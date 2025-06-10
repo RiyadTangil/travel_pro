@@ -45,7 +45,7 @@ export default function Home() {
               </Button>
             </Link>
             <Link href="/status-check">
-              <Button variant="outline" className="h-14 px-8 border-white/20 text-white hover:bg-white/10 font-semibold text-lg">
+              <Button variant="outline" className="h-14 px-8 border-white/20 bg-black/10 text-white hover:bg-white/10 font-semibold text-lg">
                 <CheckCircle className="mr-2 h-5 w-5" /> Check Application Status
               </Button>
             </Link>
