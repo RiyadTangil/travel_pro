@@ -65,7 +65,8 @@ export const authOptions = {
           };
         } catch (error) {
           console.error("Auth error:", error);
-          throw new Error(error.message || "Authentication failed");
+          const errorMessage = error instanceof Error ? error.message : "Authentication failed";
+          throw new Error(errorMessage);
         }
       },
     }),
@@ -84,17 +85,20 @@ export const authOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user }: { token: any; user?: any }) {
       // Add role and companyId to token when signing in
       if (user) {
+        console.log("user from jwt => ", user);
         token.role = user.role;
         token.companyId = user.companyId;
         token.companyName = user.companyName;
       }
       return token;
     },
-    async session({ session, token }) {
+    async session({ session, token }: { session: any; token: any }) {
       // Add role and companyId to session
+      console.log("token from session => ", token);
+      console.log("session from session => ", session);
       if (token && session.user) {
         session.user.id = token.sub;
         session.user.role = token.role;
@@ -110,7 +114,7 @@ export const authOptions = {
     error: "/auth/error",
   },
   session: {
-    strategy: "jwt",
+    strategy: "jwt" as const,
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   debug: process.env.NODE_ENV === "development",

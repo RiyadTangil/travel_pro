@@ -72,13 +72,19 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Client not found or access denied" }, { status: 404 })
     }
 
-    // Calculate due amount if contract or payment amounts changed
-    if (data.contractAmount !== undefined || data.initialPayment !== undefined) {
-        const contractAmount =
-        data.contractAmount !== undefined ? Number.parseFloat(data.contractAmount) : existingClient.contractAmount
-      const paidAmount = existingClient.contractAmount - existingClient.dueAmount
-        const newPayment = data.initialPayment !== undefined ? Number.parseFloat(data.initialPayment) : 0
-        data.dueAmount = contractAmount - (paidAmount + newPayment)
+    // Prevent modification of contract amount and initial payment
+    if (data.contractAmount !== undefined) {
+      return NextResponse.json({ 
+        error: "Contract amount cannot be modified after creation",
+        code: "CONTRACT_AMOUNT_IMMUTABLE"
+      }, { status: 400 })
+    }
+    
+    if (data.initialPayment !== undefined) {
+      return NextResponse.json({ 
+        error: "Initial payment cannot be modified after creation",
+        code: "INITIAL_PAYMENT_IMMUTABLE"
+      }, { status: 400 })
     }
 
     // Update status history if status changed

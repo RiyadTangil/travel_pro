@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
   LayoutDashboard,
   Users,
@@ -20,14 +20,32 @@ import {
 import { useState } from "react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { signOut } from "next-auth/react"
 
 export function Sidebar() {
   const pathname = usePathname()
+  const router = useRouter()
   const [expanded, setExpanded] = useState(true)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
 
   const isActive = (path: string) => {
     return pathname === path
+  }
+
+  const handleLogout = () => {
+    setShowLogoutConfirm(false)
+    signOut({ callbackUrl: "/auth/signin" }) // Redirects to sign-in after sign out
   }
 
   const navItems = [
@@ -132,20 +150,37 @@ export function Sidebar() {
                 <HelpCircle className="h-5 w-5" />
                 {expanded && <span>Help & Support</span>}
               </Link>
-              <Link
-                href="/auth/signout"
+              <Button
+                variant="ghost"
+                onClick={() => setShowLogoutConfirm(true)}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-3 rounded-md text-gray-600 hover:bg-gray-100 transition-all",
+                  "flex items-center gap-3 px-3 py-3 rounded-md text-gray-600 hover:bg-gray-100 transition-all w-full justify-start",
                   !expanded && "justify-center",
                 )}
               >
                 <LogOut className="h-5 w-5" />
                 {expanded && <span>Logout</span>}
-              </Link>
+              </Button>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Logout Confirmation Dialog */}
+      <AlertDialog open={showLogoutConfirm} onOpenChange={setShowLogoutConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sign Out</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to sign out? You will be redirected to the login page.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleLogout}>Sign Out</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

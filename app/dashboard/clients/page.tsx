@@ -103,6 +103,21 @@ export default function ClientsPage() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  
+  // Transaction deletion confirmation
+  const [transactionDeleteConfirmOpen, setTransactionDeleteConfirmOpen] = useState(false)
+  const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null)
+  const [isDeletingTransaction, setIsDeletingTransaction] = useState(false)
+
+  // Reset form when modal opens/closes
+  useEffect(() => {
+    if (!addClientOpen && !editClientOpen) {
+      resetForm()
+    } else if (addClientOpen && !editingClient) {
+      // Reset form when opening add modal (but not edit modal)
+      resetForm()
+    }
+  }, [addClientOpen, editClientOpen, editingClient])
 
   // Form state for new transaction
   const [newTransaction, setNewTransaction] = useState<Omit<Transaction, "_id" | "createdAt" | "updatedAt">>({
@@ -355,23 +370,28 @@ export default function ClientsPage() {
     setSubmitError("")
 
     try {
-      const clientData = {
-        ...formData,
-        contractAmount: Number.parseFloat(formData.contractAmount) || 0,
-        dueAmount: Number.parseFloat(formData.contractAmount) - Number.parseFloat(formData.initialPayment) || 0,
-        clientType: selectedClientType as "saudi-kuwait" | "other-countries" | "omra-visa",
-        associatedB2BId: selectedB2BClient !== "none" ? selectedB2BClient : undefined,
-      }
-
       if (editingClient) {
+        // For editing, exclude contract amount and initial payment
+        const { contractAmount, initialPayment, ...editData } = formData
+        const clientData = {
+          ...editData,
+          clientType: selectedClientType as "saudi-kuwait" | "other-countries" | "omra-visa",
+          associatedB2BId: selectedB2BClient !== "none" ? selectedB2BClient : undefined,
+        }
         await updateClient(editingClient._id, clientData, "B2C")
         setEditClientOpen(false)
       } else {
+        // For creating new client, include all fields
+        const clientData = {
+          ...formData,
+          contractAmount: Number.parseFloat(formData.contractAmount) || 0,
+          dueAmount: Number.parseFloat(formData.contractAmount) - Number.parseFloat(formData.initialPayment) || 0,
+          clientType: selectedClientType as "saudi-kuwait" | "other-countries" | "omra-visa",
+          associatedB2BId: selectedB2BClient !== "none" ? selectedB2BClient : undefined,
+        }
         await createB2CClient(clientData)
         setAddClientOpen(false)
       }
-
-      resetForm()
 
       await fetchClients({
         page: pagination.page,
@@ -464,10 +484,17 @@ export default function ClientsPage() {
     }
   }
 
-  const handleDeleteTransaction = async (transactionId: string) => {
+  const handleDeleteTransaction = (transaction: Transaction) => {
+    setTransactionToDelete(transaction)
+    setTransactionDeleteConfirmOpen(true)
+  }
+
+  const confirmDeleteTransaction = async () => {
+    if (!transactionToDelete) return
+
     try {
-      setIsSubmitting(true)
-      await deleteTransaction(transactionId)
+      setIsDeletingTransaction(true)
+      await deleteTransaction(transactionToDelete._id)
 
       // Refresh client data to update due amounts
       await fetchClients({
@@ -475,10 +502,13 @@ export default function ClientsPage() {
         search: searchTerm,
         status: statusFilter,
       })
+
+      setTransactionDeleteConfirmOpen(false)
+      setTransactionToDelete(null)
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Failed to delete transaction")
     } finally {
-      setIsSubmitting(false)
+      setIsDeletingTransaction(false)
     }
   }
 
@@ -886,9 +916,10 @@ export default function ClientsPage() {
                         type="number"
                         placeholder="0"
                         value={formData.contractAmount}
-                        onChange={(e) => setFormData({ ...formData, contractAmount: e.target.value })}
-                        required
+                        disabled
+                        className="bg-gray-50 text-gray-600 cursor-not-allowed"
                       />
+                      <p className="text-xs text-gray-500">Contract amount cannot be modified after creation</p>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="editInitialPayment">Initial Payment (BDT) *</Label>
@@ -897,9 +928,10 @@ export default function ClientsPage() {
                         type="number"
                         placeholder="0"
                         value={formData.initialPayment}
-                        onChange={(e) => setFormData({ ...formData, initialPayment: e.target.value })}
-                        required
+                        disabled
+                        className="bg-gray-50 text-gray-600 cursor-not-allowed"
                       />
+                      <p className="text-xs text-gray-500">Initial payment cannot be modified after creation</p>
                     </div>
                   </div>
                   <div className="space-y-2">
@@ -970,6 +1002,60 @@ export default function ClientsPage() {
                   </>
                 ) : (
                   "Archive Client"
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Transaction Deletion Confirmation Dialog */}
+        <AlertDialog open={transactionDeleteConfirmOpen} onOpenChange={setTransactionDeleteConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete This Transaction?</AlertDialogTitle>
+              <AlertDialogDescription className="space-y-2">
+                <p>
+                  This transaction will be permanently deleted from the system. This action cannot be undone.
+                </p>
+                {transactionToDelete && (
+                  <div className="mt-4 p-3 border rounded-md bg-gray-50">
+                    <p className="font-medium">Transaction Details:</p>
+                    <p className="text-sm text-gray-600">Date: {transactionToDelete.date}</p>
+                    <p className="text-sm text-gray-600">
+                      Received Amount: {formatCurrency(transactionToDelete.receivedAmount)}
+                    </p>
+                    {transactionToDelete.refundAmount > 0 && (
+                      <p className="text-sm text-gray-600">
+                        Refund Amount: {formatCurrency(transactionToDelete.refundAmount)}
+                      </p>
+                    )}
+                    {transactionToDelete.notes && (
+                      <p className="text-sm text-gray-600">Notes: {transactionToDelete.notes}</p>
+                    )}
+                  </div>
+                )}
+                <Alert className="mt-2 border-red-200 bg-red-50">
+                  <AlertTriangle className="h-4 w-4 text-red-600 mr-2" />
+                  <AlertDescription className="text-red-800">
+                    Deleting this transaction will affect the client's due amount calculation.
+                  </AlertDescription>
+                </Alert>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeletingTransaction}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={confirmDeleteTransaction}
+                disabled={isDeletingTransaction}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {isDeletingTransaction ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  "Delete Transaction"
                 )}
               </AlertDialogAction>
             </AlertDialogFooter>
@@ -1303,20 +1389,13 @@ export default function ClientsPage() {
                                             <TableCell>{transaction.notes}</TableCell>
                                             <TableCell className="text-right">
                                               <div className="flex justify-end gap-2">
-                                                <Button
-                                                  variant="ghost"
-                                                  size="icon"
-                                                  className="h-8 w-8"
-                                                  onClick={() => handleEditTransaction(transaction)}
-                                                >
-                                                  <Edit className="h-4 w-4" />
-                                                </Button>
+                                                {/* Edit button hidden as requested */}
                                                 <Button
                                                   variant="ghost"
                                                   size="icon"
                                                   className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
-                                                  onClick={() => handleDeleteTransaction(transaction._id)}
-                                                  disabled={isSubmitting}
+                                                  onClick={() => handleDeleteTransaction(transaction)}
+                                                  disabled={isDeletingTransaction}
                                                 >
                                                   <Trash2 className="h-4 w-4" />
                                                 </Button>

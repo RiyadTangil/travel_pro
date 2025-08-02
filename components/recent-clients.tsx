@@ -1,14 +1,23 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { clients } from "@/data/clients"
 
-export function RecentClients() {
-  // Get the 5 most recent clients
-  const recentClients = [...clients]
-    .sort((a, b) => new Date(b.registrationDate).getTime() - new Date(a.registrationDate).getTime())
-    .slice(0, 5)
+interface RecentClient {
+  id: string;
+  name: string;
+  destination: string;
+  clientType: string;
+  registrationDate: string;
+  status: string;
+  contractAmount: number;
+}
 
-  const getStatusBadge = (status) => {
+interface RecentClientsProps {
+  recentClients: RecentClient[];
+}
+
+export function RecentClients({ recentClients }: RecentClientsProps) {
+
+  const getStatusBadge = (status: string) => {
     const statusStyles = {
       "file-ready": "bg-blue-100 text-blue-800",
       medical: "bg-purple-100 text-purple-800",
@@ -36,6 +45,40 @@ export function RecentClients() {
     )
   }
 
+  const formatDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch (error) {
+      return dateString;
+    }
+  }
+
+  const getClientTypeLabel = (clientType: string) => {
+    switch (clientType) {
+      case "saudi-kuwait":
+        return "Saudi & Kuwait";
+      case "other-countries":
+        return "Other Countries";
+      case "omra-visa":
+        return "Omra Visa (Saudi)";
+      default:
+        return clientType;
+    }
+  }
+
+  if (recentClients.length === 0) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        No recent clients found.
+      </div>
+    );
+  }
+
   return (
     <Table>
       <TableHeader>
@@ -53,14 +96,10 @@ export function RecentClients() {
           <TableRow key={client.id}>
             <TableCell className="font-medium">{client.name}</TableCell>
             <TableCell>{client.destination}</TableCell>
-            <TableCell>
-              {client.clientType === "saudi-kuwait" && "Saudi & Kuwait"}
-              {client.clientType === "other-countries" && "Other Countries"}
-              {client.clientType === "omra-visa" && "Omra Visa (Saudi)"}
-            </TableCell>
-            <TableCell>{client.registrationDate}</TableCell>
+            <TableCell>{getClientTypeLabel(client.clientType)}</TableCell>
+            <TableCell>{formatDate(client.registrationDate)}</TableCell>
             <TableCell>{getStatusBadge(client.status)}</TableCell>
-            <TableCell>${client.contractAmount.toLocaleString()}</TableCell>
+            <TableCell>BDT {client.contractAmount.toLocaleString()}</TableCell>
           </TableRow>
         ))}
       </TableBody>

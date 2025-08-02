@@ -6,28 +6,11 @@ import { Loader2 } from "lucide-react";
 
 export default function SignOutPage() {
   useEffect(() => {
-    // Force a complete signout with redirect to sign in page with flag
-    const performSignout = async () => {
-      try {
-        // Clear any localStorage items that might be used for session persistence
-        localStorage.clear();
-        
-        // Clear any sessionStorage items
-        sessionStorage.clear();
-        
-        // Use NextAuth signOut with redirect to signin page and a query param to prevent auto-redirect
-        await signOut({ 
-          callbackUrl: "/auth/signin?from=signout",
-          redirect: true
-        });
-      } catch (error) {
-        console.error("Error during sign out:", error);
-        // Fallback - redirect to signin page if signOut fails
-        window.location.href = "/auth/signin?from=signout";
-      }
-    };
-    
-    performSignout();
+    // Use NextAuth signOut with redirect to signin page
+    signOut({ 
+      callbackUrl: "/auth/signin",
+      redirect: true
+    });
   }, []);
 
   return (

@@ -1,6 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
-import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
+import clientPromise from "@/lib/mongodb"
+import { TransactionService } from "@/lib/services/TransactionService"
+import { TransactionError } from "@/lib/errors/TransactionError"
+
+const transactionService = new TransactionService()
 
 // GET - Fetch single transaction
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
@@ -38,43 +42,20 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Invalid transaction ID" }, { status: 400 })
     }
 
-    const client = await clientPromise
-    const db = client.db("manage_agency")
-    const transactions = db.collection("transactions")
-    const b2cClients = db.collection("b2c_clients")
+    const result = await transactionService.updateTransaction(id, data)
 
-    // Get the old transaction to calculate the difference
-    const oldTransaction = await transactions.findOne({ _id: new ObjectId(id) })
-
-    if (!oldTransaction) {
-      return NextResponse.json({ error: "Transaction not found" }, { status: 404 })
-    }
-
-    // Calculate old and new net amounts
-    const oldNetAmount = oldTransaction.receivedAmount - (oldTransaction.refundAmount || 0)
-    const newNetAmount = (data.receivedAmount || oldTransaction.receivedAmount) - (data.refundAmount || 0)
-    const amountDifference = newNetAmount - oldNetAmount
-
-    // Update timestamp
-    data.updatedAt = new Date()
-
-    const result = await transactions.updateOne({ _id: new ObjectId(id) }, { $set: data })
-
-    if (result.matchedCount === 0) {
-      return NextResponse.json({ error: "Transaction not found" }, { status: 404 })
-    }
-
-    // Update client's due amount based on the difference
-    if (amountDifference !== 0) {
-      await b2cClients.updateOne(
-        { _id: new ObjectId(oldTransaction.clientId) },
-        { $inc: { dueAmount: -amountDifference } },
-      )
-    }
-
-    return NextResponse.json({ message: "Transaction updated successfully" })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Error updating transaction:", error)
+    
+    if (error instanceof TransactionError) {
+      return NextResponse.json({ 
+        error: error.message,
+        code: error.code,
+        details: error.details 
+      }, { status: error.statusCode })
+    }
+    
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
@@ -88,31 +69,20 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       return NextResponse.json({ error: "Invalid transaction ID" }, { status: 400 })
     }
 
-    const client = await clientPromise
-    const db = client.db("manage_agency")
-    const transactions = db.collection("transactions")
-    const b2cClients = db.collection("b2c_clients")
+    const result = await transactionService.deleteTransaction(id)
 
-    // Get the transaction before deleting to reverse its effect
-    const transaction = await transactions.findOne({ _id: new ObjectId(id) })
-
-    if (!transaction) {
-      return NextResponse.json({ error: "Transaction not found" }, { status: 404 })
-    }
-
-    const result = await transactions.deleteOne({ _id: new ObjectId(id) })
-
-    if (result.deletedCount === 0) {
-      return NextResponse.json({ error: "Transaction not found" }, { status: 404 })
-    }
-
-    // Reverse the transaction's effect on client due amount
-    const netAmount = transaction.receivedAmount - (transaction.refundAmount || 0)
-    await b2cClients.updateOne({ _id: new ObjectId(transaction.clientId) }, { $inc: { dueAmount: netAmount } })
-
-    return NextResponse.json({ message: "Transaction deleted successfully" })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Error deleting transaction:", error)
+    
+    if (error instanceof TransactionError) {
+      return NextResponse.json({ 
+        error: error.message,
+        code: error.code,
+        details: error.details 
+      }, { status: error.statusCode })
+    }
+    
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

@@ -1,7 +1,5 @@
 "use client";
-
 import type React from "react";
-
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -30,15 +28,30 @@ function SignInContent() {
   const searchParams = useSearchParams();
   const { data: session, status } = useSession();
   const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
-  const fromSignout = searchParams.get("from") === "signout";
 
+  // Redirect to dashboard if already authenticated
   useEffect(() => {
-    // Don't auto-redirect if we just signed out
-    if (status === "authenticated" && !fromSignout) {
-      // Use direct window.location.href for consistent redirect approach
-      window.location.href = "/dashboard";
+    if (status === "authenticated") {
+      router.push(callbackUrl);
     }
-  }, [status, fromSignout]);
+  }, [status, callbackUrl, router]);
+
+  // Show loading while checking session
+  if (status === "loading") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
+          <p className="text-white text-lg">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render form if already authenticated
+  if (status === "authenticated") {
+    return null;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,8 +68,7 @@ function SignInContent() {
       if (result?.error) {
         setError(result.error);
       } else if (result?.ok) {
-        // Force a hard navigation to the dashboard - use consistent approach
-        window.location.href = "/dashboard";
+        router.push(callbackUrl);
       }
     } catch (error) {
       setError("An unexpected error occurred. Please try again.");
@@ -71,26 +83,13 @@ function SignInContent() {
     setError("");
 
     try {
-      // Use redirect: true for Google sign-in
-      await signIn("google", { callbackUrl: "/dashboard", redirect: true });
+      await signIn("google", { callbackUrl, redirect: true });
     } catch (error) {
       console.error("Google sign-in error:", error);
       setError("Google sign-in failed. Please try again.");
       setIsGoogleLoading(false);
     }
   };
-
-  // If already authenticated, show loading while redirecting
-  if (status === "authenticated") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-        <div className="flex flex-col items-center space-y-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
-          <p className="text-white text-lg">Redirecting to dashboard...{callbackUrl}</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-4 relative overflow-hidden">

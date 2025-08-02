@@ -40,20 +40,20 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
   
-  // Get the token
+  // Get the NextAuth token
   try {
-    console.log(`[Middleware] Checking token for path: ${path}`);
+    console.log(`[Middleware] Checking NextAuth token for path: ${path}`);
     
     const token = await getToken({ 
       req: request,
       secret: NEXTAUTH_SECRET
     });
     
-    console.log(`[Middleware] Token found: ${!!token}`);
+    console.log(`[Middleware] NextAuth token found: ${!!token}`);
     
     // If no token, redirect to signin
     if (!token) {
-      console.log(`[Middleware] No token, redirecting to signin`);
+      console.log(`[Middleware] No NextAuth token, redirecting to signin`);
       const url = new URL('/auth/signin', request.url);
       url.searchParams.set('callbackUrl', encodeURI(request.url));
       return NextResponse.redirect(url);
