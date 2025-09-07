@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -32,6 +32,7 @@ import {
   Search,
   Trash2,
   WifiOff,
+  X,
 } from "lucide-react";
 import {
   useClients,
@@ -130,6 +131,7 @@ export default function ClientsPage() {
     string | null
   >(null);
   const [addingTransaction, setAddingTransaction] = useState(false);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
 
   // Confirmation dialogs
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -893,6 +895,7 @@ export default function ClientsPage() {
       clientName,
       transactionType: "B2C",
     });
+    setPaymentModalOpen(true);
   };
 
   const validateTransactionForm = (): boolean => {
@@ -1404,7 +1407,7 @@ export default function ClientsPage() {
                     }
                   />
                 </div>
-                //B2B Client selection for reference - only show if B2B clients
+               
                 exist
                 {hasB2BClients && (
                   <div className="space-y-2">
@@ -2331,7 +2334,7 @@ export default function ClientsPage() {
                   </TableRow>
 
                   {expandedClientId === client._id && (
-                    <>
+                    <React.Fragment key={`expanded-${client._id}`}>
                       <TableRow>
                         <TableCell colSpan={9} className="p-0 border-t-0">
                           <div className="bg-gradient-to-br from-gray-50 to-blue-50/30 p-6 border-l-4 border-blue-500">
@@ -2839,10 +2842,9 @@ export default function ClientsPage() {
                                                 <Button
                                                   variant="ghost"
                                                   size="icon"
-                                                  className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-                                                  onClick={() => handleEditTransaction(transaction)}
-                                                  disabled={isSubmitting}
-                                                  title="Edit Transaction"
+                                                  className="h-8 w-8 text-gray-400 cursor-not-allowed"
+                                                  disabled={true}
+                                                  title="Edit Transaction (Disabled)"
                                                 >
                                                   <Edit className="h-4 w-4" />
                                                 </Button>
@@ -2871,7 +2873,7 @@ export default function ClientsPage() {
                           </div>
                         </TableCell>
                       </TableRow>
-                    </>
+                    </React.Fragment>
                   )}
                 </>
               ))
