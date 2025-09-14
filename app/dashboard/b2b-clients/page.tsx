@@ -25,7 +25,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination"
-import { PlusCircle, Search, FileEdit, Eye, ChevronDown, ChevronUp, FileText, Loader2 } from "lucide-react"
+import { PlusCircle, Search, FileEdit, Eye, ChevronDown, ChevronUp, FileText, Loader2, DollarSign, TrendingUp, TrendingDown, Trash2, AlertTriangle } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
@@ -33,6 +33,17 @@ import { generateTicketPDF } from "@/lib/generate-ticket-pdf"
 import { useB2BClients } from "@/hooks/use-b2b-clients"
 import { useClients, type B2BClient, type B2CClient } from "@/hooks/use-clients"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 export default function B2BClientsPage() {
   const { b2bClients, loading, error, pagination, fetchB2BClients, getB2BClientWithAssociatedClients } = useB2BClients()
@@ -48,6 +59,23 @@ export default function B2BClientsPage() {
   const [ticketFormOpen, setTicketFormOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState("")
+  
+  // Transaction deletion confirmation
+  const [transactionDeleteConfirmOpen, setTransactionDeleteConfirmOpen] = useState(false)
+  const [transactionToDelete, setTransactionToDelete] = useState<any | null>(null)
+  const [isDeletingTransaction, setIsDeletingTransaction] = useState(false)
+  
+  // Direct Transaction states
+  const [directTransactionOpen, setDirectTransactionOpen] = useState(false)
+  const [selectedB2BClientForTransaction, setSelectedB2BClientForTransaction] = useState<B2BClient | null>(null)
+  const [directTransactions, setDirectTransactions] = useState<any[]>([])
+  const [transactionForm, setTransactionForm] = useState({
+    type: 'CASH_IN',
+    amount: '',
+    date: new Date().toISOString().split('T')[0],
+    description: '',
+    reference: ''
+  })
 
   // Form state for new B2B client
   const [formData, setFormData] = useState({
@@ -56,8 +84,7 @@ export default function B2BClientsPage() {
     phone: "",
     address: "",
     businessType: "",
-    contractAmount: "",
-    initialPayment: "",
+    balance: "",
     notes: "",
   })
 
@@ -120,14 +147,23 @@ export default function B2BClientsPage() {
     if (expandedClientId === clientId) {
       setExpandedClientId(null)
       setAssociatedB2CClients([])
+      setDirectTransactions([])
     } else {
       setExpandedClientId(clientId)
       try {
         const data = await getB2BClientWithAssociatedClients(clientId)
         setAssociatedB2CClients(data.associatedB2CClients)
+        
+        // Fetch direct transactions for this client
+        const transactionsResponse = await fetch(`/api/direct-transactions?clientId=${clientId}`)
+        if (transactionsResponse.ok) {
+          const transactionsData = await transactionsResponse.json()
+          setDirectTransactions(transactionsData.transactions || [])
+        }
       } catch (error) {
         console.error("Error fetching associated clients:", error)
         setAssociatedB2CClients([])
+        setDirectTransactions([])
       }
     }
   }
@@ -139,8 +175,7 @@ export default function B2BClientsPage() {
       phone: "",
       address: "",
       businessType: "",
-      contractAmount: "",
-      initialPayment: "",
+      balance: "",
       notes: "",
     })
   }
@@ -153,7 +188,7 @@ export default function B2BClientsPage() {
     try {
       await createB2BClient({
         ...formData,
-        contractAmount: Number.parseFloat(formData.contractAmount) || 0,
+        balance: Number.parseFloat(formData.balance) || 0,
       })
 
       setAddClientOpen(false)
@@ -203,6 +238,58 @@ export default function B2BClientsPage() {
       duration: "",
       status: "Confirmed",
     })
+  }
+
+  // Helper function to check if transaction is the last one for a client
+  const isLastTransaction = (transaction: any, clientId: string) => {
+    const clientTransactions = directTransactions
+      .filter(t => t.b2bClientId === clientId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    
+    return clientTransactions.length > 0 && clientTransactions[0]._id === transaction._id
+  }
+
+  // Handle delete transaction - show confirmation modal
+  const handleDeleteTransaction = (transaction: any) => {
+    setTransactionToDelete(transaction)
+    setTransactionDeleteConfirmOpen(true)
+  }
+
+  // Confirm delete transaction - perform actual deletion
+  const confirmDeleteTransaction = async () => {
+    if (!transactionToDelete) return
+
+    try {
+      setIsDeletingTransaction(true)
+      
+      const response = await fetch(`/api/direct-transactions/${transactionToDelete._id}`, {
+        method: 'DELETE'
+      })
+      
+      if (response.ok) {
+        // Refresh the transaction list for the current client
+        const transactionsResponse = await fetch(`/api/direct-transactions?clientId=${transactionToDelete.b2bClientId}`)
+        if (transactionsResponse.ok) {
+          const transactionsData = await transactionsResponse.json()
+          setDirectTransactions(transactionsData.transactions || [])
+        }
+        
+        // Refresh B2B clients to update balance
+        fetchB2BClients({
+          page: pagination.page,
+          search: searchTerm
+        })
+        
+        setTransactionDeleteConfirmOpen(false)
+        setTransactionToDelete(null)
+      } else {
+        console.error('Failed to delete transaction')
+      }
+    } catch (error) {
+      console.error('Error deleting transaction:', error)
+    } finally {
+      setIsDeletingTransaction(false)
+    }
   }
 
   // Search on Enter key or after delay
@@ -302,27 +389,15 @@ export default function B2BClientsPage() {
                       onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="contractAmount">Contract Amount</Label>
-                      <Input
-                        id="contractAmount"
-                        type="number"
-                        placeholder="0.00"
-                        value={formData.contractAmount}
-                        onChange={(e) => setFormData({ ...formData, contractAmount: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="initialPayment">Initial Payment</Label>
-                      <Input
-                        id="initialPayment"
-                        type="number"
-                        placeholder="0.00"
-                        value={formData.initialPayment}
-                        onChange={(e) => setFormData({ ...formData, initialPayment: e.target.value })}
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="balance">Initial Balance</Label>
+                    <Input
+                      id="balance"
+                      type="number"
+                      placeholder="0.00"
+                      value={formData.balance}
+                      onChange={(e) => setFormData({ ...formData, balance: e.target.value })}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="notes">Additional Notes</Label>
@@ -383,22 +458,21 @@ export default function B2BClientsPage() {
               <TableHead>Business Type</TableHead>
               <TableHead>Contact Email</TableHead>
               <TableHead>Contact Phone</TableHead>
-              <TableHead>Contract Amount</TableHead>
-              <TableHead>Due Amount</TableHead>
+              <TableHead>Balance</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8">
+                <TableCell colSpan={6} className="text-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                   <p className="mt-2 text-muted-foreground">Loading B2B clients...</p>
                 </TableCell>
               </TableRow>
             ) : b2bClients.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8">
+                <TableCell colSpan={6} className="text-center py-8">
                   <p className="text-muted-foreground">No B2B clients found</p>
                 </TableCell>
               </TableRow>
@@ -424,8 +498,9 @@ export default function B2BClientsPage() {
                     <TableCell>{client.businessType}</TableCell>
                     <TableCell>{client.email}</TableCell>
                     <TableCell>{client.phone}</TableCell>
-                    <TableCell>${client.contractAmount.toLocaleString()}</TableCell>
-                    <TableCell>${client.dueAmount.toLocaleString()}</TableCell>
+                    <TableCell className={`font-medium ${(client.balance || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      ৳{(client.balance || 0).toLocaleString()}
+                    </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button variant="outline" size="icon" onClick={() => handleViewDetails(client)}>
@@ -440,22 +515,22 @@ export default function B2BClientsPage() {
 
                   {expandedClientId === client._id && (
                     <TableRow>
-                      <TableCell colSpan={8} className="p-0 border-t-0">
+                      <TableCell colSpan={7} className="p-0 border-t-0">
                         <Card className="mx-2 mb-4 border-t-0 rounded-t-none shadow-sm">
-                          <CardContent className="p-4">
-                            <Tabs defaultValue="b2c-clients">
+                          <CardContent className="p-6 w-full">
+                            <Tabs defaultValue="direct-transactions">
                               <TabsList className="mb-4">
+                                <TabsTrigger value="direct-transactions">Direct Transactions</TabsTrigger>
                                 <TabsTrigger value="b2c-clients">Associated B2C Clients</TabsTrigger>
-                                <TabsTrigger value="transactions">Transaction History</TabsTrigger>
                               </TabsList>
 
-                              <TabsContent value="b2c-clients">
+                              <TabsContent value="b2c-clients" className="w-full">
                                 <div className="flex justify-between items-center mb-4">
                                   <h3 className="text-lg font-semibold">Associated B2C Clients</h3>
                                 </div>
 
-                                <div className="overflow-x-auto">
-                                  <Table>
+                                <div className="overflow-x-auto w-full">
+                                  <Table className="w-full">
                                     <TableHeader>
                                       <TableRow>
                                         <TableHead>Name</TableHead>
@@ -483,8 +558,8 @@ export default function B2BClientsPage() {
                                               {b2cClient.status}
                                             </Badge>
                                           </TableCell>
-                                          <TableCell>${b2cClient.contractAmount.toLocaleString()}</TableCell>
-                                          <TableCell>${b2cClient.dueAmount.toLocaleString()}</TableCell>
+                                          <TableCell>৳{b2cClient.contractAmount.toLocaleString()}</TableCell>
+                          <TableCell>৳{b2cClient.dueAmount.toLocaleString()}</TableCell>
                                         </TableRow>
                                       ))}
                                       {associatedB2CClients.length === 0 && (
@@ -499,14 +574,85 @@ export default function B2BClientsPage() {
                                 </div>
                               </TabsContent>
 
-                              <TabsContent value="transactions">
+                              <TabsContent value="direct-transactions" className="w-full">
                                 <div className="flex justify-between items-center mb-4">
-                                  <h3 className="text-lg font-semibold">Transaction History</h3>
+                                  <h3 className="text-lg font-semibold">Direct Transactions</h3>
+                                  <Button 
+                                    onClick={() => {
+                                      setSelectedB2BClientForTransaction(client)
+                                      setDirectTransactionOpen(true)
+                                    }}
+                                    className="flex items-center gap-2"
+                                  >
+                                    <DollarSign className="h-4 w-4" />
+                                    Add Direct Transaction
+                                  </Button>
                                 </div>
-                                <div className="text-center py-8">
-                                  <p className="text-muted-foreground">
-                                    Transaction history will be implemented with transaction API integration
-                                  </p>
+                                
+                                <div className="overflow-x-auto w-full">
+                                  <Table className="w-full">
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead>Date</TableHead>
+                                        <TableHead>Type</TableHead>
+                                        <TableHead>Amount</TableHead>
+                                        <TableHead>Description</TableHead>
+                                        <TableHead>Reference</TableHead>
+                                        <TableHead className="text-right">Actions</TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {directTransactions.filter(t => t.b2bClientId === client._id).length === 0 ? (
+                                        <TableRow>
+                                          <TableCell colSpan={7} className="text-center py-8">
+                                            <p className="text-muted-foreground">
+                                              No direct transactions found. Click "Add Direct Transaction" to get started.
+                                            </p>
+                                          </TableCell>
+                                        </TableRow>
+                                      ) : (
+                                        directTransactions
+                                          .filter(t => t.b2bClientId === client._id)
+                                          .map((transaction, index) => (
+                                            <TableRow key={index}>
+                                              <TableCell>{new Date(transaction.createdAt).toLocaleDateString()}</TableCell>
+                                              <TableCell>
+                                                <Badge 
+                                                  className={transaction.type === 'CASH_IN' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}
+                                                >
+                                                  {transaction.type === 'CASH_IN' ? (
+                                                    <><TrendingUp className="h-3 w-3 mr-1" />Cash In</>
+                                                  ) : (
+                                                    <><TrendingDown className="h-3 w-3 mr-1" />Cash Out</>
+                                                  )}
+                                                </Badge>
+                                              </TableCell>
+                                              <TableCell className={transaction.type === 'CASH_IN' ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
+                                                ৳{Number(transaction.amount).toLocaleString()}
+                                              </TableCell>
+                                              <TableCell>{transaction.description}</TableCell>
+                                              <TableCell>{transaction.reference}</TableCell>
+                                              <TableCell className="text-right">
+                                                <div className="flex gap-2 justify-end">
+                                                  <Button variant="outline" size="sm">
+                                                    <FileEdit className="h-3 w-3" />
+                                                  </Button>
+                                                  <Button 
+                                                    variant="outline" 
+                                                    size="sm"
+                                                    onClick={() => handleDeleteTransaction(transaction)}
+                                                    disabled={!isLastTransaction(transaction, client._id)}
+                                                    className={!isLastTransaction(transaction, client._id) ? "opacity-50 cursor-not-allowed" : "text-red-600 hover:text-red-700"}
+                                                  >
+                                                    <Trash2 className="h-3 w-3" />
+                                                  </Button>
+                                                </div>
+                                              </TableCell>
+                                            </TableRow>
+                                          ))
+                                      )}
+                                    </TableBody>
+                                  </Table>
                                 </div>
                               </TabsContent>
                             </Tabs>
@@ -625,18 +771,10 @@ export default function B2BClientsPage() {
                     </CardHeader>
                     <CardContent className="space-y-2">
                       <div className="grid grid-cols-3 gap-1">
-                        <div className="font-medium">Contract Amount:</div>
-                        <div className="col-span-2">${selectedClient.contractAmount.toLocaleString()}</div>
-                      </div>
-                      <div className="grid grid-cols-3 gap-1">
-                        <div className="font-medium">Paid Amount:</div>
-                        <div className="col-span-2">
-                          ${(selectedClient.contractAmount - selectedClient.dueAmount).toLocaleString()}
+                        <div className="font-medium">Current Balance:</div>
+                        <div className={`col-span-2 font-medium ${(selectedClient.balance || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          ৳{(selectedClient.balance || 0).toLocaleString()}
                         </div>
-                      </div>
-                      <div className="grid grid-cols-3 gap-1">
-                        <div className="font-medium">Due Amount:</div>
-                        <div className="col-span-2">${selectedClient.dueAmount.toLocaleString()}</div>
                       </div>
                       <div className="grid grid-cols-3 gap-1">
                         <div className="font-medium">Registration Date:</div>
@@ -668,6 +806,216 @@ export default function B2BClientsPage() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Direct Transaction Modal */}
+      <Dialog open={directTransactionOpen} onOpenChange={setDirectTransactionOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Add Direct Transaction</DialogTitle>
+            <DialogDescription>
+              Add a direct transaction for {selectedB2BClientForTransaction?.name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="transaction-type">Transaction Type</Label>
+              <Select 
+                value={transactionForm.type} 
+                onValueChange={(value) => setTransactionForm(prev => ({ ...prev, type: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select transaction type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="CASH_IN">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-green-600" />
+                      Cash In
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="CASH_OUT">
+                    <div className="flex items-center gap-2">
+                      <TrendingDown className="h-4 w-4 text-red-600" />
+                      Cash Out
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="amount">Amount</Label>
+              <Input
+                id="amount"
+                type="number"
+                placeholder="Enter amount"
+                value={transactionForm.amount}
+                onChange={(e) => setTransactionForm(prev => ({ ...prev, amount: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="date">Date</Label>
+              <Input
+                id="date"
+                type="date"
+                value={transactionForm.date}
+                onChange={(e) => setTransactionForm(prev => ({ ...prev, date: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                placeholder="Enter transaction description"
+                value={transactionForm.description}
+                onChange={(e) => setTransactionForm(prev => ({ ...prev, description: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="reference">Reference</Label>
+              <Input
+                id="reference"
+                placeholder="Enter reference number (optional)"
+                value={transactionForm.reference}
+                onChange={(e) => setTransactionForm(prev => ({ ...prev, reference: e.target.value }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setDirectTransactionOpen(false)
+                setTransactionForm({
+                  type: 'CASH_IN',
+                  amount: '',
+                  date: new Date().toISOString().split('T')[0],
+                  description: '',
+                  reference: ''
+                })
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={async () => {
+                if (selectedB2BClientForTransaction && transactionForm.amount) {
+                  try {
+                    const response = await fetch('/api/direct-transactions', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({
+                        clientId: selectedB2BClientForTransaction._id,
+                        type: transactionForm.type,
+                        amount: parseFloat(transactionForm.amount),
+                        date: transactionForm.date,
+                        description: transactionForm.description,
+                        reference: transactionForm.reference
+                      })
+                    })
+                    
+                    if (response.ok) {
+                      // Refresh the transaction list for the current client
+                      const transactionsResponse = await fetch(`/api/direct-transactions?clientId=${selectedB2BClientForTransaction._id}`)
+                      if (transactionsResponse.ok) {
+                        const transactionsData = await transactionsResponse.json()
+                        setDirectTransactions(transactionsData.transactions || [])
+                      }
+                      
+                      setDirectTransactionOpen(false)
+                      setTransactionForm({
+                        type: 'CASH_IN',
+                        amount: '',
+                        date: new Date().toISOString().split('T')[0],
+                        description: '',
+                        reference: ''
+                      })
+                      // Refresh B2B clients to show updated balance
+                      fetchB2BClients()
+                    } else {
+                      console.error('Failed to create transaction')
+                    }
+                  } catch (error) {
+                    console.error('Error creating transaction:', error)
+                  }
+                }
+              }}
+              disabled={!transactionForm.amount || !selectedB2BClientForTransaction}
+            >
+              Add Transaction
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Transaction Deletion Confirmation Dialog */}
+      <AlertDialog
+        open={transactionDeleteConfirmOpen}
+        onOpenChange={setTransactionDeleteConfirmOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete This Transaction?</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>
+                This transaction will be permanently deleted from the system.
+                This action cannot be undone.
+              </p>
+              {transactionToDelete && (
+                <div className="mt-4 p-3 border rounded-md bg-gray-50">
+                  <p className="font-medium">Transaction Details:</p>
+                  <p className="text-sm text-gray-600">
+                    Date: {new Date(transactionToDelete.date).toLocaleDateString()}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Type: {transactionToDelete.type === 'CASH_IN' ? 'Cash In' : 'Cash Out'}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Amount: ৳{Number(transactionToDelete.amount).toLocaleString()}
+                  </p>
+                  {transactionToDelete.description && (
+                    <p className="text-sm text-gray-600">
+                      Description: {transactionToDelete.description}
+                    </p>
+                  )}
+                  {transactionToDelete.reference && (
+                    <p className="text-sm text-gray-600">
+                      Reference: {transactionToDelete.reference}
+                    </p>
+                  )}
+                </div>
+              )}
+              <Alert className="mt-2 border-red-200 bg-red-50">
+                <AlertTriangle className="h-4 w-4 text-red-600 mr-2" />
+                <AlertDescription className="text-red-800">
+                  Deleting this transaction will affect the B2B client's balance
+                  calculation.
+                </AlertDescription>
+              </Alert>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingTransaction}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteTransaction}
+              disabled={isDeletingTransaction}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {isDeletingTransaction ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete Transaction"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

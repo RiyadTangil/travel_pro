@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     
     const data = await request.json()
 
-    const { name, email, phone, address, businessType, contractAmount, initialPayment, notes } = data
+    const { name, email, phone, address, businessType, balance, notes } = data
 
     // Validate required fields
     if (!name || !email || !businessType) {
@@ -89,10 +89,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Business with this name already exists" }, { status: 400 })
     }
 
-    // Calculate due amount
-    const contractAmountNum = Number.parseFloat(contractAmount) || 0
-    const initialPaymentNum = Number.parseFloat(initialPayment) || 0
-    const dueAmount = contractAmountNum - initialPaymentNum
+    // Parse balance amount
+    const balanceNum = Number.parseFloat(balance) || 0
 
     // Create client object
     const newClient = {
@@ -104,8 +102,7 @@ export async function POST(request: NextRequest) {
       clientCategory: "B2B",
       // Add company ID to create proper association
       companyId: companyId || null,
-      contractAmount: contractAmountNum,
-      dueAmount,
+      balance: balanceNum,
       notes: notes || "",
       createdAt: new Date(),
       updatedAt: new Date(),

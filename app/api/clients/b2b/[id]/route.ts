@@ -84,13 +84,9 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Client not found or access denied" }, { status: 404 })
     }
 
-    // Calculate due amount if contract or payment amounts changed
-    if (data.contractAmount !== undefined || data.initialPayment !== undefined) {
-      const contractAmount =
-        data.contractAmount !== undefined ? Number.parseFloat(data.contractAmount) : existingClient.contractAmount
-      const paidAmount = existingClient.contractAmount - existingClient.dueAmount
-      const newPayment = data.initialPayment !== undefined ? Number.parseFloat(data.initialPayment) : 0
-      data.dueAmount = contractAmount - (paidAmount + newPayment)
+    // Parse balance if provided
+    if (data.balance !== undefined) {
+      data.balance = Number.parseFloat(data.balance) || 0
     }
 
     data.updatedAt = new Date()
