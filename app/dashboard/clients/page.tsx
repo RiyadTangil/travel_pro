@@ -122,7 +122,7 @@ export default function ClientsPage() {
   const [addClientOpen, setAddClientOpen] = useState(false);
   const [editClientOpen, setEditClientOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
-  const [selectedClientType, setSelectedClientType] = useState("saudi-kuwait");
+  const [selectedClientType, setSelectedClientType] = useState("passport");
   const [selectedB2BClient, setSelectedB2BClient] = useState("none");
   const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -225,12 +225,14 @@ export default function ClientsPage() {
     passportNumber: "",
     destination: "",
     visaType: "",
-    clientType: "saudi-kuwait" as
-      | "saudi-kuwait"
-      | "other-countries"
-      | "omra-visa",
+    clientType: "passport" as
+      | "passport"
+      | "manpower"
+      | "omra"
+      | "insurance"
+      | "taqamul-test",
     associatedB2BId: "",
-    status: "file-ready",
+    status: "file-submit",
     contractAmount: "",
     initialPayment: "",
     notes: "",
@@ -256,7 +258,7 @@ export default function ClientsPage() {
         // Only load if it's not empty
         const hasData = Object.values(parsedDraft).some(
           (value) =>
-            value !== "" && value !== "saudi-kuwait" && value !== "file-ready"
+            value !== "" && value !== "passport" && value !== "file-submit"
         );
         if (hasData) {
           setFormData(parsedDraft);
@@ -270,6 +272,17 @@ export default function ClientsPage() {
       }
     }
   }, [editingClient]);
+
+  // Update status when client type changes
+  useEffect(() => {
+    const statusOptions = getStatusesForClientType(selectedClientType);
+    if (statusOptions.length > 0) {
+      setFormData(prev => ({
+        ...prev,
+        status: statusOptions[0].value
+      }));
+    }
+  }, [selectedClientType]);
 
   // Auto-save form data
   useEffect(() => {
@@ -313,27 +326,44 @@ export default function ClientsPage() {
 
   const getStatusesForClientType = (clientType: string) => {
     switch (clientType) {
-      case "saudi-kuwait":
+      case "passport":
         return [
+          { value: "file-submit", label: "File Submit" },
           { value: "file-ready", label: "File Ready" },
           { value: "medical", label: "Medical" },
           { value: "mofa", label: "MOFA" },
           { value: "visa-stamping", label: "Visa Stamping" },
-          { value: "manpower", label: "Manpower" },
           { value: "flight-ticket", label: "Flight/Ticket" },
           { value: "completed", label: "Completed" },
         ];
-      case "other-countries":
+      case "manpower":
         return [
-          { value: "manpower", label: "Manpower" },
+          { value: "file-submit", label: "File Submit" },
+          { value: "manpower-processing", label: "Manpower Processing" },
           { value: "flight-ticket", label: "Flight/Ticket" },
           { value: "completed", label: "Completed" },
         ];
-      case "omra-visa":
+      case "omra":
         return [
+          { value: "file-submit", label: "File Submit" },
           { value: "file-ready", label: "File Ready" },
           { value: "fingerprint", label: "Fingerprint" },
           { value: "flight-ticket", label: "Flight/Ticket" },
+          { value: "completed", label: "Completed" },
+        ];
+      case "insurance":
+        return [
+          { value: "file-submit", label: "File Submit" },
+          { value: "insurance-processing", label: "Insurance Processing" },
+          { value: "policy-issued", label: "Policy Issued" },
+          { value: "completed", label: "Completed" },
+        ];
+      case "taqamul-test":
+        return [
+          { value: "file-submit", label: "File Submit" },
+          { value: "test-scheduled", label: "Test Scheduled" },
+          { value: "test-completed", label: "Test Completed" },
+          { value: "results-pending", label: "Results Pending" },
           { value: "completed", label: "Completed" },
         ];
       default:
@@ -343,23 +373,35 @@ export default function ClientsPage() {
 
   const getStatusBadge = (status: string) => {
     const statusStyles = {
+      "file-submit": "bg-gray-100 text-gray-800",
       "file-ready": "bg-blue-100 text-blue-800",
       medical: "bg-purple-100 text-purple-800",
       mofa: "bg-yellow-100 text-yellow-800",
       "visa-stamping": "bg-indigo-100 text-indigo-800",
       fingerprint: "bg-pink-100 text-pink-800",
-      manpower: "bg-orange-100 text-orange-800",
+      "manpower-processing": "bg-orange-100 text-orange-800",
+      "insurance-processing": "bg-cyan-100 text-cyan-800",
+      "policy-issued": "bg-emerald-100 text-emerald-800",
+      "test-scheduled": "bg-amber-100 text-amber-800",
+      "test-completed": "bg-lime-100 text-lime-800",
+      "results-pending": "bg-violet-100 text-violet-800",
       "flight-ticket": "bg-green-100 text-green-800",
       completed: "bg-green-100 text-green-800",
     };
 
     const statusLabels = {
+      "file-submit": "File Submit",
       "file-ready": "File Ready",
       medical: "Medical",
       mofa: "MOFA",
       "visa-stamping": "Visa Stamping",
       fingerprint: "Fingerprint",
-      manpower: "Manpower",
+      "manpower-processing": "Manpower Processing",
+      "insurance-processing": "Insurance Processing",
+      "policy-issued": "Policy Issued",
+      "test-scheduled": "Test Scheduled",
+      "test-completed": "Test Completed",
+      "results-pending": "Results Pending",
       "flight-ticket": "Flight/Ticket",
       completed: "Completed",
     };
@@ -592,15 +634,15 @@ export default function ClientsPage() {
       passportNumber: "",
       destination: "",
       visaType: "",
-      clientType: "saudi-kuwait",
+      clientType: "passport",
       associatedB2BId: "",
-      status: "file-ready",
+      status: "file-submit",
       contractAmount: "",
       initialPayment: "",
       notes: "",
     });
     setSelectedB2BClient("none");
-    setSelectedClientType("saudi-kuwait");
+    setSelectedClientType("passport");
     setEditingClient(null);
     setFormErrors({});
     setSubmitError("");
@@ -1475,14 +1517,20 @@ export default function ClientsPage() {
                         <SelectValue placeholder="Select client type" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="saudi-kuwait">
-                          Saudi & Kuwait
+                        <SelectItem value="passport">
+                          Passport
                         </SelectItem>
-                        <SelectItem value="other-countries">
-                          Other Countries
+                        <SelectItem value="manpower">
+                          Manpower
                         </SelectItem>
-                        <SelectItem value="omra-visa">
-                          Omra Visa (Saudi)
+                        <SelectItem value="omra">
+                          Omra
+                        </SelectItem>
+                        <SelectItem value="insurance">
+                          Insurance
+                        </SelectItem>
+                        <SelectItem value="taqamul-test">
+                          Taqamul/Test
                         </SelectItem>
                       </SelectContent>
                     </Select>
@@ -1872,14 +1920,20 @@ export default function ClientsPage() {
                         <SelectValue placeholder="Select client type" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="saudi-kuwait">
-                          Saudi & Kuwait
+                        <SelectItem value="passport">
+                          Passport
                         </SelectItem>
-                        <SelectItem value="other-countries">
-                          Other Countries
+                        <SelectItem value="manpower">
+                          Manpower
                         </SelectItem>
-                        <SelectItem value="omra-visa">
-                          Omra Visa (Saudi)
+                        <SelectItem value="omra">
+                          Omra
+                        </SelectItem>
+                        <SelectItem value="insurance">
+                          Insurance
+                        </SelectItem>
+                        <SelectItem value="taqamul-test">
+                          Taqamul/Test
                         </SelectItem>
                       </SelectContent>
                     </Select>
@@ -2944,7 +2998,7 @@ export default function ClientsPage() {
               <div><strong>Phone:</strong> {formData.phone}</div>
               <div><strong>Passport:</strong> {formData.passportNumber}</div>
               <div><strong>Destination:</strong> {formData.destination}</div>
-              <div><strong>Client Type:</strong> {selectedClientType === "saudi-kuwait" ? "Saudi & Kuwait" : selectedClientType === "other-countries" ? "Other Countries" : "Omra Visa"}</div>
+              <div><strong>Client Type:</strong> {selectedClientType === "passport" ? "Passport" : selectedClientType === "manpower" ? "Manpower" : selectedClientType === "omra" ? "Omra" : selectedClientType === "insurance" ? "Insurance" : "Taqamul/Test"}</div>
               {!editingClient && (
                 <>
                   <div><strong>Contract Amount:</strong> {formData.contractAmount} BDT</div>

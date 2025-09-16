@@ -47,31 +47,36 @@ interface FormErrors {
 
 const getStatusesForClientType = (clientType: string) => {
   const statusOptions = {
-    "saudi-kuwait": [
-      { value: "file-ready", label: "File Ready" },
-      { value: "medical", label: "Medical" },
-      { value: "mofa", label: "MOFA" },
-      { value: "visa-stamping", label: "Visa Stamping" },
-      { value: "fingerprint", label: "Fingerprint" },
-      { value: "manpower", label: "Manpower" },
-      { value: "flight-ticket", label: "Flight/Ticket" },
-      { value: "completed", label: "Completed" },
+    "passport": [
+      { value: "file-submit", label: "File Submit" },
+      { value: "file-process", label: "File Process" },
+      { value: "delivery-date", label: "Delivery Date" },
     ],
-    "other-countries": [
-      { value: "file-ready", label: "File Ready" },
-      { value: "medical", label: "Medical" },
-      { value: "visa-stamping", label: "Visa Stamping" },
-      { value: "flight-ticket", label: "Flight/Ticket" },
-      { value: "completed", label: "Completed" },
+    "manpower": [
+      { value: "file-submit", label: "File Submit" },
+      { value: "file-process", label: "File Process" },
+      { value: "delivery-date", label: "Delivery Date" },
     ],
-    "omra-visa": [
+    "omra": [
       { value: "file-ready", label: "File Ready" },
-      { value: "visa-stamping", label: "Visa Stamping" },
+      { value: "finger-print", label: "Finger Print" },
+      { value: "processing", label: "Processing" },
       { value: "flight-ticket", label: "Flight/Ticket" },
-      { value: "completed", label: "Completed" },
+      { value: "complete", label: "Complete" },
+    ],
+    "insurance": [
+      { value: "file-ready", label: "File Ready" },
+      { value: "payment", label: "Payment" },
+      { value: "processing", label: "Processing" },
+      { value: "delivery", label: "Delivery" },
+    ],
+    "taqamul-test": [
+      { value: "file-ready", label: "File Ready" },
+      { value: "payment-exam", label: "Payment Exam" },
+      { value: "complete", label: "Complete" },
     ],
   }
-  return statusOptions[clientType] || statusOptions["saudi-kuwait"]
+  return statusOptions[clientType] || statusOptions["passport"]
 }
 
 const validateForm = (formData: ClientFormData, mode: "add" | "edit"): FormErrors => {
@@ -149,14 +154,14 @@ export function ClientFormDialog({
     passportNumber: "",
     address: "",
     destination: "",
-    status: "file-ready",
+    status: "file-submit",
     visaType: "",
     contractAmount: "",
     initialPayment: "",
     notes: ""
   })
   
-  const [selectedClientType, setSelectedClientType] = useState("saudi-kuwait")
+  const [selectedClientType, setSelectedClientType] = useState("passport")
   const [selectedB2BClient, setSelectedB2BClient] = useState("none")
   const [formErrors, setFormErrors] = useState<FormErrors>({})
   
@@ -189,18 +194,26 @@ export function ClientFormDialog({
           passportNumber: "",
           address: "",
           destination: "",
-          status: "file-ready",
+          status: "file-submit",
           visaType: "",
           contractAmount: "",
           initialPayment: "",
           notes: ""
         })
         setSelectedB2BClient("none")
-        setSelectedClientType("saudi-kuwait")
+        setSelectedClientType("passport")
       }
       setFormErrors({})
     }
   }, [open, mode, client])
+
+  // Update status when client type changes
+  useEffect(() => {
+    const statusOptions = getStatusesForClientType(selectedClientType)
+    if (statusOptions.length > 0) {
+      setFormData(prev => ({ ...prev, status: statusOptions[0].value }))
+    }
+  }, [selectedClientType])
 
   const handleFieldChange = (field: keyof ClientFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -408,15 +421,17 @@ export function ClientFormDialog({
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="clientType">Client Type</Label>
+                  <Label htmlFor="clientType">Client Te</Label>
                   <Select value={selectedClientType} onValueChange={setSelectedClientType}>
                     <SelectTrigger id="clientType">
                       <SelectValue placeholder="Select client type" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="saudi-kuwait">Saudi & Kuwait</SelectItem>
-                      <SelectItem value="other-countries">Other Countries</SelectItem>
-                      <SelectItem value="omra-visa">Omra Visa (Saudi)</SelectItem>
+                      <SelectItem value="passport">Passport</SelectItem>
+                      <SelectItem value="manpower">Manpower</SelectItem>
+                      <SelectItem value="omra">Omra</SelectItem>
+                      <SelectItem value="insurance">Insurance</SelectItem>
+                      <SelectItem value="taqamul-test">Taqamul/Test</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
