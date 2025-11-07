@@ -60,6 +60,21 @@ export function Sidebar() {
       href: "/dashboard/clients",
     },
     {
+      title: "Clients Manager",
+      icon: <Users className="h-5 w-5" />,
+      href: "/dashboard/clients-manager",
+    },
+    {
+      title: "Invoices",
+      icon: <FileText className="h-5 w-5" />,
+      href: "/dashboard/invoices",
+    },
+    {
+      title: "Client Categories",
+      icon: <FileText className="h-5 w-5" />,
+      href: "/dashboard/client-categories",
+    },
+    {
       title: "Archived Clients",
       icon: <Archive className="h-5 w-5" />,
       href: "/dashboard/archived-clients",
@@ -73,6 +88,11 @@ export function Sidebar() {
       title: "Company Profile",
       icon: <Settings className="h-5 w-5" />,
       href: "/dashboard/profile",
+    },
+    {
+      title: "Employee",
+      icon: <Users className="h-5 w-5" />,
+      href: "/dashboard/employee",
     },
     {
       title: "Reports",
@@ -98,8 +118,9 @@ export function Sidebar() {
 
       {/* Sidebar */}
       <div
+        data-state={expanded ? "expanded" : "collapsed"}
         className={cn(
-          "fixed top-0 left-0 z-40 h-full bg-white border-r shadow-sm transition-all duration-300 ease-in-out",
+          "fixed top-0 left-0 z-40 h-full bg-white border-r shadow-sm transition-all duration-300 ease-in-out peer",
           expanded ? "w-64" : "w-20",
           mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         )}

@@ -7,4 +7,10 @@ export function Loader() {
       <p className="text-sm text-muted-foreground mt-2">Loading...</p>
     </div>
   )
-} 
+}
+
+export function InlineLoader() {
+  return (
+    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+  )
+}

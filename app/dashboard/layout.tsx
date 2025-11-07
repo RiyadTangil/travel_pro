@@ -62,9 +62,9 @@ export default function DashboardLayout({
   return (
     <div className="flex min-h-screen bg-gray-100">
       <Sidebar />
-      <div className="flex-1 p-6 lg:p-8 ml-0 lg:ml-20">
-        <div className="max-w-7xl mx-auto">{children}</div>
-      </div>
+      <main className="flex-1 ml-0 lg:ml-20 lg:peer-data-[state=expanded]:ml-64 transition-[margin] duration-300 pl-2 pr-0 py-6">
+        {children}
+      </main>
     </div>
   );
 }
