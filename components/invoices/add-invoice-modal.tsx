@@ -14,6 +14,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { CustomDropdown } from "./custom-dropdown"
+import ClientSelect from "@/components/clients/client-select"
+import EmployeeSelect from "@/components/employees/employee-select"
+import AgentSelect from "@/components/agents/agent-select"
+import AddClientModal from "@/components/clients/add-client-modal"
+import { EmployeeModal } from "@/components/employees/employee-modal"
+import { AgentModal } from "@/components/agents/agent-modal"
 
 import { TicketInformation } from "./ticket-information"
 import { HotelInformation } from "./hotel-information"
@@ -22,7 +28,7 @@ import { BillingInformation } from "./billing-information"
 import { MoneyReceipt } from "./money-receipt"
 import { PassportInformation } from "./passport-information"
 import { Invoice } from "@/types/invoice"
-import { generateInvoiceNumber, generateMoneyReceiptNumber } from "@/data/invoices"
+import { generateInvoiceNumber, generateMRNumber } from "@/data/invoices"
 
 interface AddInvoiceModalProps {
   isOpen: boolean
@@ -31,6 +37,12 @@ interface AddInvoiceModalProps {
 }
 
 export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded }: AddInvoiceModalProps) {
+  const [clientId, setClientId] = useState<string | undefined>()
+  const [employeeId, setEmployeeId] = useState<string | undefined>()
+  const [agentId, setAgentId] = useState<string | undefined>()
+  const [openAddClient, setOpenAddClient] = useState(false)
+  const [openAddEmployee, setOpenAddEmployee] = useState(false)
+  const [openAddAgent, setOpenAddAgent] = useState(false)
   const [formData, setFormData] = useState({
     passport: [],
     ticket: [],
@@ -66,7 +78,7 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded }: AddInvoiceM
       dueAmount,
       status,
       salesBy: "Unknown",
-      moneyReceiptNo: receivedAmount > 0 ? generateMoneyReceiptNumber() : "",
+      mrNo: receivedAmount > 0 ? generateMRNumber() : "",
       notes: ""
     }
   }
@@ -86,6 +98,7 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded }: AddInvoiceM
   }
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-[95vw] lg:max-w-[90%] h-[85vh] p-0 flex flex-col overflow-hidden">
         <DialogHeader className="px-6 py-4 border-b">
@@ -103,21 +116,21 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded }: AddInvoiceM
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="general[client]">Select Client</Label>
-                    <CustomDropdown
+                    <ClientSelect
+                      value={clientId}
+                      onChange={(id) => setClientId(id)}
+                      onRequestAdd={() => setOpenAddClient(true)}
                       placeholder="Select client"
-                      options={["Client A", "Client B", "Client C"]}
-                      value={""}
-                      onValueChange={() => {}}
                     />
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="general[salesBy]">Sales By</Label>
-                    <CustomDropdown
+                    <EmployeeSelect
+                      value={employeeId}
+                      onChange={(id) => setEmployeeId(id)}
+                      onRequestAdd={() => setOpenAddEmployee(true)}
                       placeholder="Select staff"
-                      options={["Staff 1", "Staff 2", "Staff 3"]}
-                      value={""}
-                      onValueChange={() => {}}
                     />
                   </div>
 
@@ -138,11 +151,11 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded }: AddInvoiceM
 
                   <div className="space-y-2">
                     <Label htmlFor="general[agent]">Select Agent</Label>
-                    <CustomDropdown
+                    <AgentSelect
+                      value={agentId}
+                      onChange={(id) => setAgentId(id)}
+                      onRequestAdd={() => setOpenAddAgent(true)}
                       placeholder="Select agent"
-                      options={["Agent X", "Agent Y", "Agent Z"]}
-                      value={""}
-                      onValueChange={() => {}}
                     />
                   </div>
                 </div>
@@ -176,8 +189,8 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded }: AddInvoiceM
             
             {/* Money Receipt */}
             <MoneyReceipt />
-          </div>
-        </ScrollArea>
+        </div>
+      </ScrollArea>
         
         {/* Footer */}
         <div className="flex justify-end gap-3 px-6 py-4 border-t bg-gray-50">
@@ -193,5 +206,10 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded }: AddInvoiceM
         </div>
       </DialogContent>
     </Dialog>
+    {/* Modals for adding new entries */}
+    <AddClientModal open={openAddClient} onOpenChange={(v) => setOpenAddClient(v)} onSubmit={async () => { setOpenAddClient(false) }} />
+    <EmployeeModal open={openAddEmployee} onClose={() => setOpenAddEmployee(false)} onSubmit={async () => { setOpenAddEmployee(false) }} />
+    <AgentModal open={openAddAgent} onClose={() => setOpenAddAgent(false)} onSubmit={async () => { setOpenAddAgent(false) }} />
+    </>
   )
 }

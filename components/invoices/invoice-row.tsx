@@ -12,8 +12,7 @@ interface InvoiceRowProps {
   onView?: (invoice: Invoice) => void
   onEdit?: (invoice: Invoice) => void
   onDelete?: (invoice: Invoice) => void
-  onDownload?: (invoice: Invoice) => void
-  onSend?: (invoice: Invoice) => void
+  onMoneyReceipt?: (invoice: Invoice) => void
 }
 
 export function InvoiceRow({
@@ -22,8 +21,7 @@ export function InvoiceRow({
   onView,
   onEdit,
   onDelete,
-  onDownload,
-  onSend
+  onMoneyReceipt
 }: InvoiceRowProps) {
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-BD', {
@@ -100,14 +98,7 @@ export function InvoiceRow({
       </TableCell>
       
       <TableCell>
-        <InvoiceActions
-          invoice={invoice}
-          onView={onView}
-          onEdit={onEdit}
-          onDelete={onDelete}
-          onDownload={onDownload}
-          onSend={onSend}
-        />
+        <InvoiceActions invoice={invoice} onView={onView} onEdit={onEdit} onDelete={onDelete} onMoneyReceipt={onMoneyReceipt} />
       </TableCell>
     </TableRow>
   )

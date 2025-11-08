@@ -7,9 +7,11 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Plus, Trash2 } from "lucide-react"
 import { CustomDropdown } from "./custom-dropdown"
+import PassportSelect from "@/components/passports/passport-select"
 
 interface PassportEntry {
   id: string
+  passportId?: string
   name: string
   passportNo: string
   paxType: string
@@ -86,11 +88,12 @@ export function PassportInformation() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="space-y-2">
                 <Label htmlFor={`passportNo-${entry.id}`}>Passport No</Label>
-                <Input
-                  id={`passportNo-${entry.id}`}
-                  placeholder="Enter passport number"
-                  value={entry.passportNo}
-                  onChange={(e) => updatePassportEntry(entry.id, 'passportNo', e.target.value)}
+                <PassportSelect
+                  value={entry.passportId}
+                  onChange={(id, selected) => {
+                    setPassportEntries(passportEntries.map(p => p.id === entry.id ? { ...p, passportId: id, passportNo: selected?.passportNo || "" } : p))
+                  }}
+                  placeholder="Select passport"
                 />
               </div>
 

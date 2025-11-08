@@ -109,14 +109,9 @@ export default function InvoicesPage() {
     }
   }
 
-  const handleDownload = (invoice: Invoice) => {
-    console.log("Download invoice:", invoice)
-    // TODO: Implement PDF download
-  }
-
-  const handleSend = (invoice: Invoice) => {
-    console.log("Send invoice:", invoice)
-    // TODO: Implement email sending
+  const handleMoneyReceipt = (invoice: Invoice) => {
+    console.log("Money receipt for:", invoice)
+    // TODO: Implement money receipt flow
   }
 
   const handleAddInvoice = (newInvoice: Invoice) => {
@@ -141,7 +136,7 @@ export default function InvoicesPage() {
       </div>
 
       {/* Statistics */}
-      <InvoiceStats stats={stats} />
+      {/* <InvoiceStats stats={stats} /> */}
 
       {/* Filters */}
       <InvoiceFilters 
@@ -156,8 +151,7 @@ export default function InvoicesPage() {
         onView={handleView}
         onEdit={handleEdit}
         onDelete={handleDelete}
-        onDownload={handleDownload}
-        onSend={handleSend}
+        onMoneyReceipt={handleMoneyReceipt}
       />
 
       {/* Add Invoice Modal */}

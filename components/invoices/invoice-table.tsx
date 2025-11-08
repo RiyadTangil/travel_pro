@@ -16,8 +16,7 @@ interface InvoiceTableProps {
   onView?: (invoice: Invoice) => void
   onEdit?: (invoice: Invoice) => void
   onDelete?: (invoice: Invoice) => void
-  onDownload?: (invoice: Invoice) => void
-  onSend?: (invoice: Invoice) => void
+  onMoneyReceipt?: (invoice: Invoice) => void
 }
 
 export function InvoiceTable({
@@ -25,8 +24,7 @@ export function InvoiceTable({
   onView,
   onEdit,
   onDelete,
-  onDownload,
-  onSend
+  onMoneyReceipt
 }: InvoiceTableProps) {
   if (invoices.length === 0) {
     return (
@@ -64,16 +62,15 @@ export function InvoiceTable({
             </TableHeader>
             <TableBody>
               {invoices.map((invoice, index) => (
-                <InvoiceRow
-                  key={invoice.id}
-                  invoice={invoice}
-                  index={index}
-                  onView={onView}
-                  onEdit={onEdit}
-                  onDelete={onDelete}
-                  onDownload={onDownload}
-                  onSend={onSend}
-                />
+              <InvoiceRow
+                key={invoice.id}
+                invoice={invoice}
+                index={index}
+                onView={onView}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                onMoneyReceipt={onMoneyReceipt}
+              />
               ))}
             </TableBody>
           </Table>

@@ -54,11 +54,11 @@ export function Sidebar() {
       icon: <LayoutDashboard className="h-5 w-5" />,
       href: "/dashboard",
     },
-    {
-      title: "Client Management",
-      icon: <Users className="h-5 w-5" />,
-      href: "/dashboard/clients",
-    },
+    // {
+    //   title: "Client Management",
+    //   icon: <Users className="h-5 w-5" />,
+    //   href: "/dashboard/clients",
+    // },
     {
       title: "Clients Manager",
       icon: <Users className="h-5 w-5" />,
@@ -74,31 +74,41 @@ export function Sidebar() {
       icon: <FileText className="h-5 w-5" />,
       href: "/dashboard/client-categories",
     },
-    {
-      title: "Archived Clients",
-      icon: <Archive className="h-5 w-5" />,
-      href: "/dashboard/archived-clients",
-    },
-    {
-      title: "B2B Clients",
-      icon: <Building2 className="h-5 w-5" />,
-      href: "/dashboard/b2b-clients",
-    },
+    // {
+    //   title: "Archived Clients",
+    //   icon: <Archive className="h-5 w-5" />,
+    //   href: "/dashboard/archived-clients",
+    // },
+    // {
+    //   title: "B2B Clients",
+    //   icon: <Building2 className="h-5 w-5" />,
+    //   href: "/dashboard/b2b-clients",
+    // },
     {
       title: "Company Profile",
       icon: <Settings className="h-5 w-5" />,
       href: "/dashboard/profile",
     },
     {
+      title: "Agent Profile",
+      icon: <Users className="h-5 w-5" />,
+      href: "/dashboard/agent-profile",
+    },
+    {
+      title: "Passport",
+      icon: <FileText className="h-5 w-5" />,
+      href: "/dashboard/passport",
+    },
+    {
       title: "Employee",
       icon: <Users className="h-5 w-5" />,
       href: "/dashboard/employee",
     },
-    {
-      title: "Reports",
-      icon: <BarChart2 className="h-5 w-5" />,
-      href: "/dashboard/reports",
-    },
+    // {
+    //   title: "Reports",
+    //   icon: <BarChart2 className="h-5 w-5" />,
+    //   href: "/dashboard/reports",
+    // },
   ]
 
   return (
