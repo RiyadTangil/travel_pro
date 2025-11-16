@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { CustomDropdown } from "./custom-dropdown"
 import { Switch } from "@/components/ui/switch"
+import { DateInput } from "@/components/ui/date-input"
 
 const paymentMethodOptions = [
   "Cash", "Credit Card", "Debit Card", "Bank Transfer", "Check", 
@@ -49,7 +50,7 @@ export function MoneyReceipt() {
             <CardTitle className="text-base">Payment Details</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="receiptNumber">Receipt Number</Label>
                 <Input
@@ -62,11 +63,9 @@ export function MoneyReceipt() {
               
               <div className="space-y-2">
                 <Label htmlFor="receiptDate">Receipt Date</Label>
-                <Input
-                  id="receiptDate"
-                  type="date"
-                  value={receiptData.receiptDate}
-                  onChange={(e) => updateReceiptData('receiptDate', e.target.value)}
+                <DateInput
+                  value={receiptData.receiptDate ? new Date(receiptData.receiptDate) : undefined}
+                  onChange={(d) => updateReceiptData('receiptDate', d ? d.toISOString().slice(0,10) : "")}
                 />
               </div>
               
@@ -110,7 +109,7 @@ export function MoneyReceipt() {
             <CardTitle className="text-base">Amount Details</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="amountPaid">Amount Paid</Label>
                 <Input

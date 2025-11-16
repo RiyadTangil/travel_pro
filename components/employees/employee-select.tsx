@@ -61,20 +61,20 @@ export default function EmployeeSelect({ value, onChange, onRequestAdd, placehol
   useEffect(() => {
     if (!value || selected) return
     let isMounted = true
-    ;(async () => {
-      try {
-        const res = await fetch(`/api/employees/${value}`)
-        if (!res.ok) return
-        const data = await res.json()
-        const e = data.employee
-        if (!e) return
-        const item: EmployeeItem = { id: e.id, name: e.name, department: e.department, designation: e.designation, mobile: e.mobile, email: e.email }
-        if (isMounted) setItems(prev => {
-          if (prev.some(p => p.id === item.id)) return prev
-          return [item, ...prev]
-        })
-      } catch (e) {}
-    })()
+      ; (async () => {
+        try {
+          const res = await fetch(`/api/employees/${value}`)
+          if (!res.ok) return
+          const data = await res.json()
+          const e = data.employee
+          if (!e) return
+          const item: EmployeeItem = { id: e.id, name: e.name, department: e.department, designation: e.designation, mobile: e.mobile, email: e.email }
+          if (isMounted) setItems(prev => {
+            if (prev.some(p => p.id === item.id)) return prev
+            return [item, ...prev]
+          })
+        } catch (e) { }
+      })()
     return () => { isMounted = false }
   }, [value, selected])
 
@@ -91,9 +91,12 @@ export default function EmployeeSelect({ value, onChange, onRequestAdd, placehol
           <span className="truncate text-left">
             {selected ? formatLabel(selected) : (placeholder || "Select Employee")}
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2" onMouseDown={(e) => { e.preventDefault() }}
+            onClick={(e) => { e.stopPropagation(); handleSelect(undefined) }}>
             {selected && (
-              <X className="h-4 w-4 opacity-60 hover:opacity-100" onClick={(e) => { e.stopPropagation(); handleSelect(undefined) }} />
+              <X
+                className="h-4 w-4 opacity-60 hover:opacity-100"
+              />
             )}
             <ChevronsUpDown className="h-4 w-4 opacity-60" />
           </div>

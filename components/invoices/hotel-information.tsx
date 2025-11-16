@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Plus, Trash2 } from "lucide-react"
 import { CustomDropdown } from "./custom-dropdown"
+import { DateInput } from "@/components/ui/date-input"
 
 interface HotelEntry {
   id: string
@@ -80,7 +81,7 @@ export function HotelInformation() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
               <div className="space-y-2">
                 <Label htmlFor={`hotelName-${entry.id}`}>Hotel Name</Label>
                 <Input
@@ -103,21 +104,17 @@ export function HotelInformation() {
 
               <div className="space-y-2">
                 <Label htmlFor={`checkInDate-${entry.id}`}>Check-in Date</Label>
-                <Input
-                  id={`checkInDate-${entry.id}`}
-                  type="date"
-                  value={entry.checkInDate}
-                  onChange={(e) => updateHotelEntry(entry.id, 'checkInDate', e.target.value)}
+                <DateInput
+                  value={entry.checkInDate ? new Date(entry.checkInDate) : undefined}
+                  onChange={(d) => updateHotelEntry(entry.id, 'checkInDate', d ? d.toISOString().slice(0,10) : "")}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor={`checkOutDate-${entry.id}`}>Check-out Date</Label>
-                <Input
-                  id={`checkOutDate-${entry.id}`}
-                  type="date"
-                  value={entry.checkOutDate}
-                  onChange={(e) => updateHotelEntry(entry.id, 'checkOutDate', e.target.value)}
+                <DateInput
+                  value={entry.checkOutDate ? new Date(entry.checkOutDate) : undefined}
+                  onChange={(d) => updateHotelEntry(entry.id, 'checkOutDate', d ? d.toISOString().slice(0,10) : "")}
                 />
               </div>
 

@@ -27,10 +27,12 @@ export function InvoiceActions({ invoice, onView, onEdit, onDelete, onMoneyRecei
         <Trash2 className="h-4 w-4 mr-2" />
         Delete
       </Button>
-      <Button variant="outline" size="sm" onClick={() => onMoneyReceipt?.(invoice)} className="h-8">
-        <Receipt className="h-4 w-4 mr-2" />
-        Money Receipt
-      </Button>
+      {invoice.status !== 'paid' && (
+        <Button variant="outline" size="sm" onClick={() => onMoneyReceipt?.(invoice)} className="h-8">
+          <Receipt className="h-4 w-4 mr-2" />
+          Money Receipt
+        </Button>
+      )}
     </div>
   )
 }

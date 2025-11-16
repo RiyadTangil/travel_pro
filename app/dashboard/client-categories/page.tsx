@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useSession } from "next-auth/react"
 import { DashboardHeader } from "@/components/dashboard/header"
 import {
   Breadcrumb,
@@ -16,6 +17,7 @@ import ClientCategoryTable, { ClientCategoryItem } from "@/components/clients/cl
 import { ClientCategoryModal } from "@/components/clients/client-category-modal"
 
 export default function ClientCategoriesPage() {
+  const { data: session } = useSession()
   const [items, setItems] = useState<ClientCategoryItem[]>([])
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
@@ -29,7 +31,11 @@ export default function ClientCategoriesPage() {
   const fetchData = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/clients/client-categories?page=${page}&pageSize=${pageSize}`)
+      const res = await fetch(`/api/clients/client-categories?page=${page}&pageSize=${pageSize}`, {
+        headers: {
+          "x-company-id": session?.user?.companyId ?? "",
+        },
+      })
       const data = await res.json()
       setItems(data.data || [])
       setTotal(data.total || 0)
@@ -42,12 +48,12 @@ export default function ClientCategoriesPage() {
     fetchData()
   }, [page, pageSize])
 
-  const handleAdd = async (name: string, prefix: string) => {
+  const handleAdd = async (name: string, prefix: string, status: "active" | "inactive") => {
     setLoading(true)
     await fetch(`/api/clients/client-categories`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, prefix }),
+      body: JSON.stringify({ name, prefix, status, companyId: session?.user?.companyId ?? null }),
     })
     setIsModalOpen(false)
     await fetchData()
@@ -109,20 +115,20 @@ export default function ClientCategoriesPage() {
       <ClientCategoryModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        onSubmit={async (name, prefix) => {
+        onSubmit={async (name, prefix, status, companyId) => {
           setLoading(true)
           try {
             if (editingItem) {
               await fetch(`/api/clients/client-categories/${editingItem.id}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, prefix }),
+                body: JSON.stringify({ name, prefix, status }),
               })
             } else {
               await fetch(`/api/clients/client-categories`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, prefix }),
+                body: JSON.stringify({ name, prefix, status, companyId }),
               })
             }
           } finally {

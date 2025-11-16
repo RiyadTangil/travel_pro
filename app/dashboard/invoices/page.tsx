@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
+import { MoneyReceiptModal } from "@/components/invoices/money-receipt-modal"
 import { AddInvoiceModal } from "@/components/invoices/add-invoice-modal"
 import { InvoiceTable } from "@/components/invoices/invoice-table"
 import { InvoiceFilters } from "@/components/invoices/invoice-filters"
@@ -12,6 +13,7 @@ import { Invoice, InvoiceFilters as IInvoiceFilters, InvoiceStats as IInvoiceSta
 
 export default function InvoicesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [editingInvoice, setEditingInvoice] = useState<Invoice | undefined>(undefined)
   const [invoices, setInvoices] = useState<Invoice[]>(dummyInvoices)
   const [filters, setFilters] = useState<IInvoiceFilters>({
     search: "",
@@ -99,8 +101,8 @@ export default function InvoicesPage() {
   }
 
   const handleEdit = (invoice: Invoice) => {
-    console.log("Edit invoice:", invoice)
-    // TODO: Implement edit functionality
+    setEditingInvoice(invoice)
+    setIsModalOpen(true)
   }
 
   const handleDelete = (invoice: Invoice) => {
@@ -109,9 +111,12 @@ export default function InvoicesPage() {
     }
   }
 
+  const [moneyReceiptOpen, setMoneyReceiptOpen] = useState(false)
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | undefined>(undefined)
+
   const handleMoneyReceipt = (invoice: Invoice) => {
-    console.log("Money receipt for:", invoice)
-    // TODO: Implement money receipt flow
+    setSelectedInvoice(invoice)
+    setMoneyReceiptOpen(true)
   }
 
   const handleAddInvoice = (newInvoice: Invoice) => {
@@ -157,8 +162,29 @@ export default function InvoicesPage() {
       {/* Add Invoice Modal */}
       <AddInvoiceModal 
         isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => { setIsModalOpen(false); setEditingInvoice(undefined) }}
         onInvoiceAdded={handleAddInvoice}
+        initialInvoice={editingInvoice}
+      />
+
+      <MoneyReceiptModal
+        open={moneyReceiptOpen}
+        onClose={() => setMoneyReceiptOpen(false)}
+        invoice={selectedInvoice}
+        onSubmit={(payload) => {
+          // Update local invoices list: increment receivedAmount and recalc status
+          setInvoices(prev => prev.map(inv => {
+            if (inv.id === payload.invoiceId) {
+              const receivedAmount = (inv.receivedAmount || 0) + (payload.amount || 0)
+              const dueAmount = Math.max(0, (inv.salesPrice || 0) - receivedAmount)
+              let status: Invoice['status'] = 'due'
+              if (receivedAmount >= (inv.salesPrice || 0)) status = 'paid'
+              else if (receivedAmount > 0) status = 'partial'
+              return { ...inv, receivedAmount, dueAmount, status }
+            }
+            return inv
+          }))
+        }}
       />
     </div>
   )

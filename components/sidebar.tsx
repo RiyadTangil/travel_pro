@@ -74,6 +74,11 @@ export function Sidebar() {
       icon: <FileText className="h-5 w-5" />,
       href: "/dashboard/client-categories",
     },
+    {
+      title: "Vendors",
+      icon: <Archive className="h-5 w-5" />,
+      href: "/dashboard/vendors",
+    },
     // {
     //   title: "Archived Clients",
     //   icon: <Archive className="h-5 w-5" />,

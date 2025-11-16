@@ -14,6 +14,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     const update: any = {}
     if (typeof payload.name === "string") update.name = payload.name.trim()
     if (typeof payload.prefix === "string") update.prefix = payload.prefix.trim()
+    if (typeof payload.status === "string") update.status = payload.status === "inactive" ? "inactive" : "active"
     update.updatedAt = new Date()
 
     if (!update.name && !update.prefix) {
@@ -30,7 +31,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     }
 
     const updated = await collection.findOne({ _id: new ObjectId(id) })
-    const data = updated ? { id: String(updated._id), name: updated.name, prefix: updated.prefix || "" } : null
+    const data = updated ? { id: String(updated._id), name: updated.name, prefix: updated.prefix || "", status: updated.status || "active", companyId: updated.companyId || null } : null
     return NextResponse.json({ data })
   } catch (error) {
     console.error("Client category PUT error:", error)

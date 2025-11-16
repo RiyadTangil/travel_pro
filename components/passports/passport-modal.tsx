@@ -5,6 +5,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { DateInput } from "@/components/ui/date-input"
+import { format } from "date-fns"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import ClientSelect from "@/components/clients/client-select"
 import AddClientModal from "@/components/clients/add-client-modal"
@@ -174,17 +176,26 @@ export function PassportModal({ open, onClose, onSubmit, mode = "add", initialVa
 
             <div className="space-y-2">
               <Label>Date of Birth</Label>
-              <Input type="date" value={dob} onChange={(e) => setDob(e.target.value)} />
+              <DateInput
+                value={dob ? new Date(dob) : undefined}
+                onChange={(d) => setDob(d ? format(d, "yyyy-MM-dd") : "")}
+              />
             </div>
 
             <div className="space-y-2">
               <Label>Date of Issue</Label>
-              <Input type="date" value={doi} onChange={(e) => setDoi(e.target.value)} />
+              <DateInput
+                value={doi ? new Date(doi) : undefined}
+                onChange={(d) => setDoi(d ? format(d, "yyyy-MM-dd") : "")}
+              />
             </div>
 
             <div className="space-y-2">
               <Label>Date of Expire</Label>
-              <Input type="date" value={doe} onChange={(e) => setDoe(e.target.value)} />
+              <DateInput
+                value={doe ? new Date(doe) : undefined}
+                onChange={(d) => setDoe(d ? format(d, "yyyy-MM-dd") : "")}
+              />
             </div>
 
             <div className="space-y-2 md:col-span-3">

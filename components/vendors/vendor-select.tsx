@@ -6,33 +6,31 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { ChevronsUpDown, Plus, X } from "lucide-react"
 
-type ClientItem = {
+type VendorItem = {
   id: string
   name: string
-  uniqueId?: number
   email?: string
-  phone?: string
+  mobile?: string
 }
 
-interface ClientSelectProps {
+interface VendorSelectProps {
   value?: string
-  onChange: (id: string | undefined, selected?: ClientItem) => void
+  onChange: (id: string | undefined, selected?: VendorItem) => void
   onRequestAdd?: () => void
   placeholder?: string
   className?: string
   autoFocus?: boolean
 }
 
-// Formats like: NAME - (CL-0001)
-function formatLabel(c: ClientItem) {
-  const code = typeof c.uniqueId === "number" ? `CL-${String(c.uniqueId).padStart(4, "0")}` : "CL-XXXX"
-  return `${c.name} - (${code})`
+function formatLabel(v: VendorItem) {
+  const contact = v.mobile ? v.mobile : v.email ? v.email : ""
+  return contact ? `${v.name} - (${contact})` : v.name
 }
 
-export default function ClientSelect({ value, onChange, onRequestAdd, placeholder = "Select Client", className, autoFocus }: ClientSelectProps) {
+export default function VendorSelect({ value, onChange, onRequestAdd, placeholder = "Select Vendor", className, autoFocus }: VendorSelectProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [items, setItems] = useState<ClientItem[]>([])
+  const [items, setItems] = useState<VendorItem[]>([])
   const [search, setSearch] = useState("")
 
   const selected = useMemo(() => items.find(i => i.id === value), [items, value])
@@ -43,13 +41,14 @@ export default function ClientSelect({ value, onChange, onRequestAdd, placeholde
     const load = async () => {
       setLoading(true)
       try {
-        const qs = new URLSearchParams({ page: "1", limit: "25", search }).toString()
-        const res = await fetch(`/api/clients-manager?${qs}`, { signal: controller.signal })
+        const qs = new URLSearchParams({ page: "1", pageSize: "25" }).toString()
+        const res = await fetch(`/api/vendors?${qs}`, { signal: controller.signal })
         const data = await res.json()
-        const list: ClientItem[] = (data.clients || []).map((c: any) => ({ id: c.id, name: c.name, uniqueId: c.uniqueId, email: c.email, phone: c.phone }))
-        setItems(list)
+        const list: VendorItem[] = (data.data || []).map((v: any) => ({ id: v.id, name: v.name, email: v.email, mobile: v.mobile }))
+        const filtered = search.trim() ? list.filter(i => i.name.toLowerCase().includes(search.toLowerCase()) || (i.mobile || "").includes(search) || (i.email || "").toLowerCase().includes(search.toLowerCase())) : list
+        setItems(filtered)
       } catch (e) {
-        if (process.env.NODE_ENV !== "production") console.error("ClientSelect load error", e)
+        if (process.env.NODE_ENV !== "production") console.error("VendorSelect load error", e)
       } finally {
         setLoading(false)
       }
@@ -58,25 +57,23 @@ export default function ClientSelect({ value, onChange, onRequestAdd, placeholde
     return () => controller.abort()
   }, [open, search])
 
-  // When a value is externally set but not in items yet, fetch that item
   useEffect(() => {
     if (!value || selected) return
     let isMounted = true
-      ; (async () => {
-        try {
-          const res = await fetch(`/api/clients-manager/${value}`)
-          if (!res.ok) return
-          const data = await res.json()
-          const c = data.client
-          if (!c) return
-          const item: ClientItem = { id: c.id, name: c.name, uniqueId: c.uniqueId, email: c.email, phone: c.phone }
-          if (isMounted) setItems(prev => {
-            // avoid duplicates
-            if (prev.some(p => p.id === item.id)) return prev
-            return [item, ...prev]
-          })
-        } catch (e) { }
-      })()
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/vendors/${value}`)
+        if (!res.ok) return
+        const data = await res.json()
+        const v = data.vendor
+        if (!v) return
+        const item: VendorItem = { id: v.id, name: v.name, email: v.email, mobile: v.mobile }
+        if (isMounted) setItems(prev => {
+          if (prev.some(p => p.id === item.id)) return prev
+          return [item, ...prev]
+        })
+      } catch (e) {}
+    })()
     return () => { isMounted = false }
   }, [value, selected])
 
@@ -93,13 +90,15 @@ export default function ClientSelect({ value, onChange, onRequestAdd, placeholde
           autoFocus={autoFocus}
         >
           <span className="truncate text-left">
-            {selected ? formatLabel(selected) : (placeholder || "Select Client")}
+            {selected ? formatLabel(selected) : (placeholder || "Select Vendor")}
           </span>
-          <div className="flex items-center gap-2" onMouseDown={(e) => { e.preventDefault() }}
-            onClick={(e) => { e.stopPropagation(); handleSelect(undefined) }}>
+          <div className="flex items-center gap-2">
             {selected && (
               <X
                 className="h-4 w-4 opacity-60 hover:opacity-100"
+                onMouseDown={(e) => { e.preventDefault() }}
+                onClick={(e) => { e.stopPropagation(); handleSelect(undefined) }}
+                title="Clear"
               />
             )}
             <ChevronsUpDown className="h-4 w-4 opacity-60" />
@@ -111,16 +110,16 @@ export default function ClientSelect({ value, onChange, onRequestAdd, placeholde
           <div className="px-2 pt-2">
             <Button size="sm" variant="secondary" className="w-full justify-start gap-2" onClick={() => { onRequestAdd?.(); }}>
               <Plus className="h-4 w-4" />
-              Add Client
+              Add Vendor
             </Button>
           </div>
-          <CommandInput placeholder="Search client..." value={search} onValueChange={setSearch} />
+          <CommandInput placeholder="Search vendor..." value={search} onValueChange={setSearch} />
           <CommandList>
-            <CommandEmpty>{loading ? "Loading..." : "No clients found."}</CommandEmpty>
+            <CommandEmpty>{loading ? "Loading..." : "No vendors found."}</CommandEmpty>
             <CommandGroup>
-              {items.map((c) => (
-                <CommandItem key={c.id} value={c.id} onSelect={() => handleSelect(c.id)}>
-                  {formatLabel(c)}
+              {items.map((v) => (
+                <CommandItem key={v.id} value={v.id} onSelect={() => handleSelect(v.id)}>
+                  {formatLabel(v)}
                 </CommandItem>
               ))}
             </CommandGroup>

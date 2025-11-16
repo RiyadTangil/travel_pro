@@ -91,7 +91,12 @@ export default function AgentSelect({ value, onChange, onRequestAdd, placeholder
           </span>
           <div className="flex items-center gap-2">
             {selected && (
-              <X className="h-4 w-4 opacity-60 hover:opacity-100" onClick={(e) => { e.stopPropagation(); handleSelect(undefined) }} />
+              <X
+                className="h-4 w-4 opacity-60 hover:opacity-100"
+                onMouseDown={(e) => { e.preventDefault() }}
+                onClick={(e) => { e.stopPropagation(); handleSelect(undefined) }}
+                title="Clear"
+              />
             )}
             <ChevronsUpDown className="h-4 w-4 opacity-60" />
           </div>

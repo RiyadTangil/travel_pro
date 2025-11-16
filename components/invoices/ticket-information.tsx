@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Plus, Trash2 } from "lucide-react"
 import { CustomDropdown } from "./custom-dropdown"
+import { DateInput } from "@/components/ui/date-input"
 
 interface TicketEntry {
   id: string
@@ -85,7 +86,7 @@ export function TicketInformation() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
               <div className="space-y-2">
                 <Label htmlFor={`ticketNo-${entry.id}`}>Ticket No</Label>
                 <Input
@@ -128,21 +129,17 @@ export function TicketInformation() {
 
               <div className="space-y-2">
                 <Label htmlFor={`journeyDate-${entry.id}`}>Journey Date</Label>
-                <Input
-                  id={`journeyDate-${entry.id}`}
-                  type="date"
-                  value={entry.journeyDate}
-                  onChange={(e) => updateTicketEntry(entry.id, 'journeyDate', e.target.value)}
+                <DateInput
+                  value={entry.journeyDate ? new Date(entry.journeyDate) : undefined}
+                  onChange={(d) => updateTicketEntry(entry.id, 'journeyDate', d ? d.toISOString().slice(0,10) : "")}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor={`returnDate-${entry.id}`}>Return Date</Label>
-                <Input
-                  id={`returnDate-${entry.id}`}
-                  type="date"
-                  value={entry.returnDate}
-                  onChange={(e) => updateTicketEntry(entry.id, 'returnDate', e.target.value)}
+                <DateInput
+                  value={entry.returnDate ? new Date(entry.returnDate) : undefined}
+                  onChange={(d) => updateTicketEntry(entry.id, 'returnDate', d ? d.toISOString().slice(0,10) : "")}
                 />
               </div>
 

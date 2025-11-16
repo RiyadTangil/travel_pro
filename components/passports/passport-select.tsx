@@ -58,20 +58,20 @@ export default function PassportSelect({ value, onChange, onRequestAdd, placehol
   useEffect(() => {
     if (!value || selected) return
     let isMounted = true
-    ;(async () => {
-      try {
-        const res = await fetch(`/api/passports/${value}`)
-        if (!res.ok) return
-        const data = await res.json()
-        const p = data.passport
-        if (!p) return
-        const item: PassportItem = { id: p.id || String(p._id), passportNo: p.passportNo, name: p.name }
-        if (isMounted) setItems(prev => {
-          if (prev.some(pp => pp.id === item.id)) return prev
-          return [item, ...prev]
-        })
-      } catch (e) {}
-    })()
+      ; (async () => {
+        try {
+          const res = await fetch(`/api/passports/${value}`)
+          if (!res.ok) return
+          const data = await res.json()
+          const p = data.passport
+          if (!p) return
+          const item: PassportItem = { id: p.id || String(p._id), passportNo: p.passportNo, name: p.name }
+          if (isMounted) setItems(prev => {
+            if (prev.some(pp => pp.id === item.id)) return prev
+            return [item, ...prev]
+          })
+        } catch (e) { }
+      })()
     return () => { isMounted = false }
   }, [value, selected])
 
@@ -88,9 +88,12 @@ export default function PassportSelect({ value, onChange, onRequestAdd, placehol
           <span className="truncate text-left">
             {selected ? formatLabel(selected) : (placeholder || "Select Passport")}
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 " onClick={(e) => { e.stopPropagation(); handleSelect(undefined) }} onMouseDown={(e) => { e.preventDefault() }}
+          >
             {selected && (
-              <X className="h-4 w-4 opacity-60 hover:opacity-100" onClick={(e) => { e.stopPropagation(); handleSelect(undefined) }} />
+              <X
+                className="h-4 w-4 opacity-60 hover:opacity-100"
+              />
             )}
             <ChevronsUpDown className="h-4 w-4 opacity-60" />
           </div>

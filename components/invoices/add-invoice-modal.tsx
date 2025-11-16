@@ -13,6 +13,7 @@ import { Separator } from "@/components/ui/separator"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { DateInput } from "@/components/ui/date-input"
 import { CustomDropdown } from "./custom-dropdown"
 import ClientSelect from "@/components/clients/client-select"
 import EmployeeSelect from "@/components/employees/employee-select"
@@ -29,20 +30,27 @@ import { MoneyReceipt } from "./money-receipt"
 import { PassportInformation } from "./passport-information"
 import { Invoice } from "@/types/invoice"
 import { generateInvoiceNumber, generateMRNumber } from "@/data/invoices"
+import { VendorAddModal } from "@/components/vendors/vendor-add-modal"
+import { useSession } from "next-auth/react"
 
 interface AddInvoiceModalProps {
   isOpen: boolean
   onClose: () => void
   onInvoiceAdded?: (invoice: Invoice) => void
+  initialInvoice?: Invoice
 }
 
-export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded }: AddInvoiceModalProps) {
+export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoice }: AddInvoiceModalProps) {
+  const { data: session } = useSession()
   const [clientId, setClientId] = useState<string | undefined>()
   const [employeeId, setEmployeeId] = useState<string | undefined>()
   const [agentId, setAgentId] = useState<string | undefined>()
+  const [salesDate, setSalesDate] = useState<Date | undefined>(undefined)
+  const [dueDate, setDueDate] = useState<Date | undefined>(undefined)
   const [openAddClient, setOpenAddClient] = useState(false)
   const [openAddEmployee, setOpenAddEmployee] = useState(false)
   const [openAddAgent, setOpenAddAgent] = useState(false)
+  const [openAddVendor, setOpenAddVendor] = useState(false)
   const [formData, setFormData] = useState({
     passport: [],
     ticket: [],
@@ -54,10 +62,8 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded }: AddInvoiceM
 
   const buildInvoice = (): Invoice => {
     const invoiceNoInput = (document.getElementById("general[invoiceNo]") as HTMLInputElement | null)?.value?.trim()
-    const salesDateInput = (document.getElementById("general[salesDate]") as HTMLInputElement | null)?.value?.trim()
-
     const invoiceNo = invoiceNoInput && invoiceNoInput.length > 0 ? invoiceNoInput : generateInvoiceNumber()
-    const salesDate = salesDateInput && salesDateInput.length > 0 ? new Date(salesDateInput).toISOString() : new Date().toISOString()
+    const salesDateIso = salesDate ? salesDate.toISOString() : new Date().toISOString()
 
     // Basic defaults until sections are fully wired
     const salesPrice = 0
@@ -72,7 +78,7 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded }: AddInvoiceM
       clientName: "Unknown Client",
       clientPhone: "",
       passportNo: "",
-      salesDate,
+      salesDate: salesDateIso,
       salesPrice,
       receivedAmount,
       dueAmount,
@@ -84,6 +90,12 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded }: AddInvoiceM
   }
 
   const handleCreate = () => {
+    const invoiceNoInput = (document.getElementById("general[invoiceNo]") as HTMLInputElement | null)?.value?.trim()
+    if (!clientId) { alert("Select Client is required."); return }
+    if (!employeeId) { alert("Sales By is required."); return }
+    if (!invoiceNoInput) { alert("Invoice No is required."); return }
+    if (!salesDate) { alert("Sales Date is required."); return }
+
     const newInvoice = buildInvoice()
     console.log("Creating invoice:", newInvoice)
     onInvoiceAdded?.(newInvoice)
@@ -113,9 +125,9 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded }: AddInvoiceM
                 <CardTitle className="text-base">General Information</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 lg:[grid-template-columns:repeat(6,minmax(0,1fr))]">
                   <div className="space-y-2">
-                    <Label htmlFor="general[client]">Select Client</Label>
+                    <Label htmlFor="general[client]">Select Client <span className="text-red-500">*</span></Label>
                     <ClientSelect
                       value={clientId}
                       onChange={(id) => setClientId(id)}
@@ -125,7 +137,7 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded }: AddInvoiceM
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="general[salesBy]">Sales By</Label>
+                    <Label htmlFor="general[salesBy]">Sales By <span className="text-red-500">*</span></Label>
                     <EmployeeSelect
                       value={employeeId}
                       onChange={(id) => setEmployeeId(id)}
@@ -135,18 +147,18 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded }: AddInvoiceM
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="general[invoiceNo]">Invoice No</Label>
-                    <Input id="general[invoiceNo]" placeholder="Enter invoice number" />
+                    <Label htmlFor="general[invoiceNo]">Invoice No *</Label>
+                    <Input id="general[invoiceNo]" placeholder="Enter invoice number" defaultValue={initialInvoice?.invoiceNo || ""} />
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="general[salesDate]">Sales Date</Label>
-                    <Input id="general[salesDate]" type="date" />
+                    <Label>Sales Date <span className="text-red-500">*</span></Label>
+                    <DateInput value={salesDate} onChange={setSalesDate} />
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="general[dueDate]">Due Date</Label>
-                    <Input id="general[dueDate]" type="date" />
+                    <Label>Due Date</Label>
+                    <DateInput value={dueDate} onChange={setDueDate} />
                   </div>
 
                   <div className="space-y-2">
@@ -183,7 +195,7 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded }: AddInvoiceM
             <Separator />
             
             {/* Billing Information */}
-            <BillingInformation />
+            <BillingInformation onRequestAddVendor={() => setOpenAddVendor(true)} />
             
             <Separator />
             
@@ -210,6 +222,18 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded }: AddInvoiceM
     <AddClientModal open={openAddClient} onOpenChange={(v) => setOpenAddClient(v)} onSubmit={async () => { setOpenAddClient(false) }} />
     <EmployeeModal open={openAddEmployee} onClose={() => setOpenAddEmployee(false)} onSubmit={async () => { setOpenAddEmployee(false) }} />
     <AgentModal open={openAddAgent} onClose={() => setOpenAddAgent(false)} onSubmit={async () => { setOpenAddAgent(false) }} />
+    <VendorAddModal
+      open={openAddVendor}
+      onOpenChange={(v) => setOpenAddVendor(v)}
+      onSubmit={async (v) => {
+        await fetch(`/api/vendors`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...v, companyId: session?.user?.companyId ?? null })
+        })
+        setOpenAddVendor(false)
+      }}
+    />
     </>
   )
 }

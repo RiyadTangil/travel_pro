@@ -140,6 +140,7 @@ export function InvoiceFilters({
                   value={filters.dateFrom}
                   onChange={(e) => handleFilterChange("dateFrom", e.target.value)}
                 />
+                <Button variant="ghost" size="sm" onClick={() => handleFilterChange("dateFrom", "")}>Clear datepicker input</Button>
               </div>
 
               <div className="space-y-2">
@@ -150,6 +151,7 @@ export function InvoiceFilters({
                   value={filters.dateTo}
                   onChange={(e) => handleFilterChange("dateTo", e.target.value)}
                 />
+                <Button variant="ghost" size="sm" onClick={() => handleFilterChange("dateTo", "")}>Clear datepicker input</Button>
               </div>
             </div>
           )}

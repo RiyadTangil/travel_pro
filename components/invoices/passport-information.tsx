@@ -7,7 +7,9 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Plus, Trash2 } from "lucide-react"
 import { CustomDropdown } from "./custom-dropdown"
+import { DateInput } from "@/components/ui/date-input"
 import PassportSelect from "@/components/passports/passport-select"
+import { PassportModal } from "@/components/passports/passport-modal"
 
 interface PassportEntry {
   id: string
@@ -39,6 +41,7 @@ export function PassportInformation() {
   const [passportEntries, setPassportEntries] = useState<PassportEntry[]>([
     { id: "1", ...initialPassportEntry }
   ])
+  const [openAddPassport, setOpenAddPassport] = useState(false)
 
   const addPassportEntry = () => {
     const newEntry: PassportEntry = {
@@ -85,14 +88,54 @@ export function PassportInformation() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
               <div className="space-y-2">
                 <Label htmlFor={`passportNo-${entry.id}`}>Passport No</Label>
                 <PassportSelect
                   value={entry.passportId}
-                  onChange={(id, selected) => {
+                  onChange={async (id, selected) => {
+                    if (!id) {
+                      // Clear selection and unfill all autofilled fields
+                      setPassportEntries(passportEntries.map(p => p.id === entry.id ? {
+                        ...p,
+                        passportId: undefined,
+                        passportNo: "",
+                        name: "",
+                        paxType: "",
+                        contactNo: "",
+                        email: "",
+                        dateOfBirth: "",
+                        dateOfIssue: "",
+                        dateOfExpire: "",
+                      } : p))
+                      return
+                    }
+                    // Set basic selected passportNo first
                     setPassportEntries(passportEntries.map(p => p.id === entry.id ? { ...p, passportId: id, passportNo: selected?.passportNo || "" } : p))
+                    // Load full passport details to autofill
+                    try {
+                      const res = await fetch(`/api/passports/${id}`)
+                      if (res.ok) {
+                        const data = await res.json()
+                        const pass = data.passport
+                        if (pass) {
+                          setPassportEntries(prev => prev.map(p => p.id === entry.id ? {
+                            ...p,
+                            name: pass.name || p.name,
+                            paxType: pass.paxType || p.paxType,
+                            contactNo: pass.mobile || p.contactNo,
+                            email: pass.email || p.email,
+                            dateOfBirth: pass.dob || p.dateOfBirth,
+                            dateOfIssue: pass.dateOfIssue || p.dateOfIssue,
+                            dateOfExpire: pass.dateOfExpire || p.dateOfExpire,
+                          } : p))
+                        }
+                      }
+                    } catch (e) {
+                      // ignore
+                    }
                   }}
+                  onRequestAdd={() => setOpenAddPassport(true)}
                   placeholder="Select passport"
                 />
               </div>
@@ -140,31 +183,28 @@ export function PassportInformation() {
 
               <div className="space-y-2">
                 <Label htmlFor={`dateOfBirth-${entry.id}`}>Date of Birth</Label>
-                <Input
-                  id={`dateOfBirth-${entry.id}`}
-                  type="date"
-                  value={entry.dateOfBirth}
-                  onChange={(e) => updatePassportEntry(entry.id, 'dateOfBirth', e.target.value)}
+                <DateInput
+                  value={entry.dateOfBirth ? new Date(entry.dateOfBirth) : undefined}
+                  onChange={(d) => updatePassportEntry(entry.id, 'dateOfBirth', d ? d.toISOString().slice(0,10) : "")}
+                  disabled={true}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor={`dateOfIssue-${entry.id}`}>Date of Issue</Label>
-                <Input
-                  id={`dateOfIssue-${entry.id}`}
-                  type="date"
-                  value={entry.dateOfIssue}
-                  onChange={(e) => updatePassportEntry(entry.id, 'dateOfIssue', e.target.value)}
+                <DateInput
+                  value={entry.dateOfIssue ? new Date(entry.dateOfIssue) : undefined}
+                  onChange={(d) => updatePassportEntry(entry.id, 'dateOfIssue', d ? d.toISOString().slice(0,10) : "")}
+                  disabled={true}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor={`dateOfExpire-${entry.id}`}>Date of Expire</Label>
-                <Input
-                  id={`dateOfExpire-${entry.id}`}
-                  type="date"
-                  value={entry.dateOfExpire}
-                  onChange={(e) => updatePassportEntry(entry.id, 'dateOfExpire', e.target.value)}
+                <DateInput
+                  value={entry.dateOfExpire ? new Date(entry.dateOfExpire) : undefined}
+                  onChange={(d) => updatePassportEntry(entry.id, 'dateOfExpire', d ? d.toISOString().slice(0,10) : "")}
+                  disabled={true}
                 />
               </div>
             </div>
@@ -184,6 +224,22 @@ export function PassportInformation() {
           Add Passport
         </Button>
       </div>
+
+      <PassportModal
+        open={openAddPassport}
+        onClose={() => setOpenAddPassport(false)}
+        onSubmit={async (payload) => {
+          // naive add: after adding passport, set into the first entry without id
+          const createdId = payload.passportNo
+          setPassportEntries(prev => prev.map(p => {
+            if (!p.passportId) {
+              return { ...p, passportId: createdId, passportNo: payload.passportNo, name: payload.name || p.name }
+            }
+            return p
+          }))
+          setOpenAddPassport(false)
+        }}
+      />
     </div>
   )
 }

@@ -59,7 +59,7 @@ export function CustomDropdown({
             </SelectItem>
           ))}
           
-          {!isAddingNew ? (
+          {/* {!isAddingNew ? (
             <div className="px-2 py-1">
               <Button
                 variant="ghost"
@@ -106,7 +106,7 @@ export function CustomDropdown({
                 </Button>
               </div>
             </div>
-          )}
+          )} */}
         </SelectContent>
       </Select>
     </div>

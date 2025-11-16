@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Plus, Trash2 } from "lucide-react"
 import { CustomDropdown } from "./custom-dropdown"
+import { TimeInput } from "@/components/ui/time-input"
 
 interface TransportEntry {
   id: string
@@ -81,7 +82,7 @@ export function TransportInformation() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
               <div className="space-y-2">
                 <Label>Transport Type</Label>
                 <CustomDropdown
@@ -114,11 +115,9 @@ export function TransportInformation() {
 
               <div className="space-y-2">
                 <Label htmlFor={`pickupTime-${entry.id}`}>Pickup Time</Label>
-                <Input
-                  id={`pickupTime-${entry.id}`}
-                  type="time"
+                <TimeInput
                   value={entry.pickupTime}
-                  onChange={(e) => updateTransportEntry(entry.id, 'pickupTime', e.target.value)}
+                  onChange={(t) => updateTransportEntry(entry.id, 'pickupTime', t || "")}
                 />
               </div>
 
@@ -134,11 +133,9 @@ export function TransportInformation() {
 
               <div className="space-y-2">
                 <Label htmlFor={`dropoffTime-${entry.id}`}>Dropoff Time</Label>
-                <Input
-                  id={`dropoffTime-${entry.id}`}
-                  type="time"
+                <TimeInput
                   value={entry.dropoffTime}
-                  onChange={(e) => updateTransportEntry(entry.id, 'dropoffTime', e.target.value)}
+                  onChange={(t) => updateTransportEntry(entry.id, 'dropoffTime', t || "")}
                 />
               </div>
             </div>
