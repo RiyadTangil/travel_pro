@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Plus, Trash2 } from "lucide-react"
 import { CustomDropdown } from "./custom-dropdown"
 import { DateInput } from "@/components/ui/date-input"
+import AirportRouteSelect from "./airport-route-select"
 
 interface TicketEntry {
   id: string
@@ -30,16 +31,28 @@ const initialTicketEntry: Omit<TicketEntry, 'id'> = {
   airline: "",
 }
 
-const airlineOptions = [
-  "Emirates", "Qatar Airways", "Singapore Airlines", "Lufthansa", "British Airways",
-  "Air France", "KLM", "Turkish Airlines", "Etihad Airways", "Cathay Pacific",
-  "American Airlines", "Delta Air Lines", "United Airlines"
-]
-
 export function TicketInformation() {
   const [ticketEntries, setTicketEntries] = useState<TicketEntry[]>([
     { id: "1", ...initialTicketEntry }
   ])
+  const [airlineOptions, setAirlineOptions] = useState<string[]>([])
+
+  useEffect(() => {
+    let active = true
+    const controller = new AbortController()
+    const loadAirlines = async () => {
+      try {
+        const res = await fetch(`/api/airlines?limit=500`, { signal: controller.signal })
+        const data = await res.json()
+        const names: string[] = (data.items || []).map((a: any) => a.name)
+        if (active) setAirlineOptions(names)
+      } catch (e) {
+        if (active) setAirlineOptions([])
+      }
+    }
+    loadAirlines()
+    return () => { active = false; controller.abort() }
+  }, [])
 
   const addTicketEntry = () => {
     const newEntry: TicketEntry = {
@@ -109,11 +122,10 @@ export function TicketInformation() {
 
               <div className="space-y-2">
                 <Label htmlFor={`route-${entry.id}`}>Route</Label>
-                <Input
-                  id={`route-${entry.id}`}
-                  placeholder="e.g., DAC → DXB"
+                <AirportRouteSelect
                   value={entry.route}
-                  onChange={(e) => updateTicketEntry(entry.id, 'route', e.target.value)}
+                  onChange={(next) => updateTicketEntry(entry.id, 'route', next)}
+                  placeholder="PKX->CNS->"
                 />
               </div>
 
