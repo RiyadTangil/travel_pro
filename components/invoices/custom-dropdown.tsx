@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   Select,
   SelectContent,
@@ -30,6 +30,11 @@ export function CustomDropdown({
   const [isAddingNew, setIsAddingNew] = useState(false)
   const [newOption, setNewOption] = useState("")
   const [dropdownOptions, setDropdownOptions] = useState(options)
+
+  // Keep internal options in sync when parent options change
+  useEffect(() => {
+    setDropdownOptions(options)
+  }, [options])
 
   const handleAddNew = () => {
     if (newOption.trim()) {

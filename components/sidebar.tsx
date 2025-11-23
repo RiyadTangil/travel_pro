@@ -75,6 +75,11 @@ export function Sidebar() {
       href: "/dashboard/client-categories",
     },
     {
+      title: "Product",
+      icon: <FileText className="h-5 w-5" />,
+      href: "/dashboard/products",
+    },
+    {
       title: "Vendors",
       icon: <Archive className="h-5 w-5" />,
       href: "/dashboard/vendors",

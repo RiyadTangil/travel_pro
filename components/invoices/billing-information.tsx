@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -23,9 +23,33 @@ interface BillingItem {
   vendor: string
 }
 
-const productOptions = [
-  "Ticket", "Passport", "Hotel", "Transport", "Visa", "Service", "Miscellaneous"
-]
+// Product options are loaded from Products API to keep it in sync with /dashboard/products
+// Users can still add ad-hoc items via CustomDropdown's add-new capability
+// The dropdown internally syncs when options change
+const staticFallbackProducts = ["Ticket", "Passport", "Hotel", "Transport", "Visa", "Service", "Miscellaneous"]
+const useProductOptions = () => {
+  const [options, setOptions] = useState<string[]>(staticFallbackProducts)
+  useEffect(() => {
+    let active = true
+    const controller = new AbortController()
+    const loadProducts = async () => {
+      try {
+        const res = await fetch(`/api/products?page=1&pageSize=200`, { signal: controller.signal })
+        const json = await res.json()
+        const names: string[] = (json.data || [])
+          .filter((p: any) => p.product_status === 1 && !p.products_is_deleted)
+          .map((p: any) => String(p.product_name))
+        const deduped = Array.from(new Set(names))
+        if (active && deduped.length) setOptions(deduped)
+      } catch (e) {
+        // keep fallback options
+      }
+    }
+    loadProducts()
+    return () => { active = false; controller.abort() }
+  }, [])
+  return options
+}
 
 const vendorOptions = [
   "Airlines", "Agency", "Hotel", "Transport", "Other"
@@ -50,6 +74,7 @@ interface BillingInformationProps {
 
 export function BillingInformation({ onRequestAddVendor }: BillingInformationProps) {
   const [items, setItems] = useState<BillingItem[]>([{ id: "1", ...initialItem }])
+  const productOptions = useProductOptions()
 
   const addItem = () => {
     const newItem: BillingItem = { id: Date.now().toString(), ...initialItem }

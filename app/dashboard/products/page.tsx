@@ -6,6 +6,7 @@ import ProductTable from "@/components/products/product-table"
 import ProductModal, { ProductItem } from "@/components/products/product-modal"
 import { useSession } from "next-auth/react"
 import { InlineLoader } from "@/components/ui/loader"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 
 export default function ProductsPage() {
   const { data: session } = useSession()
@@ -15,6 +16,7 @@ export default function ProductsPage() {
   const [editing, setEditing] = useState<ProductItem | null>(null)
   const [loadingList, setLoadingList] = useState(false)
   const [loadingRowId, setLoadingRowId] = useState<string | null>(null)
+  const [confirmDeleteItem, setConfirmDeleteItem] = useState<ProductItem | null>(null)
 
   const companyId = useMemo(() => session?.user?.companyId ?? null, [session?.user?.companyId])
 
@@ -83,13 +85,19 @@ export default function ProductsPage() {
     setOpen(true)
   }
 
-  const handleDelete = async (item: ProductItem) => {
-    setLoadingRowId(item.id)
+  const handleDelete = (item: ProductItem) => {
+    setConfirmDeleteItem(item)
+  }
+
+  const confirmDelete = async () => {
+    if (!confirmDeleteItem) return
+    setLoadingRowId(confirmDeleteItem.id)
     try {
-      await fetch(`/api/products/${item.id}`, { method: "DELETE" })
+      await fetch(`/api/products/${confirmDeleteItem.id}`, { method: "DELETE" })
       await load()
     } finally {
       setLoadingRowId(null)
+      setConfirmDeleteItem(null)
     }
   }
 
@@ -118,6 +126,22 @@ export default function ProductsPage() {
         onSubmit={onAddEditSubmit}
         initialItem={editing}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!confirmDeleteItem} onOpenChange={(v) => !v && setConfirmDeleteItem(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Product</AlertDialogTitle>
+          </AlertDialogHeader>
+          <p className="text-sm text-muted-foreground">Are you sure you want to delete {confirmDeleteItem?.name}? This action can be undone later since we keep a soft delete.</p>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmDeleteItem(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">
+              {loadingRowId === confirmDeleteItem?.id ? (<span className="flex items-center gap-2"><InlineLoader /> Deleting...</span>) : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
