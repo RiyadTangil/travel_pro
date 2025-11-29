@@ -84,6 +84,11 @@ export function Sidebar() {
       icon: <Archive className="h-5 w-5" />,
       href: "/dashboard/vendors",
     },
+    {
+      title: "Accounts",
+      icon: <CreditCard className="h-5 w-5" />,
+      href: "/dashboard/accounts",
+    },
     // {
     //   title: "Archived Clients",
     //   icon: <Archive className="h-5 w-5" />,

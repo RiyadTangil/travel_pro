@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useCallback, memo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -70,35 +70,91 @@ const initialItem: Omit<BillingItem, 'id'> = {
 
 interface BillingInformationProps {
   onRequestAddVendor?: () => void
+  onChange?: (payload: {
+    items: BillingItem[]
+    totals: { subtotal: number; discount: number; serviceCharge: number; vatTax: number; netTotal: number; agentCommission: number; invoiceDue: number; presentBalance: number; note?: string; reference?: string }
+  }) => void
+  initialItems?: BillingItem[]
+  initialTotals?: { subtotal?: number; discount?: number; serviceCharge?: number; vatTax?: number; netTotal?: number; agentCommission?: number; invoiceDue?: number; presentBalance?: number; note?: string; reference?: string }
+  vendorPreloaded?: Array<{ id: string; name: string; email?: string; mobile?: string }>
+  productOptionsExternal?: string[]
 }
 
-export function BillingInformation({ onRequestAddVendor }: BillingInformationProps) {
+export function BillingInformation({ onRequestAddVendor, onChange, initialItems, initialTotals, vendorPreloaded, productOptionsExternal }: BillingInformationProps) {
   const [items, setItems] = useState<BillingItem[]>([{ id: "1", ...initialItem }])
-  const productOptions = useProductOptions()
+  const productOptions = productOptionsExternal && productOptionsExternal.length ? productOptionsExternal : useProductOptions()
+  const vendorPreloadedMemo = useMemo(() => (
+    vendorPreloaded?.map(v => ({ id: v.id, name: v.name, email: v.email, mobile: v.mobile }))
+  ), [vendorPreloaded])
 
-  const addItem = () => {
+  const addItem = useCallback(() => {
     const newItem: BillingItem = { id: Date.now().toString(), ...initialItem }
     setItems(prev => [...prev, newItem])
-  }
+  }, [])
 
-  const removeItem = (id: string) => {
+  const removeItem = useCallback((id: string) => {
     setItems(prev => prev.length > 1 ? prev.filter(i => i.id !== id) : prev)
-  }
+  }, [])
 
-  const updateItem = (id: string, field: keyof Omit<BillingItem, 'id'>, rawValue: string) => {
-    setItems(prev => prev.map(item => {
-      if (item.id !== id) return item
-      const value = ['product','paxName','description','vendor'].includes(field as string) ? rawValue : Number(rawValue)
+  const updateItem = useCallback((id: string, field: keyof Omit<BillingItem, 'id'>, rawValue: string) => {
+    setItems(prev => {
+      const idx = prev.findIndex(i => i.id === id)
+      if (idx === -1) return prev
+      const next = [...prev]
+      const item = next[idx]
+      const value = ['product', 'paxName', 'description', 'vendor'].includes(field as string) ? rawValue : Number(rawValue)
       const updated = { ...item, [field]: value } as BillingItem
       updated.totalSales = updated.quantity * updated.unitPrice
       updated.totalCost = updated.quantity * updated.costPrice
       updated.profit = updated.totalSales - updated.totalCost
-      return updated
-    }))
-  }
+      next[idx] = updated
+      return next
+    })
+  }, [])
   const totalSalesAll = useMemo(() => items.reduce((sum, i) => sum + i.totalSales, 0), [items])
   const totalCostAll = useMemo(() => items.reduce((sum, i) => sum + i.totalCost, 0), [items])
   const totalProfitAll = useMemo(() => totalSalesAll - totalCostAll, [totalSalesAll, totalCostAll])
+
+  const [discount, setDiscount] = useState<number>(initialTotals?.discount ?? 0)
+  const [serviceCharge, setServiceCharge] = useState<number>(initialTotals?.serviceCharge ?? 0)
+  const [vatTax, setVatTax] = useState<number>(initialTotals?.vatTax ?? 0)
+  const netTotal = useMemo(() => totalSalesAll - discount + serviceCharge + vatTax, [totalSalesAll, discount, serviceCharge, vatTax])
+  const [agentCommission, setAgentCommission] = useState<number>(initialTotals?.agentCommission ?? 0)
+  const [invoiceDue, setInvoiceDue] = useState<number>(initialTotals?.invoiceDue ?? 0)
+  const [presentBalance, setPresentBalance] = useState<number>(initialTotals?.presentBalance ?? 0)
+  const [note, setNote] = useState<string>(initialTotals?.note ?? "")
+  const [reference, setReference] = useState<string>(initialTotals?.reference ?? "")
+
+  // When editing, apply incoming totals from API once they arrive
+  useEffect(() => {
+    if (!initialTotals) return
+    if (typeof initialTotals.discount !== 'undefined') setDiscount(Number(initialTotals.discount) || 0)
+    if (typeof initialTotals.serviceCharge !== 'undefined') setServiceCharge(Number(initialTotals.serviceCharge) || 0)
+    if (typeof initialTotals.vatTax !== 'undefined') setVatTax(Number(initialTotals.vatTax) || 0)
+    if (typeof initialTotals.agentCommission !== 'undefined') setAgentCommission(Number(initialTotals.agentCommission) || 0)
+    if (typeof initialTotals.invoiceDue !== 'undefined') setInvoiceDue(Number(initialTotals.invoiceDue) || 0)
+    if (typeof initialTotals.presentBalance !== 'undefined') setPresentBalance(Number(initialTotals.presentBalance) || 0)
+    if (typeof initialTotals.note !== 'undefined') setNote(String(initialTotals.note || ''))
+    if (typeof initialTotals.reference !== 'undefined') setReference(String(initialTotals.reference || ''))
+  }, [initialTotals])
+
+  useEffect(() => {
+    if (initialItems && initialItems.length) {
+      setItems(initialItems.map((i, idx) => ({ id: i.id || String(Date.now() + idx), ...i })))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialItems])
+
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      onChange?.({
+        items,
+        totals: { subtotal: totalSalesAll, discount, serviceCharge, vatTax, netTotal, agentCommission, invoiceDue, presentBalance, note, reference }
+      })
+    }, 120)
+    return () => clearTimeout(handle)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, totalSalesAll, discount, serviceCharge, vatTax, netTotal, agentCommission, invoiceDue, presentBalance, note, reference])
 
   return (
     <div className="space-y-4">
@@ -110,132 +166,193 @@ export function BillingInformation({ onRequestAddVendor }: BillingInformationPro
       </div>
 
       {items.map((item, index) => (
-        <Card key={item.id} className="relative">
-          <CardHeader className="pb-4">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base">Item {index + 1}</CardTitle>
-              {items.length > 1 && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => removeItem(item.id)}
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4">
-              <div className="space-y-2">
-                <Label>Product <span className="text-red-500">*</span></Label>
-                <CustomDropdown
-                  placeholder="Select Product"
-                  options={productOptions}
-                  value={item.product}
-                  onValueChange={(value) => updateItem(item.id, 'product', value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Pax Name</Label>
-                <Input
-                  type="text"
-                  value={item.paxName}
-                  onChange={(e) => updateItem(item.id, 'paxName', e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Description</Label>
-                <Input
-                  type="text"
-                  value={item.description}
-                  onChange={(e) => updateItem(item.id, 'description', e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor={`quantity-${item.id}`}>Quantity <span className="text-red-500">*</span></Label>
-                <Input
-                  id={`quantity-${item.id}`}
-                  type="number"
-                  min="1"
-                  value={item.quantity}
-                  onChange={(e) => updateItem(item.id, 'quantity', e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor={`unitPrice-${item.id}`}>Unit Price <span className="text-red-500">*</span></Label>
-                <Input
-                  id={`unitPrice-${item.id}`}
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={item.unitPrice}
-                  onChange={(e) => updateItem(item.id, 'unitPrice', e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor={`costPrice-${item.id}`}>Cost Price</Label>
-                <Input
-                  id={`costPrice-${item.id}`}
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={item.costPrice}
-                  onChange={(e) => updateItem(item.id, 'costPrice', e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Total Sales</Label>
-                <Input value={item.totalSales.toFixed(2)} readOnly />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Total Cost</Label>
-                <Input value={item.totalCost.toFixed(2)} readOnly />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Profit</Label>
-                <Input value={item.profit.toFixed(2)} readOnly />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Vendor</Label>
-                <VendorSelect
-                  value={item.vendor || undefined}
-                  onChange={(id) => updateItem(item.id, 'vendor', id || "")}
-                  onRequestAdd={onRequestAddVendor}
-                  placeholder="Select Vendor"
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <BillingItemRow
+          key={item.id}
+          item={item}
+          index={index}
+          canRemove={items.length > 1}
+          productOptions={productOptions}
+          vendorPreloaded={vendorPreloadedMemo}
+          onUpdate={updateItem}
+          onRemove={removeItem}
+          onRequestAddVendor={onRequestAddVendor}
+        />
       ))}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-        <div className="space-y-3 rounded-md border p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Total Sales</span>
-            <span className="font-medium">{totalSalesAll.toFixed(2)}</span>
+      {/* Bottom totals and adjustments section matching target UI */}
+      <div className="rounded-md border p-4 space-y-4 bg-gray-50">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-8 gap-4">
+          <div className="space-y-2">
+            <Label>Sub Total</Label>
+            <Input value={totalSalesAll.toLocaleString(undefined, { maximumFractionDigits: 2 })} readOnly />
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Total Cost</span>
-            <span className="font-medium">{totalCostAll.toFixed(2)}</span>
+          <div className="space-y-2">
+            <Label>Discount</Label>
+            <Input type="number" value={discount} onChange={(e) => setDiscount(Number(e.target.value || 0))} />
           </div>
-          <div className="border-t pt-2 mt-2 flex items-center justify-between">
-            <span className="font-semibold">Profit</span>
-            <span className="font-bold">{totalProfitAll.toFixed(2)}</span>
+          <div className="space-y-2">
+            <Label>Service Charge</Label>
+            <Input type="number" value={serviceCharge} onChange={(e) => setServiceCharge(Number(e.target.value || 0))} />
+          </div>
+          <div className="space-y-2">
+            <Label>Vat / Tax</Label>
+            <Input type="number" value={vatTax} onChange={(e) => setVatTax(Number(e.target.value || 0))} />
+          </div>
+          <div className="space-y-2">
+            <Label>Net Total</Label>
+            <Input value={netTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })} readOnly />
+          </div>
+          <div className="space-y-2">
+            <Label>Agent Commission</Label>
+            <Input placeholder="Agent Commission" value={agentCommission} onChange={(e) => setAgentCommission(Number(e.target.value || 0))} />
+          </div>
+          <div className="space-y-2">
+            <Label>Invoice Due</Label>
+            <Input type="number" value={invoiceDue} onChange={(e) => setInvoiceDue(Number(e.target.value || 0))} />
+          </div>
+          <div className="space-y-2">
+            <Label>Present Balance</Label>
+            <Input type="number" value={presentBalance} onChange={(e) => setPresentBalance(Number(e.target.value || 0))} />
+          </div>
+        </div>
+
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="space-y-2">
+            <Label>Note</Label>
+            <Input placeholder="Note something" value={note} onChange={(e) => setNote(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Reference</Label>
+            <Input placeholder="Reference" value={reference} onChange={(e) => setReference(e.target.value)} />
           </div>
         </div>
       </div>
     </div>
   )
 }
+
+type BillingItemRowProps = {
+  item: BillingItem
+  index: number
+  canRemove: boolean
+  productOptions: string[]
+  vendorPreloaded?: Array<{ id: string; name: string; email?: string; mobile?: string }>
+  onUpdate: (id: string, field: keyof Omit<BillingItem, 'id'>, rawValue: string) => void
+  onRemove: (id: string) => void
+  onRequestAddVendor?: () => void
+}
+
+const BillingItemRow = memo(function BillingItemRow({ item, index, canRemove, productOptions, vendorPreloaded, onUpdate, onRemove, onRequestAddVendor }: BillingItemRowProps) {
+  return (
+    <Card className="relative">
+      <CardHeader className="pb-4">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base">Item {index + 1}</CardTitle>
+          {canRemove && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => onRemove(item.id)}
+              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-10 gap-4">
+          <div className="space-y-2">
+            <Label>Product <span className="text-red-500">*</span></Label>
+            <CustomDropdown
+              placeholder="Select Product"
+              options={productOptions}
+              value={item.product}
+              onValueChange={(value) => onUpdate(item.id, 'product', value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Pax Name</Label>
+            <Input
+              type="text"
+              value={item.paxName}
+              onChange={(e) => onUpdate(item.id, 'paxName', e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Description</Label>
+            <Input
+              type="text"
+              value={item.description}
+              onChange={(e) => onUpdate(item.id, 'description', e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor={`quantity-${item.id}`}>Quantity <span className="text-red-500">*</span></Label>
+            <Input
+              id={`quantity-${item.id}`}
+              type="number"
+              min="1"
+              value={item.quantity}
+              onChange={(e) => onUpdate(item.id, 'quantity', e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor={`unitPrice-${item.id}`}>Unit Price <span className="text-red-500">*</span></Label>
+            <Input
+              id={`unitPrice-${item.id}`}
+              type="number"
+              min="0"
+              step="0.01"
+              value={item.unitPrice}
+              onChange={(e) => onUpdate(item.id, 'unitPrice', e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor={`costPrice-${item.id}`}>Cost Price</Label>
+            <Input
+              id={`costPrice-${item.id}`}
+              type="number"
+              min="0"
+              step="0.01"
+              value={item.costPrice}
+              onChange={(e) => onUpdate(item.id, 'costPrice', e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Total Sales</Label>
+            <Input value={item.totalSales.toFixed(2)} readOnly />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Total Cost</Label>
+            <Input value={item.totalCost.toFixed(2)} readOnly />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Profit</Label>
+            <Input value={item.profit.toFixed(2)} readOnly />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Vendor <span className="text-red-500">*</span></Label>
+            <VendorSelect
+              value={item.vendor || undefined}
+              onChange={(id) => onUpdate(item.id, 'vendor', id || "")}
+              preloaded={vendorPreloaded}
+              onRequestAdd={onRequestAddVendor}
+              placeholder="Select Vendor"
+            />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+})

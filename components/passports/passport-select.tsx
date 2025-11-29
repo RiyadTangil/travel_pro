@@ -10,6 +10,13 @@ type PassportItem = {
   id: string
   passportNo: string
   name?: string
+  // Optional fields if caller preloads richer data
+  paxType?: string
+  mobile?: string
+  email?: string
+  dob?: string
+  dateOfIssue?: string
+  dateOfExpire?: string
 }
 
 interface PassportSelectProps {
@@ -19,6 +26,7 @@ interface PassportSelectProps {
   placeholder?: string
   className?: string
   autoFocus?: boolean
+  preloaded?: PassportItem[]
 }
 
 function formatLabel(p: PassportItem) {
@@ -26,10 +34,10 @@ function formatLabel(p: PassportItem) {
   return `${p.passportNo}${nm}`
 }
 
-export default function PassportSelect({ value, onChange, onRequestAdd, placeholder = "Select Passport", className, autoFocus }: PassportSelectProps) {
+export default function PassportSelect({ value, onChange, onRequestAdd, placeholder = "Select Passport", className, autoFocus, preloaded }: PassportSelectProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [items, setItems] = useState<PassportItem[]>([])
+  const [items, setItems] = useState<PassportItem[]>(preloaded || [])
   const [search, setSearch] = useState("")
 
   const selected = useMemo(() => items.find(i => i.id === value), [items, value])
@@ -38,6 +46,22 @@ export default function PassportSelect({ value, onChange, onRequestAdd, placehol
     if (!open) return
     const controller = new AbortController()
     const load = async () => {
+      // If preloaded is provided, prefer local filtering to avoid network
+      if (preloaded && preloaded.length) {
+        setLoading(true)
+        try {
+          const s = search.trim().toLowerCase()
+          const filtered = preloaded.filter(p => {
+            if (!s) return true
+            const label = `${p.passportNo} ${p.name || ''}`.toLowerCase()
+            return label.includes(s)
+          })
+          setItems(filtered)
+        } finally {
+          setLoading(false)
+        }
+        return
+      }
       setLoading(true)
       try {
         const qs = new URLSearchParams({ page: "1", limit: "25", search }).toString()
@@ -53,13 +77,22 @@ export default function PassportSelect({ value, onChange, onRequestAdd, placehol
     }
     load()
     return () => controller.abort()
-  }, [open, search])
+  }, [open, search, preloaded])
 
   useEffect(() => {
     if (!value || selected) return
     let isMounted = true
       ; (async () => {
         try {
+          // If preloaded contains this value, add it locally and skip network
+          const preload = preloaded?.find(p => p.id === value)
+          if (preload) {
+            if (isMounted) setItems(prev => {
+              if (prev.some(pp => pp.id === preload.id)) return prev
+              return [preload, ...prev]
+            })
+            return
+          }
           const res = await fetch(`/api/passports/${value}`)
           if (!res.ok) return
           const data = await res.json()
@@ -73,7 +106,7 @@ export default function PassportSelect({ value, onChange, onRequestAdd, placehol
         } catch (e) { }
       })()
     return () => { isMounted = false }
-  }, [value, selected])
+  }, [value, selected, preloaded])
 
   const handleSelect = (id?: string) => {
     const sel = items.find(i => i.id === id)

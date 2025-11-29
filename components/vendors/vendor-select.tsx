@@ -20,6 +20,7 @@ interface VendorSelectProps {
   placeholder?: string
   className?: string
   autoFocus?: boolean
+  preloaded?: VendorItem[]
 }
 
 function formatLabel(v: VendorItem) {
@@ -27,7 +28,7 @@ function formatLabel(v: VendorItem) {
   return contact ? `${v.name} - (${contact})` : v.name
 }
 
-export default function VendorSelect({ value, onChange, onRequestAdd, placeholder = "Select Vendor", className, autoFocus }: VendorSelectProps) {
+export default function VendorSelect({ value, onChange, onRequestAdd, placeholder = "Select Vendor", className, autoFocus, preloaded }: VendorSelectProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [items, setItems] = useState<VendorItem[]>([])
@@ -36,17 +37,28 @@ export default function VendorSelect({ value, onChange, onRequestAdd, placeholde
   const selected = useMemo(() => items.find(i => i.id === value), [items, value])
 
   useEffect(() => {
+    if (preloaded && preloaded.length && items.length === 0) {
+      setItems(preloaded)
+    }
+  }, [preloaded])
+
+  useEffect(() => {
     if (!open) return
     const controller = new AbortController()
     const load = async () => {
       setLoading(true)
       try {
-        const qs = new URLSearchParams({ page: "1", pageSize: "25" }).toString()
-        const res = await fetch(`/api/vendors?${qs}`, { signal: controller.signal })
-        const data = await res.json()
-        const list: VendorItem[] = (data.data || []).map((v: any) => ({ id: v.id, name: v.name, email: v.email, mobile: v.mobile }))
-        const filtered = search.trim() ? list.filter(i => i.name.toLowerCase().includes(search.toLowerCase()) || (i.mobile || "").includes(search) || (i.email || "").toLowerCase().includes(search.toLowerCase())) : list
-        setItems(filtered)
+        if (preloaded && preloaded.length) {
+          const filtered = search.trim() ? preloaded.filter(i => i.name.toLowerCase().includes(search.toLowerCase()) || (i.mobile || "").includes(search) || (i.email || "").toLowerCase().includes(search.toLowerCase())) : preloaded
+          setItems(filtered)
+        } else {
+          const qs = new URLSearchParams({ page: "1", pageSize: "25" }).toString()
+          const res = await fetch(`/api/vendors?${qs}`, { signal: controller.signal })
+          const data = await res.json()
+          const list: VendorItem[] = (data.data || []).map((v: any) => ({ id: v.id, name: v.name, email: v.email, mobile: v.mobile }))
+          const filtered = search.trim() ? list.filter(i => i.name.toLowerCase().includes(search.toLowerCase()) || (i.mobile || "").includes(search) || (i.email || "").toLowerCase().includes(search.toLowerCase())) : list
+          setItems(filtered)
+        }
       } catch (e) {
         if (process.env.NODE_ENV !== "production") console.error("VendorSelect load error", e)
       } finally {
@@ -55,27 +67,29 @@ export default function VendorSelect({ value, onChange, onRequestAdd, placeholde
     }
     load()
     return () => controller.abort()
-  }, [open, search])
+  }, [open, search, preloaded])
 
   useEffect(() => {
     if (!value || selected) return
+    // If preloaded vendors are provided, skip fetching by id here
+    if (preloaded && preloaded.length) return
     let isMounted = true
-    ;(async () => {
-      try {
-        const res = await fetch(`/api/vendors/${value}`)
-        if (!res.ok) return
-        const data = await res.json()
-        const v = data.vendor
-        if (!v) return
-        const item: VendorItem = { id: v.id, name: v.name, email: v.email, mobile: v.mobile }
-        if (isMounted) setItems(prev => {
-          if (prev.some(p => p.id === item.id)) return prev
-          return [item, ...prev]
-        })
-      } catch (e) {}
-    })()
+      ; (async () => {
+        try {
+          const res = await fetch(`/api/vendors/${value}`)
+          if (!res.ok) return
+          const data = await res.json()
+          const v = data.vendor
+          if (!v) return
+          const item: VendorItem = { id: v.id, name: v.name, email: v.email, mobile: v.mobile }
+          if (isMounted) setItems(prev => {
+            if (prev.some(p => p.id === item.id)) return prev
+            return [item, ...prev]
+          })
+        } catch (e) { }
+      })()
     return () => { isMounted = false }
-  }, [value, selected])
+  }, [value, selected, preloaded])
 
   const handleSelect = (id?: string) => {
     const sel = items.find(i => i.id === id)
@@ -92,13 +106,11 @@ export default function VendorSelect({ value, onChange, onRequestAdd, placeholde
           <span className="truncate text-left">
             {selected ? formatLabel(selected) : (placeholder || "Select Vendor")}
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 " onClick={(e) => { e.stopPropagation(); handleSelect(undefined) }} onMouseDown={(e) => { e.preventDefault() }}>
             {selected && (
               <X
                 className="h-4 w-4 opacity-60 hover:opacity-100"
-                onMouseDown={(e) => { e.preventDefault() }}
-                onClick={(e) => { e.stopPropagation(); handleSelect(undefined) }}
-                title="Clear"
+
               />
             )}
             <ChevronsUpDown className="h-4 w-4 opacity-60" />

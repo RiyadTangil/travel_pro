@@ -21,6 +21,7 @@ interface ClientSelectProps {
   placeholder?: string
   className?: string
   autoFocus?: boolean
+  preloaded?: ClientItem[]
 }
 
 // Formats like: NAME - (CL-0001)
@@ -29,7 +30,7 @@ function formatLabel(c: ClientItem) {
   return `${c.name} - (${code})`
 }
 
-export default function ClientSelect({ value, onChange, onRequestAdd, placeholder = "Select Client", className, autoFocus }: ClientSelectProps) {
+export default function ClientSelect({ value, onChange, onRequestAdd, placeholder = "Select Client", className, autoFocus, preloaded }: ClientSelectProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [items, setItems] = useState<ClientItem[]>([])
@@ -38,16 +39,27 @@ export default function ClientSelect({ value, onChange, onRequestAdd, placeholde
   const selected = useMemo(() => items.find(i => i.id === value), [items, value])
 
   useEffect(() => {
+    if (preloaded && preloaded.length && items.length === 0) {
+      setItems(preloaded)
+    }
+  }, [preloaded])
+
+  useEffect(() => {
     if (!open) return
     const controller = new AbortController()
     const load = async () => {
       setLoading(true)
       try {
-        const qs = new URLSearchParams({ page: "1", limit: "25", search }).toString()
-        const res = await fetch(`/api/clients-manager?${qs}`, { signal: controller.signal })
-        const data = await res.json()
-        const list: ClientItem[] = (data.clients || []).map((c: any) => ({ id: c.id, name: c.name, uniqueId: c.uniqueId, email: c.email, phone: c.phone }))
-        setItems(list)
+        if (preloaded && preloaded.length) {
+          const filtered = search.trim() ? preloaded.filter(i => i.name.toLowerCase().includes(search.toLowerCase()) || (i.phone || "").includes(search) || (i.email || "").toLowerCase().includes(search.toLowerCase())) : preloaded
+          setItems(filtered)
+        } else {
+          const qs = new URLSearchParams({ page: "1", limit: "25", search }).toString()
+          const res = await fetch(`/api/clients-manager?${qs}`, { signal: controller.signal })
+          const data = await res.json()
+          const list: ClientItem[] = (data.clients || []).map((c: any) => ({ id: c.id, name: c.name, uniqueId: c.uniqueId, email: c.email, phone: c.phone }))
+          setItems(list)
+        }
       } catch (e) {
         if (process.env.NODE_ENV !== "production") console.error("ClientSelect load error", e)
       } finally {
@@ -56,7 +68,7 @@ export default function ClientSelect({ value, onChange, onRequestAdd, placeholde
     }
     load()
     return () => controller.abort()
-  }, [open, search])
+  }, [open, search, preloaded])
 
   // When a value is externally set but not in items yet, fetch that item
   useEffect(() => {
@@ -89,7 +101,7 @@ export default function ClientSelect({ value, onChange, onRequestAdd, placeholde
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" role="combobox" aria-expanded={open} className={`justify-between w-full ${className || ""}`}
+        <Button variant="outline" role="combobox" aria-expanded={open} className={`justify-between hover:bg-gray-10 w-full ${className || ""}`}
           autoFocus={autoFocus}
         >
           <span className="truncate text-left">
@@ -99,7 +111,7 @@ export default function ClientSelect({ value, onChange, onRequestAdd, placeholde
             onClick={(e) => { e.stopPropagation(); handleSelect(undefined) }}>
             {selected && (
               <X
-                className="h-4 w-4 opacity-60 hover:opacity-100"
+                className="h-4 w-4 opacity-60 hover:opacity-100 cursor-pointer rounded-full border border-solid border-gray-300 bg-gray-300 w-4 h-4 px-0.5"
               />
             )}
             <ChevronsUpDown className="h-4 w-4 opacity-60" />

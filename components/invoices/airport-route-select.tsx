@@ -13,9 +13,10 @@ interface AirportRouteSelectProps {
   value: string
   onChange: (next: string) => void
   placeholder?: string
+  preloaded?: Airport[]
 }
 
-export default function AirportRouteSelect({ value, onChange, placeholder = "PKX->CNS->" }: AirportRouteSelectProps) {
+export default function AirportRouteSelect({ value, onChange, placeholder = "PKX->CNS->", preloaded }: AirportRouteSelectProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
   const [items, setItems] = useState<Airport[]>([])
@@ -24,7 +25,21 @@ export default function AirportRouteSelect({ value, onChange, placeholder = "PKX
   useEffect(() => {
     let active = true
     const controller = new AbortController()
-    const fetchItems = async () => {
+    const load = async () => {
+      // Use preloaded airports when available; filter client-side by query
+      if (preloaded && preloaded.length) {
+        setLoading(true)
+        try {
+          const q = query.toLowerCase().trim()
+          const filtered = preloaded.filter(
+            (a) => !q || a.code.toLowerCase().includes(q) || a.name.toLowerCase().includes(q) || (a.country || '').toLowerCase().includes(q)
+          )
+          if (active) setItems(filtered.slice(0, 500))
+        } finally {
+          if (active) setLoading(false)
+        }
+        return
+      }
       setLoading(true)
       try {
         const res = await fetch(`/api/airports?q=${encodeURIComponent(query)}&limit=500`, { signal: controller.signal })
@@ -36,9 +51,9 @@ export default function AirportRouteSelect({ value, onChange, placeholder = "PKX
         if (active) setLoading(false)
       }
     }
-    fetchItems()
+    load()
     return () => { active = false; controller.abort() }
-  }, [query])
+  }, [query, preloaded])
 
   const segments = useMemo(() => value.split("->").filter(Boolean), [value])
 

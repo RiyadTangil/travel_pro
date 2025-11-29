@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 import { MoneyReceiptModal } from "@/components/invoices/money-receipt-modal"
@@ -8,13 +8,15 @@ import { AddInvoiceModal } from "@/components/invoices/add-invoice-modal"
 import { InvoiceTable } from "@/components/invoices/invoice-table"
 import { InvoiceFilters } from "@/components/invoices/invoice-filters"
 import { InvoiceStats } from "@/components/invoices/invoice-stats"
-import { dummyInvoices } from "@/data/invoices"
+// import { dummyInvoices } from "@/data/invoices"
 import { Invoice, InvoiceFilters as IInvoiceFilters, InvoiceStats as IInvoiceStats } from "@/types/invoice"
+import { useInvoiceLookups } from "@/hooks/useInvoiceLookups"
 
 export default function InvoicesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingInvoice, setEditingInvoice] = useState<Invoice | undefined>(undefined)
-  const [invoices, setInvoices] = useState<Invoice[]>(dummyInvoices)
+  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const { lookups } = useInvoiceLookups()
   const [filters, setFilters] = useState<IInvoiceFilters>({
     search: "",
     status: "",
@@ -22,6 +24,24 @@ export default function InvoicesPage() {
     dateTo: "",
     salesBy: ""
   })
+
+  // Load invoices from API on mount
+  useEffect(() => {
+    let mounted = true
+    const controller = new AbortController()
+    const load = async () => {
+      try {
+        const res = await fetch(`/api/invoices?page=1&pageSize=100`, { signal: controller.signal })
+        const data = await res.json()
+        const list: Invoice[] = (data.items || [])
+        if (mounted) setInvoices(list)
+      } catch (e) {
+        // fallback: keep empty
+      }
+    }
+    load()
+    return () => { mounted = false; controller.abort() }
+  }, [])
 
   // Filter invoices based on current filters
   const filteredInvoices = useMemo(() => {
@@ -165,6 +185,7 @@ export default function InvoicesPage() {
         onClose={() => { setIsModalOpen(false); setEditingInvoice(undefined) }}
         onInvoiceAdded={handleAddInvoice}
         initialInvoice={editingInvoice}
+        lookups={lookups || undefined}
       />
 
       <MoneyReceiptModal

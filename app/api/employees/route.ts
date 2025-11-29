@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server"
+import clientPromise from "@/lib/mongodb"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 
 type Employee = {
   id: string
@@ -18,23 +21,6 @@ type Employee = {
   active: boolean
 }
 
-// Use a global store to persist across route invocations in dev
-const globalStore = globalThis as any
-if (!globalStore.__EMPLOYEES__) {
-  globalStore.__EMPLOYEES__ = [
-    {
-      id: "1",
-      name: "Tanvir Hasan",
-      department: "All Over",
-      designation: "Sales Representative",
-      salary: 0,
-      mobile: "",
-      joiningDate: "20 May 2023",
-      active: true,
-    },
-  ] satisfies Employee[]
-}
-
 function validateRequired(body: any) {
   const errors: string[] = []
   if (!body.name) errors.push("name is required")
@@ -47,35 +33,84 @@ function validateRequired(body: any) {
 }
 
 export async function GET() {
-  return NextResponse.json({ employees: globalStore.__EMPLOYEES__ as Employee[] })
+  try {
+    const session = await getServerSession(authOptions as any)
+    const companyId = session?.user?.companyId || null
+    const client = await clientPromise
+    const db = client.db("manage_agency")
+    const col = db.collection("employees")
+
+    const filter: any = {}
+    if (companyId) filter.companyId = companyId
+
+    const docs = await col.find(filter).sort({ createdAt: -1 }).toArray()
+    const employees: Employee[] = docs.map((d: any) => ({
+      id: String(d._id),
+      idCardNo: d.idCardNo || "",
+      name: d.name,
+      department: d.department,
+      designation: d.designation,
+      bloodGroup: d.bloodGroup || "",
+      salary: Number(d.salary) || 0,
+      commission: d.commission !== undefined ? Number(d.commission) : undefined,
+      email: d.email || "",
+      mobile: d.mobile,
+      birthDate: d.birthDate || "",
+      appointmentDate: d.appointmentDate || "",
+      joiningDate: d.joiningDate || new Date().toLocaleDateString(),
+      address: d.address || "",
+      active: !!d.active,
+    }))
+    return NextResponse.json({ employees })
+  } catch (error) {
+    console.error("Employees GET error:", error)
+    return NextResponse.json({ employees: [] })
+  }
 }
 
 export async function POST(req: Request) {
-  const data = await req.json()
-  const errors = validateRequired(data)
-  if (errors.length) {
-    return NextResponse.json({ errors }, { status: 400 })
-  }
+  try {
+    const session = await getServerSession(authOptions as any)
+    const companyId = session?.user?.companyId || null
+    const data = await req.json()
+    const errors = validateRequired(data)
+    if (errors.length) {
+      return NextResponse.json({ errors }, { status: 400 })
+    }
 
-  const id = String(Date.now())
-  const employee: Employee = {
-    id,
-    idCardNo: data.idCardNo || "",
-    name: data.name,
-    department: data.department,
-    designation: data.designation,
-    bloodGroup: data.bloodGroup || "",
-    salary: Number(data.salary) || 0,
-    commission: data.commission ? Number(data.commission) : undefined,
-    email: data.email || "",
-    mobile: data.mobile,
-    birthDate: data.birthDate || "",
-    appointmentDate: data.appointmentDate || "",
-    joiningDate: data.joiningDate || new Date().toLocaleDateString(),
-    address: data.address || "",
-    active: !!data.active,
-  }
+    const client = await clientPromise
+    const db = client.db("manage_agency")
+    const col = db.collection("employees")
 
-  globalStore.__EMPLOYEES__.push(employee)
-  return NextResponse.json({ employee })
+    const doc = {
+      idCardNo: data.idCardNo || "",
+      name: data.name,
+      department: data.department,
+      designation: data.designation,
+      bloodGroup: data.bloodGroup || "",
+      salary: Number(data.salary) || 0,
+      commission: data.commission ? Number(data.commission) : undefined,
+      email: data.email || "",
+      mobile: data.mobile,
+      birthDate: data.birthDate || "",
+      appointmentDate: data.appointmentDate || "",
+      joiningDate: data.joiningDate || new Date().toLocaleDateString(),
+      address: data.address || "",
+      active: !!data.active,
+      companyId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+
+    const result = await col.insertOne(doc)
+
+    const employee: Employee = {
+      id: String(result.insertedId),
+      ...doc,
+    }
+    return NextResponse.json({ employee })
+  } catch (error) {
+    console.error("Employees POST error:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
 }

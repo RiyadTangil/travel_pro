@@ -20,6 +20,7 @@ interface AgentSelectProps {
   placeholder?: string
   className?: string
   autoFocus?: boolean
+  preloaded?: AgentItem[]
 }
 
 function formatLabel(a: AgentItem) {
@@ -27,7 +28,7 @@ function formatLabel(a: AgentItem) {
   return `${a.name}${phone}`
 }
 
-export default function AgentSelect({ value, onChange, onRequestAdd, placeholder = "Select Agent", className, autoFocus }: AgentSelectProps) {
+export default function AgentSelect({ value, onChange, onRequestAdd, placeholder = "Select Agent", className, autoFocus, preloaded }: AgentSelectProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [items, setItems] = useState<AgentItem[]>([])
@@ -36,16 +37,27 @@ export default function AgentSelect({ value, onChange, onRequestAdd, placeholder
   const selected = useMemo(() => items.find(i => i.id === value), [items, value])
 
   useEffect(() => {
+    if (preloaded && preloaded.length && items.length === 0) {
+      setItems(preloaded)
+    }
+  }, [preloaded])
+
+  useEffect(() => {
     if (!open) return
     const controller = new AbortController()
     const load = async () => {
       setLoading(true)
       try {
-        const qs = new URLSearchParams({ page: "1", limit: "25", search }).toString()
-        const res = await fetch(`/api/agents?${qs}`, { signal: controller.signal })
-        const data = await res.json()
-        const list: AgentItem[] = (data.data || []).map((a: any) => ({ id: a.id, name: a.name, mobile: a.mobile, email: a.email }))
-        setItems(list)
+        if (preloaded && preloaded.length) {
+          const filtered = search.trim() ? preloaded.filter(i => i.name.toLowerCase().includes(search.toLowerCase()) || (i.mobile || "").includes(search) || (i.email || "").toLowerCase().includes(search.toLowerCase())) : preloaded
+          setItems(filtered)
+        } else {
+          const qs = new URLSearchParams({ page: "1", limit: "25", search }).toString()
+          const res = await fetch(`/api/agents?${qs}`, { signal: controller.signal })
+          const data = await res.json()
+          const list: AgentItem[] = (data.data || []).map((a: any) => ({ id: a.id, name: a.name, mobile: a.mobile, email: a.email }))
+          setItems(list)
+        }
       } catch (e) {
         if (process.env.NODE_ENV !== "production") console.error("AgentSelect load error", e)
       } finally {
@@ -54,25 +66,25 @@ export default function AgentSelect({ value, onChange, onRequestAdd, placeholder
     }
     load()
     return () => controller.abort()
-  }, [open, search])
+  }, [open, search, preloaded])
 
   useEffect(() => {
     if (!value || selected) return
     let isMounted = true
-    ;(async () => {
-      try {
-        const res = await fetch(`/api/agents/${value}`)
-        if (!res.ok) return
-        const data = await res.json()
-        const a = data.agent
-        if (!a) return
-        const item: AgentItem = { id: a.id, name: a.name, mobile: a.mobile, email: a.email }
-        if (isMounted) setItems(prev => {
-          if (prev.some(p => p.id === item.id)) return prev
-          return [item, ...prev]
-        })
-      } catch (e) {}
-    })()
+      ; (async () => {
+        try {
+          const res = await fetch(`/api/agents/${value}`)
+          if (!res.ok) return
+          const data = await res.json()
+          const a = data.agent
+          if (!a) return
+          const item: AgentItem = { id: a.id, name: a.name, mobile: a.mobile, email: a.email }
+          if (isMounted) setItems(prev => {
+            if (prev.some(p => p.id === item.id)) return prev
+            return [item, ...prev]
+          })
+        } catch (e) { }
+      })()
     return () => { isMounted = false }
   }, [value, selected])
 
@@ -89,13 +101,12 @@ export default function AgentSelect({ value, onChange, onRequestAdd, placeholder
           <span className="truncate text-left">
             {selected ? formatLabel(selected) : (placeholder || "Select Agent")}
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 " onClick={(e) => { e.stopPropagation(); handleSelect(undefined) }} onMouseDown={(e) => { e.preventDefault() }}>
             {selected && (
               <X
                 className="h-4 w-4 opacity-60 hover:opacity-100"
-                onMouseDown={(e) => { e.preventDefault() }}
-                onClick={(e) => { e.stopPropagation(); handleSelect(undefined) }}
-                title="Clear"
+
+
               />
             )}
             <ChevronsUpDown className="h-4 w-4 opacity-60" />

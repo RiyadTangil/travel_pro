@@ -18,6 +18,8 @@ interface CustomDropdownProps {
   value?: string
   onValueChange: (value: string) => void
   className?: string
+  allowClear?: boolean
+  disabled?: boolean
 }
 
 export function CustomDropdown({ 
@@ -25,7 +27,9 @@ export function CustomDropdown({
   options, 
   value, 
   onValueChange,
-  className 
+  className,
+  allowClear = true,
+  disabled = false,
 }: CustomDropdownProps) {
   const [isAddingNew, setIsAddingNew] = useState(false)
   const [newOption, setNewOption] = useState("")
@@ -52,9 +56,9 @@ export function CustomDropdown({
   }
 
   return (
-    <div className={className}>
+    <div className={`relative ${className || ""} group`}> 
       <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger>
+        <SelectTrigger disabled={disabled} className={(allowClear && value ? "pr-8 " : "") + (value ? "group-hover:[&>svg]:opacity-0" : "")}>
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
@@ -114,6 +118,17 @@ export function CustomDropdown({
           )} */}
         </SelectContent>
       </Select>
+      {allowClear && value && !disabled ? (
+        <button
+          type="button"
+          aria-label="Clear selection"
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 opacity-0 group-hover:opacity-100"
+          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onValueChange("") }}
+        >
+          <X className="h-4 w-4" />
+        </button>
+      ) : null}
     </div>
   )
 }

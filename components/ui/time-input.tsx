@@ -11,22 +11,56 @@ interface TimeInputProps {
   onChange?: (time: string | undefined) => void
   placeholder?: string
   className?: string
+  twelveHour?: boolean
+  wheelStepMinutes?: number
 }
 
-export function TimeInput({ value, onChange, placeholder = "Pick a time", className }: TimeInputProps) {
+export function TimeInput({ value, onChange, placeholder = "Pick a time", className, twelveHour = false, wheelStepMinutes = 15 }: TimeInputProps) {
   const [open, setOpen] = useState(false)
 
   const times = useMemo(() => {
     const list: string[] = []
     for (let h = 0; h < 24; h++) {
-      for (let m = 0; m < 60; m += 15) {
+      for (let m = 0; m < 60; m += wheelStepMinutes) {
         const hh = h.toString().padStart(2, "0")
         const mm = m.toString().padStart(2, "0")
         list.push(`${hh}:${mm}`)
       }
     }
     return list
-  }, [])
+  }, [wheelStepMinutes])
+
+  const toDisplay = (t?: string) => {
+    if (!t || !twelveHour) return t || placeholder
+    const [hhStr, mmStr] = t.split(":")
+    const hh = Number(hhStr)
+    const mm = Number(mmStr)
+    const am = hh < 12
+    const hour12 = hh % 12 === 0 ? 12 : hh % 12
+    return `${hour12}:${mmStr} ${am ? "AM" : "PM"}`
+  }
+
+  const adjustByWheel = (direction: 1 | -1) => {
+    // Find current index; if unset, approximate to nearest current time
+    let idx = value ? times.indexOf(value) : -1
+    if (idx === -1) {
+      const now = new Date()
+      const hh = now.getHours()
+      const mm = now.getMinutes()
+      const step = wheelStepMinutes
+      const snapped = Math.round(mm / step) * step
+      const hhStr = hh.toString().padStart(2, "0")
+      const mmStr = String(snapped % 60).padStart(2, "0")
+      const candidate = `${hhStr}:${mmStr}`
+      idx = times.indexOf(candidate)
+      if (idx === -1) idx = 0
+    }
+    let next = idx + direction
+    if (next < 0) next = times.length - 1
+    if (next >= times.length) next = 0
+    const newVal = times[next]
+    onChange?.(newVal)
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -39,9 +73,10 @@ export function TimeInput({ value, onChange, placeholder = "Pick a time", classN
             className
           )}
           onClick={() => setOpen(true)}
+          onWheel={(e) => { e.preventDefault(); adjustByWheel(e.deltaY < 0 ? -1 : 1) }}
         >
           <span className={cn("truncate", !value && "text-gray-500")}>
-            {value || placeholder}
+            {toDisplay(value)}
           </span>
           <span className="flex items-center gap-2">
             {value && (
@@ -66,7 +101,7 @@ export function TimeInput({ value, onChange, placeholder = "Pick a time", classN
                   className={cn("w-full text-left px-3 py-2 hover:bg-gray-50", t === value && "bg-gray-100")}
                   onClick={() => { onChange?.(t); setOpen(false) }}
                 >
-                  {t}
+                  {twelveHour ? toDisplay(t) : t}
                 </button>
               </li>
             ))}

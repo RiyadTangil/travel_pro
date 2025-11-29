@@ -22,6 +22,7 @@ interface EmployeeSelectProps {
   placeholder?: string
   className?: string
   autoFocus?: boolean
+  preloaded?: EmployeeItem[]
 }
 
 function formatLabel(e: EmployeeItem) {
@@ -29,7 +30,7 @@ function formatLabel(e: EmployeeItem) {
   return `${e.name}${dept}`
 }
 
-export default function EmployeeSelect({ value, onChange, onRequestAdd, placeholder = "Select Employee", className, autoFocus }: EmployeeSelectProps) {
+export default function EmployeeSelect({ value, onChange, onRequestAdd, placeholder = "Select Employee", className, autoFocus, preloaded }: EmployeeSelectProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [items, setItems] = useState<EmployeeItem[]>([])
@@ -38,16 +39,27 @@ export default function EmployeeSelect({ value, onChange, onRequestAdd, placehol
   const selected = useMemo(() => items.find(i => i.id === value), [items, value])
 
   useEffect(() => {
+    if (preloaded && preloaded.length && items.length === 0) {
+      setItems(preloaded)
+    }
+  }, [preloaded])
+
+  useEffect(() => {
     if (!open) return
     const controller = new AbortController()
     const load = async () => {
       setLoading(true)
       try {
-        const qs = new URLSearchParams({ page: "1", limit: "25", search }).toString()
-        const res = await fetch(`/api/employees?${qs}`, { signal: controller.signal })
-        const data = await res.json()
-        const list: EmployeeItem[] = (data.employees || []).map((e: any) => ({ id: e.id, name: e.name, department: e.department, designation: e.designation, mobile: e.mobile, email: e.email }))
-        setItems(list)
+        if (preloaded && preloaded.length) {
+          const filtered = search.trim() ? preloaded.filter(i => i.name.toLowerCase().includes(search.toLowerCase())) : preloaded
+          setItems(filtered)
+        } else {
+          const qs = new URLSearchParams({ page: "1", limit: "25", search }).toString()
+          const res = await fetch(`/api/employees?${qs}`, { signal: controller.signal })
+          const data = await res.json()
+          const list: EmployeeItem[] = (data.employees || []).map((e: any) => ({ id: e.id, name: e.name, department: e.department, designation: e.designation, mobile: e.mobile, email: e.email }))
+          setItems(list)
+        }
       } catch (e) {
         if (process.env.NODE_ENV !== "production") console.error("EmployeeSelect load error", e)
       } finally {
@@ -56,10 +68,13 @@ export default function EmployeeSelect({ value, onChange, onRequestAdd, placehol
     }
     load()
     return () => controller.abort()
-  }, [open, search])
+  }, [open, search, preloaded])
 
   useEffect(() => {
     if (!value || selected) return
+    // If caller provided preloaded items, avoid fetching by id here.
+    // The preloaded list should contain the selected item soon.
+    if (preloaded && preloaded.length) return
     let isMounted = true
       ; (async () => {
         try {
@@ -76,7 +91,7 @@ export default function EmployeeSelect({ value, onChange, onRequestAdd, placehol
         } catch (e) { }
       })()
     return () => { isMounted = false }
-  }, [value, selected])
+  }, [value, selected, preloaded])
 
   const handleSelect = (id?: string) => {
     const sel = items.find(i => i.id === id)
