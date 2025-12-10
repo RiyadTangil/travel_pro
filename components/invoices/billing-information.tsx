@@ -82,7 +82,11 @@ interface BillingInformationProps {
 
 export function BillingInformation({ onRequestAddVendor, onChange, initialItems, initialTotals, vendorPreloaded, productOptionsExternal }: BillingInformationProps) {
   const [items, setItems] = useState<BillingItem[]>([{ id: "1", ...initialItem }])
-  const productOptions = productOptionsExternal && productOptionsExternal.length ? productOptionsExternal : useProductOptions()
+  // Always call hooks in a consistent order; avoid conditional hook calls.
+  const productOptionsInternal = useProductOptions()
+  const productOptions = (productOptionsExternal && productOptionsExternal.length)
+    ? productOptionsExternal
+    : productOptionsInternal
   const vendorPreloadedMemo = useMemo(() => (
     vendorPreloaded?.map(v => ({ id: v.id, name: v.name, email: v.email, mobile: v.mobile }))
   ), [vendorPreloaded])

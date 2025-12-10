@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useSession } from "next-auth/react"
 
 type Employee = { id: string; name: string; department?: string; designation?: string }
 type Agent = { id: string; name: string; mobile?: string; email?: string }
@@ -15,6 +16,7 @@ let CACHE: { employees: Employee[]; agents: Agent[]; vendors: Vendor[]; products
 let loadingPromise: Promise<any> | null = null
 
 export function useInvoiceLookups() {
+  const { data: session } = useSession()
   const [data, setData] = useState<typeof CACHE | null>(CACHE)
   const [loading, setLoading] = useState<boolean>(!CACHE)
   const [error, setError] = useState<string | null>(null)
@@ -22,14 +24,14 @@ export function useInvoiceLookups() {
   useEffect(() => {
     if (CACHE) { setData(CACHE); setLoading(false); return }
     if (!loadingPromise) {
-      loadingPromise = fetch(`/api/invoice-lookups`, { cache: "no-store" })
+      loadingPromise = fetch(`/api/invoice-lookups`, { cache: "no-store", headers: { "x-company-id": session?.user?.companyId ?? "" } })
         .then((r) => r.json())
         .then((json) => { CACHE = json; return json })
         .catch((e) => { setError(String(e)); CACHE = null })
         .finally(() => { setLoading(false) })
     }
     loadingPromise.then(() => { if (CACHE) setData(CACHE) })
-  }, [])
+  }, [session?.user?.companyId])
 
   return { lookups: data, loading, error }
 }

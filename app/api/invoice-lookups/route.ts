@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
+import { ObjectId } from "mongodb"
 
 // Aggregated lookups for Add Invoice modal
 // Returns employees, agents, vendors, products, airlines, transportTypes, clients, accounts, airports, passports
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const client = await clientPromise
     const db = client.db("manage_agency")
+    const companyIdHeader = (request.headers as any).get?.('x-company-id') || undefined
 
     // Employees from global store (same source as /api/employees)
     const globalStore = globalThis as any
@@ -42,10 +44,19 @@ export async function GET() {
 
     // Clients (limited to avoid heavy payload)
     const clientsDocs = await db.collection("clients_manager").find({ isDeleted: { $ne: true } }).sort({ createdAt: -1 }).limit(50).toArray()
-    const clients = clientsDocs.map((c: any) => ({ id: String(c._id), name: c.name || "", uniqueId: c.uniqueId || undefined, email: c.email || "", phone: c.phone || "" }))
+    // const clients = clientsDocs.map((c: any) => ({ id: String(c._id), name: c.name || "", uniqueId: c.uniqueId || undefined, email: c.email || "", phone: c.phone || "" }))
+    const clients = clientsDocs.map((c: any) => ({ id: String(c._id), name: c.name || "", uniqueId: c.uniqueId || undefined, email: c.email || "", phone: c.phone || "",presentBalance: c.presentBalance || 0,invoiceDue: c.invoiceDue || 0 }))
 
     // Accounts (limited)
-    const accountsDocs = await db.collection("accounts").find({ isDeleted: { $ne: true } }).sort({ createdAt: -1 }).limit(200).toArray()
+    const accQuery: any = { isDeleted: { $ne: true } }
+    if (companyIdHeader) {
+      const cid = String(companyIdHeader)
+      accQuery.$or = [
+        { companyId: cid },
+        ...(ObjectId.isValid(cid) ? [{ companyId: new ObjectId(cid) }] as any[] : []),
+      ]
+    }
+    const accountsDocs = await db.collection("accounts").find(accQuery).sort({ createdAt: -1 }).limit(200).toArray()
     const accounts = accountsDocs.map((a: any) => ({ id: String(a._id ?? a.id ?? a.name), name: String(a.name || ""), type: String(a.type || "") }))
 
     // Airports from static JSON (same normalization as /api/airports)

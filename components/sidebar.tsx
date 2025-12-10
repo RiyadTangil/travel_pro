@@ -70,6 +70,11 @@ export function Sidebar() {
       href: "/dashboard/invoices",
     },
     {
+      title: "Money Receipts",
+      icon: <CreditCard className="h-5 w-5" />,
+      href: "/dashboard/money-receipts",
+    },
+    {
       title: "Client Categories",
       icon: <FileText className="h-5 w-5" />,
       href: "/dashboard/client-categories",

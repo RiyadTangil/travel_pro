@@ -55,7 +55,7 @@ export default function AirportRouteSelect({ value, onChange, placeholder = "PKX
     return () => { active = false; controller.abort() }
   }, [query, preloaded])
 
-  const segments = useMemo(() => value.split("->").filter(Boolean), [value])
+  const segments = useMemo(() => value?.trim()?.split("->").filter(Boolean) || [], [value])
 
   const appendCode = (code: string) => {
     const next = segments.length === 0 ? `${code}->` : `${segments.join("->")}->${code}->`

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
+import { ObjectId } from "mongodb"
 
 function computeNextInvoiceNo(prev?: string | null): string {
   const DEFAULT = "INV-0001"
@@ -28,11 +29,20 @@ export async function GET() {
     const col = db.collection("invoices")
 
     const filter: any = {}
-    if (companyId) filter.companyId = companyId
+    if (companyId) {
+      // Support both ObjectId and string-typed companyId in stored documents
+      filter.$or = [
+        ...(ObjectId.isValid(String(companyId)) ? [{ companyId: new ObjectId(String(companyId)) }] : []),
+        { companyId: String(companyId) },
+      ]
+    }
+    // Consider only invoices with a non-empty invoiceNo
+    filter.invoiceNo = { $exists: true, $ne: "" }
 
     // Find the most recent invoice with a non-empty invoiceNo
     const last = await col
-      .find(filter, { projection: { invoiceNo: 1 }, sort: { createdAt: -1 } })
+      .find(filter, { projection: { invoiceNo: 1 } })
+      .sort({ createdAt: -1, _id: -1 })
       .limit(1)
       .toArray()
 
@@ -45,4 +55,3 @@ export async function GET() {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
-

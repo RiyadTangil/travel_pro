@@ -27,6 +27,7 @@ export interface InvoiceFormData {
     agent: string
   }
   passport: Array<{
+    passportId?: string
     name: string
     passportNo: string
     paxType: string

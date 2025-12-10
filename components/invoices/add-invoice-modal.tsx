@@ -344,9 +344,10 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
           const data = await res.json()
           if (!res.ok) {
             if (data?.error === "credit_limit_exceeded") {
+              const desc = data?.message || (typeof data?.creditLimit !== 'undefined' ? `Limit: ${data.creditLimit}, Present: ${data.presentBalance}, Attempt: ${data.attemptAmount}` : undefined)
               toast({
                 title: "Credit limit exceeded",
-                description: `Limit: ${data.creditLimit}, Present: ${data.presentBalance}, Attempt: ${data.attemptAmount}`,
+                description: desc,
                 variant: "destructive",
               })
               return

@@ -49,7 +49,8 @@ export default function AddClientModal({ open, onOpenChange, onSubmit, loading, 
       source: "",
       designation: "",
       tradeLicenseNo: "",
-      openingBalanceType: "Due",
+      openingBalanceType: "",
+      openingBalanceAmount: "",
       creditLimit: "",
     }
   })
@@ -77,7 +78,8 @@ export default function AddClientModal({ open, onOpenChange, onSubmit, loading, 
         source: initialValues.source || "",
         designation: initialValues.designation || "",
         tradeLicenseNo: initialValues.tradeLicenseNo || "",
-        openingBalanceType: initialValues.openingBalanceType || "Due",
+        openingBalanceType: initialValues.openingBalanceType || "",
+        openingBalanceAmount: (initialValues as any).openingBalanceAmount || "",
         creditLimit: initialValues.creditLimit || "",
       })
     }
@@ -86,7 +88,24 @@ export default function AddClientModal({ open, onOpenChange, onSubmit, loading, 
   const onSubmitForm = async (data: any) => {
     if (!data.name) return
     if (!data.clientType) return
-    await onSubmit(data)
+    const amountNum = typeof data.openingBalanceAmount === "string"
+      ? parseFloat(data.openingBalanceAmount || "0") || 0
+      : (Number(data.openingBalanceAmount) || 0)
+    const type = data.openingBalanceType
+    const presentBalance = type === "Due" ? -Math.abs(amountNum) : type === "Advance" ? Math.abs(amountNum) : 0
+    const creditLimitNum = typeof data.creditLimit === "string" ? parseFloat(data.creditLimit || "0") || 0 : Number(data.creditLimit) || 0
+    const payload = {
+      ...data,
+      creditLimit: creditLimitNum,
+      ...(mode === "add" ? { presentBalance } : {}),
+    }
+    // Prevent editing opening balance fields in edit mode
+    if (mode === "edit") {
+      delete (payload as any).openingBalanceType
+      delete (payload as any).openingBalanceAmount
+      delete (payload as any).presentBalance
+    }
+    await onSubmit(payload)
   }
 
   return (
@@ -193,10 +212,16 @@ export default function AddClientModal({ open, onOpenChange, onSubmit, loading, 
               <Label>Trade License No</Label>
               <Input {...register("tradeLicenseNo")} placeholder="Trade License No" />
             </div>
+            {watch("openingBalanceType") && (
+              <div className="space-y-2">
+                <Label>Opening Balance Amount</Label>
+                <Input {...register("openingBalanceAmount")} placeholder="0.00" type="number" step="0.01" disabled={mode === "edit"} />
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Opening Balance type</Label>
-              <Select value={watch("openingBalanceType")} onValueChange={(v) => setValue("openingBalanceType", v)}>
-                <SelectTrigger>
+              <Select value={watch("openingBalanceType")} onValueChange={mode === "edit" ? undefined : (v) => setValue("openingBalanceType", v)}>
+                <SelectTrigger disabled={mode === "edit"}>
                   <SelectValue placeholder="Select Opening Balance type" />
                 </SelectTrigger>
                 <SelectContent>

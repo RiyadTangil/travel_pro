@@ -72,13 +72,14 @@ export default function ClientsManagerPage() {
         name: data.name || "",
         email: data.email || "",
         gender: data.gender || "",
-        mobile: data.mobile || "",
+        phone: data.phone || "",
         address: data.address || "",
         walkingCustomer: data.walkingCustomer || "No",
         source: data.source || "",
         designation: data.designation || "",
         tradeLicenseNo: data.tradeLicenseNo || "",
-        openingBalanceType: data.openingBalanceType || "Due",
+        openingBalanceType: data.openingBalanceType || "",
+        openingBalanceAmount: String(data.openingBalanceAmount || ""),
         creditLimit: String(data.creditLimit || ""),
       })
       setModalOpen(true)
