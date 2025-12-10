@@ -111,6 +111,7 @@ export async function createMoneyReceipt(body: any, companyId?: string) {
     // If invoice-specific receipt, update the invoice
     let newReceived = undefined as number | undefined
     let newStatus = undefined as string | undefined
+    const allocated: Array<{ invoiceId: any; applied: number }> = []
     if (invDoc) {
       const oldReceived = parseNumber(invDoc.receivedAmount, 0)
       const net = parseNumber(invDoc.netTotal, 0)
@@ -121,28 +122,92 @@ export async function createMoneyReceipt(body: any, companyId?: string) {
         { $set: { receivedAmount: newReceived, status: newStatus, updatedAt: now } },
         sess ? { session: sess } : undefined
       )
+      allocated.push({ invoiceId, applied: paidAmount })
+    } else if (paymentTo === "overall") {
+      // Distribute overall payment to most recent due invoices of the client
+      const invs = await Invoice.find({ clientId, companyId: companyObjectId }).sort({ createdAt: -1 }).lean()
+      let remaining = paidAmount
+      for (const inv of invs) {
+        if (remaining <= 0) break
+        const net = parseNumber((inv as any).netTotal, 0)
+        const recv = parseNumber((inv as any).receivedAmount, 0)
+        const due = Math.max(0, net - recv)
+        if (due <= 0) continue
+        const apply = Math.min(remaining, due)
+        const newRecv = recv + apply
+        const status = newRecv >= net ? "paid" : newRecv > 0 ? "partial" : "due"
+        await Invoice.updateOne({ _id: inv._id }, { $set: { receivedAmount: newRecv, status, updatedAt: now } }, sess ? { session: sess } : undefined)
+        allocated.push({ invoiceId: inv._id, applied: apply })
+        remaining -= apply
+      }
     }
 
     // Create Client Transaction (receive)
-    const trxnDoc: any = {
-      date: paymentDate,
-      voucherNo,
-      clientId,
-      clientName: clientDoc.name || "",
-      companyId: companyObjectId,
-      invoiceType: paymentTo?.toUpperCase?.() || "OVERALL",
-      paymentTypeId: accId,
-      accountName,
-      payType: paymentMethod || undefined,
-      amount: paidAmount,
-      direction: "receive",
-      relatedInvoiceId: invoiceId,
-      note: note || undefined,
-      createdAt: now,
-      updatedAt: now,
+    // Create Client Transaction entries
+    if (allocated.length && paymentTo === "overall" && !invoiceId) {
+      // Create one transaction per affected invoice using the same voucher
+      let appliedTotal = 0
+      for (const a of allocated) {
+        appliedTotal += a.applied
+        const txn: any = {
+          date: paymentDate,
+          voucherNo,
+          clientId,
+          clientName: clientDoc.name || "",
+          companyId: companyObjectId,
+          invoiceType: "INVOICE",
+          paymentTypeId: accId,
+          accountName,
+          payType: paymentMethod || undefined,
+          amount: a.applied,
+          direction: "receive",
+          relatedInvoiceId: a.invoiceId,
+          note: note || undefined,
+          createdAt: now,
+          updatedAt: now,
+        }
+        await new ClientTransaction(txn).save(sess ? { session: sess } : undefined)
+      }
+      const leftover = Math.max(0, paidAmount - appliedTotal)
+      if (leftover > 0) {
+        const txnLeft: any = {
+          date: paymentDate,
+          voucherNo,
+          clientId,
+          clientName: clientDoc.name || "",
+          companyId: companyObjectId,
+          invoiceType: "OVERALL",
+          paymentTypeId: accId,
+          accountName,
+          payType: paymentMethod || undefined,
+          amount: leftover,
+          direction: "receive",
+          note: note || undefined,
+          createdAt: now,
+          updatedAt: now,
+        }
+        await new ClientTransaction(txnLeft).save(sess ? { session: sess } : undefined)
+      }
+    } else {
+      const trxnDoc: any = {
+        date: paymentDate,
+        voucherNo,
+        clientId,
+        clientName: clientDoc.name || "",
+        companyId: companyObjectId,
+        invoiceType: paymentTo?.toUpperCase?.() || "OVERALL",
+        paymentTypeId: accId,
+        accountName,
+        payType: paymentMethod || undefined,
+        amount: paidAmount,
+        direction: "receive",
+        relatedInvoiceId: invoiceId,
+        note: note || undefined,
+        createdAt: now,
+        updatedAt: now,
+      }
+      await new ClientTransaction(trxnDoc).save(sess ? { session: sess } : undefined)
     }
-    // Ensure client transaction creation is part of the transaction session
-    await new ClientTransaction(trxnDoc).save(sess ? { session: sess } : undefined)
     // Mark account as having transactions
     // Update account balance and mark it as having transactions
     await Account.updateOne(
@@ -404,9 +469,30 @@ export async function deleteMoneyReceipt(id: string, companyId?: string) {
       sess ? { session: sess } : undefined
     )
 
-    // Delete receipt and its transaction
+    // Reverse invoice allocations if multiple transactions exist for this voucher
+    const txns = await ClientTransaction.find({ voucherNo: String(mr.voucherNo), clientId, direction: "receive" }).lean()
+    if (Array.isArray(txns) && txns.length) {
+      for (const t of txns) {
+        if (t.relatedInvoiceId) {
+          const invDoc = await Invoice.findById(t.relatedInvoiceId).lean()
+          if (invDoc) {
+            const net = parseNumber(invDoc.netTotal, 0)
+            const currentReceived = parseNumber(invDoc.receivedAmount, 0)
+            const newReceived = Math.max(0, currentReceived - parseNumber(t.amount, 0))
+            const newStatus = newReceived >= net ? "paid" : newReceived > 0 ? "partial" : "due"
+            await Invoice.updateOne({ _id: invDoc._id }, { $set: { receivedAmount: newReceived, status: newStatus, updatedAt: now } }, sess ? { session: sess } : undefined)
+          }
+        }
+      }
+      // Delete all client transactions with this voucher
+      await ClientTransaction.deleteMany({ voucherNo: String(mr.voucherNo), clientId }, sess ? { session: sess } : undefined)
+    } else {
+      // Fallback: delete single transaction
+      await ClientTransaction.deleteOne({ voucherNo: String(mr.voucherNo), clientId }, sess ? { session: sess } : undefined)
+    }
+
+    // Delete receipt
     await MoneyReceipt.deleteOne({ _id: idObj }, sess ? { session: sess } : undefined)
-    await ClientTransaction.deleteOne({ voucherNo: String(mr.voucherNo), clientId }, sess ? { session: sess } : undefined)
 
     return { deleted_id: String(idObj), present_balance: newClientPresent }
   }

@@ -11,6 +11,7 @@ import { Vendor } from "@/models/vendor"
 import { Employee } from "@/models/employee"
 import { Client } from "@/models/client"
 import { MoneyReceipt } from "@/models/money-receipt"
+import { ClientTransaction } from "@/models/client-transaction"
 import { AppError } from "@/errors/AppError"
 
 export async function getInvoiceById(id: string, companyId?: string) {
@@ -412,16 +413,25 @@ export async function listInvoices(params: { page?: number; pageSize?: number; s
     const invId = String((p as any).invoiceId)
     if (!passMap.has(invId)) passMap.set(invId, (p as any).passportNo || "")
   }
-  // Collect money receipt voucher numbers per invoice
+  // Collect money receipt voucher numbers per invoice (from receipts and client transactions)
   const receiptDocs = await MoneyReceipt.find({ invoiceId: { $in: invoiceIds } }).lean()
-  const mrMap = new Map<string, string>()
+  const txnDocs = await ClientTransaction.find({ relatedInvoiceId: { $in: invoiceIds }, direction: "receive" }).lean()
+  const mrSetMap = new Map<string, Set<string>>()
   for (const r of receiptDocs) {
     const invId = String((r as any).invoiceId)
-    const existing = mrMap.get(invId)
     const voucher = String((r as any).voucherNo || "")
-    if (voucher) {
-      mrMap.set(invId, existing ? `${existing}, ${voucher}` : voucher)
-    }
+    if (!voucher) continue
+    const s = mrSetMap.get(invId) || new Set<string>()
+    s.add(voucher)
+    mrSetMap.set(invId, s)
+  }
+  for (const t of txnDocs) {
+    const invId = String((t as any).relatedInvoiceId || "")
+    const voucher = String((t as any).voucherNo || "")
+    if (!invId || !voucher) continue
+    const s = mrSetMap.get(invId) || new Set<string>()
+    s.add(voucher)
+    mrSetMap.set(invId, s)
   }
 
   const items = docs.map((d: any) => ({
@@ -435,7 +445,7 @@ export async function listInvoices(params: { page?: number; pageSize?: number; s
     salesPrice: parseNumber(d.netTotal, 0),
     receivedAmount: parseNumber(d.receivedAmount, 0),
     dueAmount: Math.max(0, parseNumber(d.netTotal, 0) - parseNumber(d.receivedAmount, 0)),
-    mrNo: mrMap.get(String(d._id)) || d.mrNo || "",
+    mrNo: Array.from(mrSetMap.get(String(d._id)) || new Set<string>()).join(", ") || d.mrNo || "",
     passportNo: passMap.get(String(d._id)) || d.passportNo || "",
     salesBy: d.salesByName || "",
     agent: d.agentName || "",
@@ -575,8 +585,119 @@ export async function createInvoice(body: any, companyId?: string) {
     }
   }
 
-  // Perform writes, optionally within a session
+  // Idempotent write: if invoice with same invoiceNo exists, update it instead of creating a duplicate
   const performWrite = async (session?: any) => {
+    const existing = await Invoice.findOne({ invoiceNo }).lean()
+    if (existing) {
+      const invoiceId = String(existing._id)
+      const oldNet = Number(existing.netTotal || existing.billing?.netTotal || 0)
+      const delta = netTotal - oldNet
+
+      // Update header (preserve original createdAt)
+      await Invoice.updateOne(
+        { _id: existing._id },
+        { $set: { ...headerDoc, createdAt: existing.createdAt, updatedAt: now } },
+        session ? { session } : undefined
+      )
+
+      // Replace child collections with current payload
+      if (Array.isArray(billingItems)) {
+        if (session) {
+          await InvoiceItem.deleteMany({ invoiceId }).session(session)
+        } else {
+          await InvoiceItem.deleteMany({ invoiceId })
+        }
+        const docs = billingItems.map((i: any) => ({ ...i, invoiceId, companyId: companyIdStr, createdAt: now, updatedAt: now }))
+        if (docs.length) await InvoiceItem.insertMany(docs, session ? { session } : {})
+      }
+      if (Array.isArray(tickets) && tickets.length) {
+        if (session) {
+          await InvoiceTicket.deleteMany({ invoiceId }).session(session)
+        } else {
+          await InvoiceTicket.deleteMany({ invoiceId })
+        }
+        const docs = tickets.map((t: any) => ({ ...t, invoiceId, companyId: companyIdStr, createdAt: now, updatedAt: now }))
+        if (docs.length) await InvoiceTicket.insertMany(docs, session ? { session } : {})
+      }
+      if (Array.isArray(hotels) && hotels.length) {
+        if (session) {
+          await InvoiceHotel.deleteMany({ invoiceId }).session(session)
+        } else {
+          await InvoiceHotel.deleteMany({ invoiceId })
+        }
+        const docs = hotels.map((h: any) => ({ ...h, invoiceId, companyId: companyIdStr, createdAt: now, updatedAt: now }))
+        if (docs.length) await InvoiceHotel.insertMany(docs, session ? { session } : {})
+      }
+      if (Array.isArray(transports) && transports.length) {
+        if (session) {
+          await InvoiceTransport.deleteMany({ invoiceId }).session(session)
+        } else {
+          await InvoiceTransport.deleteMany({ invoiceId })
+        }
+        const docs = transports.map((tr: any) => ({ ...tr, invoiceId, companyId: companyIdStr, createdAt: now, updatedAt: now }))
+        if (docs.length) await InvoiceTransport.insertMany(docs, session ? { session } : {})
+      }
+      if (Array.isArray(passports) && passports.length) {
+        if (session) {
+          await InvoicePassport.deleteMany({ invoiceId }).session(session)
+        } else {
+          await InvoicePassport.deleteMany({ invoiceId })
+        }
+        const docs = passports.map((p: any, idx: number) => ({
+          id: p.id || String(Date.now() + idx),
+          invoiceId,
+          companyId: companyIdStr,
+          passportNo: p.passportNo || p.passport_no || "",
+          name: p.name || "",
+          email: p.email || "",
+          dateOfIssue: p.dateOfIssue || p.date_of_issue || "",
+          dateOfExpire: p.dateOfExpire || p.date_of_expire || "",
+          paxType: p.paxType || p.pax_type || "",
+          contactNo: p.contactNo || p.mobile || "",
+          dateOfBirth: p.dateOfBirth || p.dob || "",
+          passportId: p.passportId || p.passport_id || "",
+          createdAt: now,
+          updatedAt: now,
+        }))
+        const col = mongoose.connection?.db?.collection("invoice_passports")
+        if (!col) throw new AppError("DB not available", 500)
+        if (docs.length) await col.insertMany(docs as any[], session ? { session } : undefined)
+      }
+
+      // Adjust client present balance by delta (invoice reduces balance)
+      await Client.updateOne(
+        { _id: clientDoc._id },
+        { $set: { presentBalance: presentBalance - delta, updatedAt: now } },
+        session ? { session } : undefined
+      )
+
+      const response = {
+        invoice_id: Number(String(invoiceId).slice(-6)),
+        invoice_org_agency: null,
+        invoice_no: invoiceNo,
+        net_total: String(netTotal.toFixed(2)),
+        invoice_client_id: clientDoc.uniqueId || null,
+        invoice_combined_id: null,
+        comb_client: clientDoc.uniqueId ? `client-${clientDoc.uniqueId}` : null,
+        invoice_total_profit: String(billingItems.reduce((s: number, i: any) => s + parseNumber(i.profit), 0).toFixed(2)),
+        invoice_total_vendor_price: String(billingItems.reduce((s: number, i: any) => s + parseNumber(i.costPrice) * parseNumber(i.quantity), 0).toFixed(2)),
+        invoice_sales_date: salesDate,
+        invoice_date: salesDate,
+        invoice_due_date: dueDate || null,
+        invoice_is_refund: 0,
+        client_name: names.clientName || "",
+        mobile: names.clientPhone || null,
+        invclientpayment_amount: String(receivedAmount.toFixed(2)),
+        money_receipt_num: "",
+        passport_no: null,
+        passport_name: null,
+        sales_by: names.salesByName || "",
+      }
+
+      return { ok: true, id: invoiceId, created: response }
+    }
+
+    // No existing doc: proceed with new insert
     await resolveLookups(session)
     const result = await Invoice.create(headerDoc, session ? { session } : undefined)
     const invoiceId = String((result as any)._id)
@@ -659,18 +780,6 @@ export async function createInvoice(body: any, companyId?: string) {
     return { ok: true, id: invoiceId, created: response }
   }
 
-  // Attempt to run within transaction; fall back if not supported (e.g., standalone MongoDB)
-  const session = await mongoose.startSession()
-  try {
-    let result: any
-    await session.withTransaction(async () => {
-      result = await performWrite(session)
-    }, { writeConcern: { w: "majority" } })
-    return result
-  } catch (err) {
-    console.warn("createInvoice: transaction failed, falling back without session", err)
-    return await performWrite(undefined)
-  } finally {
-    await session.endSession()
-  }
+  // Perform write once without transaction to avoid duplicate creations on non-replica setups
+  return await performWrite(undefined)
 }

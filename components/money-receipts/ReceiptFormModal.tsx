@@ -304,7 +304,7 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
                     <FormItem>
                       <FormLabel>Present Due:</FormLabel>
                       <FormControl>
-                        <Input type="number" disabled value={field.value ?? 0} />
+                        <Input type="number" disabled value={field.value ?? 0} className={(Number(field.value ?? 0) < 0) ? "border-red-500" : undefined} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -531,7 +531,7 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
                   )}
                 />
 
-                {/* Manual Money receipt no (disabled) */}
+                {/* Manual Money receipt no */}
                 <FormField
                   control={form.control}
                   name="manualReceiptNo"
@@ -539,7 +539,7 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
                     <FormItem>
                       <FormLabel>Manual Money receipt no</FormLabel>
                       <FormControl>
-                        <Input disabled placeholder="Manual Money receipt no" value={field.value ?? ""} onChange={field.onChange} />
+                        <Input placeholder="Manual Money receipt no" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

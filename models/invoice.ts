@@ -11,7 +11,7 @@ const BillingSummarySchema = new Schema({
 }, { _id: false })
 
 const InvoiceSchema = new Schema({
-  invoiceNo: { type: String, required: true, index: true },
+  invoiceNo: { type: String, required: true, index: true, unique: true },
   clientId: { type: Types.ObjectId, ref: "Client", index: true },
   employeeId: { type: Types.ObjectId, ref: "Employee", index: true },
   agentId: { type: Types.ObjectId, ref: "Agent", index: true },
