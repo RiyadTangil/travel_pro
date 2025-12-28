@@ -2,7 +2,8 @@ import { Schema, model, models, Types } from "mongoose"
 
 const AccountSchema = new Schema({
   name: { type: String, required: true },
-  type: { type: String, enum: ["Cash", "Bank", "Mobile banking", "Credit Card"], required: true },
+  type: { type: String, required: true },
+  accountTypeId: { type: Types.ObjectId, ref: "AccountType", index: true, required: true },
   accountNo: { type: String },
   bankName: { type: String },
   routingNo: { type: String },
@@ -16,4 +17,3 @@ const AccountSchema = new Schema({
 }, { collection: "accounts" })
 
 export const Account = models.Account || model("Account", AccountSchema)
-

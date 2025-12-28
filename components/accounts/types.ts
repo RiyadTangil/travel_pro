@@ -1,9 +1,10 @@
-export type AccountType = "Cash" | "Bank" | "Mobile banking" | "Credit Card"
+export type AccountType = string
 
 export type AccountItem = {
   id: string
   name: string
   type: AccountType
+  accountTypeId?: string
   accountNo?: string
   bankName?: string
   routingNo?: string

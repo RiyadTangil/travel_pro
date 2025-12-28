@@ -346,7 +346,7 @@ const BillingItemRow = memo(function BillingItemRow({ item, index, canRemove, pr
           </div>
 
           <div className="space-y-2">
-            <Label>Vendor <span className="text-red-500">*</span></Label>
+            <Label>Vendor {item.costPrice > 0 ? <span className="text-red-500">*</span> : null}</Label>
             <VendorSelect
               value={item.vendor || undefined}
               onChange={(id) => onUpdate(item.id, 'vendor', id || "")}

@@ -23,8 +23,6 @@ import { toast } from "@/components/ui/use-toast"
 type ClientItem = { id: string; name: string; uniqueId?: number; email?: string; phone?: string }
 type AccountOptionItem = { id: string; name: string; type: AccountType }
 
-const paymentMethodOptions: AccountType[] = ["Cash", "Bank", "Mobile banking", "Credit Card"]
-
 const schema = z.object({
   clientId: z.string({ required_error: "Client is required" }),
   presentDue: z.number().optional(),
@@ -93,6 +91,7 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
   const [invoiceLoading, setInvoiceLoading] = useState(false)
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>(mode === "edit" && defaults?.paymentTo === "invoice" && defaults?.invoiceId ? String(defaults.invoiceId) : "")
   const [submitting, setSubmitting] = useState(false)
+  const [paymentMethodOptions, setPaymentMethodOptions] = useState<AccountType[]>([])
 
   const filteredAccounts = useMemo(() => {
     if (!accountsPreloaded || !paymentMethod) return []
@@ -120,6 +119,18 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
         note: defaults?.note ?? "",
         showBalance: defaults?.showBalance ?? true,
       })
+      const ctrl = new AbortController()
+      ;(async () => {
+        try {
+          const res = await fetch(`/api/account-types`, { signal: ctrl.signal })
+          const data = await res.json()
+          const items: string[] = Array.isArray(data?.items) ? data.items.map((i: any) => String(i.name)) : []
+          setPaymentMethodOptions(items.length ? items : ["Cash", "Bank", "Mobile banking", "Credit Card"])
+        } catch {
+          setPaymentMethodOptions(["Cash", "Bank", "Mobile banking", "Credit Card"])
+        }
+      })()
+      return () => ctrl.abort()
     }
   }, [open, defaults, form, mode, nextVoucher])
 
@@ -228,7 +239,7 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
       const created = data?.created || {}
       const updated = data?.updated || {}
 
-      const invoiceType: MoneyReceipt["invoiceType"] = (String(created?.receipt_payment_to || values.paymentTo).toUpperCase() === "INVOICE") ? "INVOICE" : "OVERALL"
+      const invoiceType: MoneyReceipt["invoiceType"] = String(created?.receipt_payment_to || values.paymentTo).toUpperCase()
       const receipt: MoneyReceipt = {
         id: isEdit ? String(editId) : String(created?.doc_id || ''),
         paymentDate: String(created?.receipt_payment_date || values.paymentDate),

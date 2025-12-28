@@ -13,6 +13,8 @@ const MoneyReceiptSchema = new Schema({
   manualReceiptNo: { type: String },
   amount: { type: Number, required: true },
   discount: { type: Number, default: 0 },
+  allocatedAmount: { type: Number, default: 0 },
+  remainingAmount: { type: Number, default: 0 },
   paymentDate: { type: String }, // ISO YYYY-MM-DD
   note: { type: String },
   docOneName: { type: String },

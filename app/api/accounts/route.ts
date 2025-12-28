@@ -3,7 +3,8 @@ import { listAccounts, createAccount } from '@/services/accountService'
 
 type AccountPayload = {
   name: string
-  type: 'Cash' | 'Bank' | 'Mobile banking' | 'Credit Card'
+  type: string
+  accountTypeId?: string
   accountNo?: string
   bankName?: string
   routingNo?: string

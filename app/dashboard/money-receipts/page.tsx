@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useSession } from "next-auth/react"
+import { useRouter } from "next/navigation"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
@@ -13,6 +14,7 @@ import { useInvoiceLookups } from "@/hooks/useInvoiceLookups"
 
 export default function MoneyReceiptsPage() {
   const { data: session } = useSession()
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [rows, setRows] = useState<MoneyReceipt[]>([])
   const [loading, setLoading] = useState(false)
@@ -60,7 +62,16 @@ export default function MoneyReceiptsPage() {
 
   const onView = (id: string) => {
     const r = rows.find(x => x.id === id)
-    if (r) alert(`Money Receipt\nVoucher: ${r.voucherNo}\nClient: ${r.clientName}\nAmount: ${r.paidAmount}`)
+    if (!r) return
+    const params = new URLSearchParams({
+      voucherNo: r.voucherNo,
+      clientId: r.clientId,
+      clientName: r.clientName,
+      paidAmount: String(r.paidAmount),
+      paymentDate: r.paymentDate,
+      paymentTo: r.paymentTo,
+    })
+    router.push(`/dashboard/money-receipts/${id}?${params.toString()}`)
   }
 
   const onEdit = (id: string) => {
@@ -102,7 +113,7 @@ export default function MoneyReceiptsPage() {
         clientId: String(it.client_id || ""),
         clientName: String(it.client_name || "Unknown"),
         invoiceId: it.invoice_id ? String(it.invoice_id) : undefined,
-        invoiceType: String(it.receipt_payment_to || "OVERALL") === "INVOICE" ? "INVOICE" : "OVERALL",
+        invoiceType: String(it.receipt_payment_to || "OVERALL").toUpperCase(),
         paymentTo: String(it.receipt_payment_to || "overall").toLowerCase(),
         paymentMethod: String(it.acctype_name || ""),
         accountId: String(it.receipt_account_id || ""),

@@ -11,8 +11,8 @@ const ClientTransactionSchema = new Schema({
   accountName: { type: String },
   payType: { type: String }, // e.g. CASH / BANK / MOBILE
   amount: { type: Number, required: true },
-  direction: { type: String, enum: ["receive", "expense"], required: true },
-  relatedInvoiceId: { type: Types.ObjectId, ref: "Invoice" },
+  direction: { type: String, enum: ["receiv", "payout"], required: true },
+  lastTotalAmount: { type: Number, default: 0 },
   note: { type: String },
   createdAt: { type: String },
   updatedAt: { type: String },

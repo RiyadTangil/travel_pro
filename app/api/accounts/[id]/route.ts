@@ -4,7 +4,8 @@ import { ObjectId } from 'mongodb'
 
 type AccountPayload = {
   name?: string
-  type?: 'Cash' | 'Bank' | 'Mobile banking' | 'Credit Card'
+  type?: string
+  accountTypeId?: string
   accountNo?: string
   bankName?: string
   routingNo?: string
@@ -28,6 +29,9 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       if ((payload as any)[key] !== undefined) {
         update.$set[key] = (payload as any)[key] || undefined
       }
+    }
+    if (payload.accountTypeId !== undefined) {
+      update.$set.accountTypeId = payload.accountTypeId ? new ObjectId(String(payload.accountTypeId)) : undefined
     }
     if (payload.lastBalance !== undefined) {
       update.$set.lastBalance = typeof payload.lastBalance === 'number' ? payload.lastBalance : Number(payload.lastBalance || 0)

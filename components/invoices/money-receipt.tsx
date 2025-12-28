@@ -9,8 +9,6 @@ import { DateInput } from "@/components/ui/date-input"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import type { AccountType } from "@/components/accounts/types"
 
-const paymentMethodOptions: AccountType[] = ["Cash", "Bank", "Mobile banking", "Credit Card"]
-
 type AccountOptionItem = { id: string; name: string; type: AccountType }
 
 function useAccountOptions(preloaded?: AccountOptionItem[]) {
@@ -38,6 +36,7 @@ function useAccountOptions(preloaded?: AccountOptionItem[]) {
 export function MoneyReceipt({ accountsPreloaded }: { accountsPreloaded?: AccountOptionItem[] }) {
   const accounts = useAccountOptions(accountsPreloaded)
   const [paymentMethod, setPaymentMethod] = useState<AccountType | "">("")
+  const [paymentMethodOptions, setPaymentMethodOptions] = useState<AccountType[]>([])
   const [account, setAccount] = useState("")
   const [amount, setAmount] = useState<string>("")
   const [discount, setDiscount] = useState<string>("")
@@ -54,6 +53,22 @@ export function MoneyReceipt({ accountsPreloaded }: { accountsPreloaded?: Accoun
       .filter(a => (paymentMethod ? a.type === paymentMethod : false))
       .map(a => a.name)
   ), [accounts, paymentMethod])
+
+  useEffect(() => {
+    let active = true
+    const ctrl = new AbortController()
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/account-types`, { signal: ctrl.signal })
+        const data = await res.json()
+        const items: string[] = Array.isArray(data?.items) ? data.items.map((i: any) => String(i.name)) : []
+        if (active) setPaymentMethodOptions(items.length ? items : ["Cash", "Bank", "Mobile banking", "Credit Card"])
+      } catch {
+        if (active) setPaymentMethodOptions(["Cash", "Bank", "Mobile banking", "Credit Card"])
+      }
+    })()
+    return () => { active = false; ctrl.abort() }
+  }, [])
 
   useEffect(() => {
     // Reset account and transNo when payment method changes

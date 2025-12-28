@@ -18,9 +18,8 @@ interface AccountModalProps {
   submitting?: boolean
 }
 
-const accountTypes: AccountType[] = ["Cash", "Bank", "Mobile banking", "Credit Card"]
-
 export default function AccountModal({ open, onOpenChange, initialItem, onSubmit, submitting }: AccountModalProps) {
+  const [types, setTypes] = useState<AccountType[]>([])
   const [type, setType] = useState<AccountType>("Cash")
   const [name, setName] = useState("")
   const [accountNo, setAccountNo] = useState("")
@@ -31,6 +30,22 @@ export default function AccountModal({ open, onOpenChange, initialItem, onSubmit
   const [cardCsv, setCardCsv] = useState("")
   const [cardExpiry, setCardExpiry] = useState<string>("")
   const [lastBalance, setLastBalance] = useState<string>("")
+
+  useEffect(() => {
+    if (!open) return
+    const ctrl = new AbortController()
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/account-types`, { signal: ctrl.signal })
+        const data = await res.json()
+        const items: string[] = Array.isArray(data?.items) ? data.items.map((i: any) => String(i.name)) : []
+        setTypes(items.length ? items : ["Cash", "Bank", "Mobile banking", "Credit Card"])
+      } catch {
+        setTypes(["Cash", "Bank", "Mobile banking", "Credit Card"])
+      }
+    })()
+    return () => ctrl.abort()
+  }, [open])
 
   useEffect(() => {
     if (open) {
@@ -88,7 +103,7 @@ export default function AccountModal({ open, onOpenChange, initialItem, onSubmit
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {accountTypes.map((t) => (
+                {types.map((t) => (
                   <SelectItem key={t} value={t}>{t}</SelectItem>
                 ))}
               </SelectContent>

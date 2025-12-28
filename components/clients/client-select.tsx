@@ -22,6 +22,7 @@ interface ClientSelectProps {
   className?: string
   autoFocus?: boolean
   preloaded?: ClientItem[]
+  disabled?: boolean
 }
 
 // Formats like: NAME - (CL-0001)
@@ -30,7 +31,7 @@ function formatLabel(c: ClientItem) {
   return `${c.name} - (${code})`
 }
 
-export default function ClientSelect({ value, onChange, onRequestAdd, placeholder = "Select Client", className, autoFocus, preloaded }: ClientSelectProps) {
+export default function ClientSelect({ value, onChange, onRequestAdd, placeholder = "Select Client", className, autoFocus, preloaded, disabled }: ClientSelectProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [items, setItems] = useState<ClientItem[]>([])
@@ -99,16 +100,16 @@ export default function ClientSelect({ value, onChange, onRequestAdd, placeholde
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open && !disabled} onOpenChange={(v) => { if (!disabled) setOpen(v) }}>
       <PopoverTrigger asChild>
-        <Button variant="outline" role="combobox" aria-expanded={open} className={`justify-between hover:bg-gray-10 w-full ${className || ""}`}
-          autoFocus={autoFocus}
+        <Button variant="outline" role="combobox" aria-expanded={open && !disabled} className={`justify-between hover:bg-gray-10 w-full ${className || ""}`}
+          autoFocus={autoFocus} disabled={disabled}
         >
           <span className="truncate text-left">
             {selected ? formatLabel(selected) : (placeholder || "Select Client")}
           </span>
           <div className="flex items-center gap-2" onMouseDown={(e) => { e.preventDefault() }}
-            onClick={(e) => { e.stopPropagation(); handleSelect(undefined) }}>
+            onClick={(e) => { if (disabled) return; e.stopPropagation(); handleSelect(undefined) }}>
             {selected && (
               <X
                 className="h-4 w-4 opacity-60 hover:opacity-100 cursor-pointer rounded-full border border-solid border-gray-300 bg-gray-300 w-4 h-4 px-0.5"
@@ -121,17 +122,17 @@ export default function ClientSelect({ value, onChange, onRequestAdd, placeholde
       <PopoverContent className="p-0 w-[360px]" align="start">
         <Command>
           <div className="px-2 pt-2">
-            <Button size="sm" variant="secondary" className="w-full justify-start gap-2" onClick={() => { onRequestAdd?.(); }}>
+            <Button size="sm" variant="secondary" className="w-full justify-start gap-2" onClick={() => { if (!disabled) onRequestAdd?.(); }} disabled={disabled}>
               <Plus className="h-4 w-4" />
               Add Client
             </Button>
           </div>
-          <CommandInput placeholder="Search client..." value={search} onValueChange={setSearch} />
+          <CommandInput placeholder="Search client..." value={search} onValueChange={setSearch} disabled={disabled} />
           <CommandList>
             <CommandEmpty>{loading ? "Loading..." : "No clients found."}</CommandEmpty>
             <CommandGroup>
               {items.map((c) => (
-                <CommandItem key={c.id} value={c.id} onSelect={() => handleSelect(c.id)}>
+                <CommandItem key={c.id} value={c.id} onSelect={() => { if (!disabled) handleSelect(c.id) }}>
                   {formatLabel(c)}
                 </CommandItem>
               ))}

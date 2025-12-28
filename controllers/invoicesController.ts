@@ -55,8 +55,9 @@ const billingItemSchema = z.object({
   profit: z.number().optional().default(0),
   vendor: z.string().optional().default(""),
 }).superRefine((val, ctx) => {
-  if (val.product.trim() && !val.vendor.trim()) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Vendor is required when product is provided", path: ["vendor"] })
+  const cp = typeof val.costPrice === 'number' ? val.costPrice : 0
+  if (cp > 0 && !val.vendor.trim()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Vendor is required when Cost Price is provided", path: ["vendor"] })
   }
 })
 

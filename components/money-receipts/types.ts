@@ -10,7 +10,7 @@ export type MoneyReceipt = {
   clientId: string
   clientName: string
   invoiceId?: string
-  invoiceType: "OVERALL" | "INVOICE"
+  invoiceType: "OVERALL" | "INVOICE" | "ADVANCE" | "TICKETS" | "ADJUST"
   paymentTo: string
   paymentMethod: string
   accountId: string

@@ -2,6 +2,7 @@ import connectMongoose from "@/lib/mongoose"
 import { AppError } from "@/errors/AppError"
 import { Account } from "@/models/account"
 import { Types } from "mongoose"
+import { AccountType as AccountTypeModel } from "@/models/account-type"
 
 type ListParams = { q?: string; page?: number; pageSize?: number }
 
@@ -27,6 +28,7 @@ export async function listAccounts(params: ListParams, companyId?: string) {
       id: String(doc._id),
       name: doc.name,
       type: doc.type,
+      accountTypeId: doc.accountTypeId ? String(doc.accountTypeId) : undefined,
       accountNo: doc.accountNo,
       bankName: doc.bankName,
       routingNo: doc.routingNo,
@@ -43,7 +45,8 @@ export async function listAccounts(params: ListParams, companyId?: string) {
 
 type CreatePayload = {
   name: string
-  type: 'Cash' | 'Bank' | 'Mobile banking' | 'Credit Card'
+  type: string
+  accountTypeId?: string
   accountNo?: string
   bankName?: string
   routingNo?: string
@@ -71,7 +74,13 @@ export async function createAccount(payload: CreatePayload, companyId?: string) 
     createdAt: now,
     updatedAt: now,
   }
+  if (payload.accountTypeId && Types.ObjectId.isValid(String(payload.accountTypeId))) {
+    doc.accountTypeId = new Types.ObjectId(String(payload.accountTypeId))
+    if (!payload.type) {
+      const at = await AccountTypeModel.findById(doc.accountTypeId).lean()
+      doc.type = at?.name || "Cash"
+    }
+  }
   const res = await Account.create(doc)
   return { id: String(res._id) }
 }
-

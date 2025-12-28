@@ -296,10 +296,10 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
     if (!employeeId) { alert("Sales By is required."); return }
     if (!invoiceNoInput) { alert("Invoice No is required."); return }
     if (!salesDate) { alert("Sales Date is required."); return }
-    // Vendor required validation for each billing item with product
+    // Vendor required only if Cost Price has a value (> 0)
     const billingItems = billingData?.items || []
-    const missingVendor = billingItems.some((i) => (i.product || "").trim() && !(i.vendor || "").trim())
-    if (missingVendor) { alert("Vendor is required for each billing item."); return }
+    const missingVendor = billingItems.some((i) => Number(i.costPrice) > 0 && !(i.vendor || "").trim())
+    if (missingVendor) { alert("Vendor is required when Cost Price is provided."); return }
 
     setSubmitting(true)
       ; (async () => {
@@ -361,6 +361,8 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
           }
           if (method === "POST") {
             const created = data.created
+            const recAmt = Number(created.invclientpayment_amount || 0)
+            const net = Number(created.net_total || 0)
             const newInvoice = {
               id: data.id,
               invoiceNo: created.invoice_no,
@@ -368,14 +370,14 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
               clientPhone: created.mobile || "",
               salesDate: created.invoice_sales_date?.slice(0, 10) || new Date().toISOString().slice(0, 10),
               dueDate: created.invoice_due_date || "",
-              salesPrice: Number(created.net_total || 0),
-              receivedAmount: Number(created.invclientpayment_amount || 0),
-              dueAmount: Math.max(0, Number(created.net_total || 0) - Number(created.invclientpayment_amount || 0)),
+              salesPrice: net,
+              receivedAmount: recAmt,
+              dueAmount: Math.max(0, net - recAmt),
               mrNo: created.money_receipt_num || "",
               passportNo: created.passport_no || "",
               salesBy: created.sales_by || "",
               agent: "",
-              status: 'due' as const,
+              status: recAmt >= net ? 'paid' as const : (recAmt > 0 ? 'partial' as const : 'due' as const),
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString()
             }

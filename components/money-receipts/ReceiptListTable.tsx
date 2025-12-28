@@ -23,7 +23,7 @@ export default function ReceiptListTable({ rows, onView, onEdit, onDelete, loadi
             <TableHead>Payment Date</TableHead>
             <TableHead>Vouchor No</TableHead>
             <TableHead>Client Name</TableHead>
-            <TableHead>Invoice Type</TableHead>
+            <TableHead>Payment To</TableHead>
             <TableHead>Payment Type</TableHead>
             <TableHead>Account Name</TableHead>
             <TableHead>Manual Receipt No</TableHead>
@@ -40,7 +40,7 @@ export default function ReceiptListTable({ rows, onView, onEdit, onDelete, loadi
               <TableCell>{new Date(r.paymentDate).toLocaleDateString("en-GB")}</TableCell>
               <TableCell>{r.voucherNo}</TableCell>
               <TableCell>{r.clientName}</TableCell>
-              <TableCell>{r.invoiceType}</TableCell>
+              <TableCell>{r.paymentTo.toUpperCase()}</TableCell>
               <TableCell>{r.paymentMethod}</TableCell>
               <TableCell>{r.accountName}</TableCell>
               <TableCell>{r.manualReceiptNo ?? ""}</TableCell>

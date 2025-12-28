@@ -64,6 +64,11 @@ export async function updateById(id: string, body: any, companyId?: string) {
       totalCost: z.number().optional(),
       profit: z.number().optional(),
       vendor: z.string().optional().default(""),
+    }).superRefine((val, ctx) => {
+      const cp = typeof val.costPrice === 'number' ? val.costPrice : 0
+      if (cp > 0 && !String(val.vendor || '').trim()) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Vendor is required when Cost Price is provided", path: ["vendor"] })
+      }
     })
     const billingSchema = z.object({
       items: z.array(billingItemSchema).optional().default([]),

@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   LayoutDashboard,
   Users,
@@ -16,6 +16,8 @@ import {
   Settings,
   Archive,
   BarChart2,
+  ChevronRight,
+  ChevronDown,
 } from "lucide-react"
 import { useState } from "react"
 import { cn } from "@/lib/utils"
@@ -31,13 +33,18 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { signOut } from "next-auth/react"
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
 
 export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [expanded, setExpanded] = useState(true)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+  const [openMap, setOpenMap] = useState<Record<string, boolean>>({
+    "Money Receipt": pathname.startsWith("/dashboard/money-receipts"),
+  })
 
   const isActive = (path: string) => {
     return pathname === path
@@ -70,9 +77,18 @@ export function Sidebar() {
       href: "/dashboard/invoices",
     },
     {
-      title: "Money Receipts",
+      title: "Money Receipt",
       icon: <CreditCard className="h-5 w-5" />,
-      href: "/dashboard/money-receipts",
+      children: [
+        {
+          title: "Invoice Money Receipt",
+          href: "/dashboard/money-receipts?view=invoice",
+        },
+        {
+          title: "Advance Return",
+          href: "/dashboard/money-receipts/advance-return",
+        },
+      ],
     },
     {
       title: "Client Categories",
@@ -170,21 +186,110 @@ export function Sidebar() {
           {/* Navigation */}
           <div className="flex-1 overflow-y-auto py-4 px-3">
             <nav className="space-y-1">
-              {navItems.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-3 rounded-md transition-all",
-                    isActive(item.href) ? "bg-primary/10 text-primary font-medium" : "text-gray-600 hover:bg-gray-100",
-                    !expanded && "justify-center",
-                  )}
-                  onClick={() => setMobileOpen(false)}
-                >
-                  {item.icon}
-                  {expanded && <span>{item.title}</span>}
-                </Link>
-              ))}
+              {navItems.map((item) => {
+                const hasChildren = Array.isArray((item as any).children) && (item as any).children.length > 0
+
+                const isParentActive = hasChildren
+                  ? ((item as any).children as Array<{ href: string }>).some((child) => {
+                      const u = new URL(child.href, "http://localhost")
+                      const base = u.pathname
+                      if (pathname !== base) return false
+                      const qs = u.searchParams
+                      for (const [k, v] of qs.entries()) {
+                        if (searchParams.get(k) !== v) return false
+                      }
+                      return true
+                    })
+                  : isActive((item as any).href)
+
+                if (!hasChildren) {
+                  return (
+                    <Link
+                      key={(item as any).href}
+                      href={(item as any).href}
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-3 rounded-md transition-all",
+                        isParentActive ? "bg-primary/10 text-primary font-medium" : "text-gray-600 hover:bg-gray-100",
+                        !expanded && "justify-center",
+                      )}
+                      onClick={() => setMobileOpen(false)}
+                    >
+                      {(item as any).icon}
+                      {expanded && <span>{(item as any).title}</span>}
+                    </Link>
+                  )
+                }
+
+                const open = !!openMap[(item as any).title]
+                return (
+                  <Collapsible
+                    key={(item as any).title}
+                    open={open}
+                    onOpenChange={(v) => setOpenMap((m) => ({ ...m, [(item as any).title]: v }))}
+                  >
+                    <CollapsibleTrigger asChild>
+                      <button
+                        type="button"
+                        className={cn(
+                          "w-full flex items-center gap-3 px-3 py-3 rounded-md transition-all",
+                          isParentActive ? "bg-primary/10 text-primary font-medium" : "text-gray-600 hover:bg-gray-100",
+                          !expanded && "justify-center",
+                        )}
+                        onClick={() => setMobileOpen(false)}
+                      >
+                        {(item as any).icon}
+                        {expanded && (
+                          <>
+                            <span>{(item as any).title}</span>
+                            <div className="ml-auto">
+                              {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                            </div>
+                          </>
+                        )}
+                      </button>
+                    </CollapsibleTrigger>
+                    {expanded && (
+                      <CollapsibleContent
+                        className={cn(
+                          "overflow-hidden data-[state=open]:animate-in data-[state=closed]:animate-out",
+                          "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
+                          "data-[state=open]:slide-in-from-top-2 data-[state=closed]:slide-out-to-top-2",
+                        )}
+                      >
+                        <div className="mt-1 space-y-1 pl-3">
+                          {((item as any).children as Array<{ title: string; href: string }>).map((child) => {
+                            const u = new URL(child.href, "http://localhost")
+                            const base = u.pathname
+                            const qs = u.searchParams
+                            let active = pathname === base
+                            if (active) {
+                              for (const [k, v] of qs.entries()) {
+                                if (searchParams.get(k) !== v) {
+                                  active = false
+                                  break
+                                }
+                              }
+                            }
+                            return (
+                              <Link
+                                key={child.href}
+                                href={child.href}
+                                className={cn(
+                                  "flex items-center gap-3 px-3 py-2 rounded-md transition-all",
+                                  active ? "bg-primary/10 text-primary font-medium" : "text-gray-600 hover:bg-gray-100",
+                                )}
+                                onClick={() => setMobileOpen(false)}
+                              >
+                                <span>{child.title}</span>
+                              </Link>
+                            )
+                          })}
+                        </div>
+                      </CollapsibleContent>
+                    )}
+                  </Collapsible>
+                )
+              })}
             </nav>
           </div>
 

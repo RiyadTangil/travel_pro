@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
 
     let runningBalance = openingBalance
     const items = docs.map((t: any) => {
-      const isReceive = String(t.direction) === "receive"
+      const isReceive = String(t.direction) === "receiv"
       const acctrxn_type = isReceive ? "CREDIT" : "DEBIT"
       const amount = parseNumber(t.amount, 0)
       runningBalance = runningBalance + (isReceive ? amount : -amount)
@@ -67,4 +67,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
-

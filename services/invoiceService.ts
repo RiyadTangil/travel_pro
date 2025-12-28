@@ -11,6 +11,7 @@ import { Vendor } from "@/models/vendor"
 import { Employee } from "@/models/employee"
 import { Client } from "@/models/client"
 import { MoneyReceipt } from "@/models/money-receipt"
+import { MoneyReceiptAllocation } from "@/models/money-receipt-allocation"
 import { ClientTransaction } from "@/models/client-transaction"
 import { AppError } from "@/errors/AppError"
 
@@ -200,6 +201,71 @@ export async function updateInvoiceById(id: string, body: any, companyId?: strin
         await Client.updateOne({ _id: inv.clientId }, { $inc: { presentBalance: -delta }, $set: { updatedAt: now } }, { session })
       }
 
+      // Auto allocate advances to this invoice after update
+      const netTotal = Number(inv.netTotal || inv.billing?.netTotal || 0)
+      const currentReceived = Number(inv.receivedAmount || 0)
+      let needed = Math.max(0, netTotal - currentReceived)
+      if (needed > 0 && inv.clientId && Types.ObjectId.isValid(String(inv.clientId))) {
+        const companyIdStr = companyId ? String(companyId) : undefined
+        const filter: any = { clientId: inv.clientId, paymentTo: "advance" }
+        if (companyIdStr) {
+          filter.$or = [
+            { companyId: new Types.ObjectId(companyIdStr) },
+            { companyId: companyIdStr },
+          ]
+        }
+        const receipts = await MoneyReceipt.find(filter).sort({ createdAt: 1 }).lean()
+        let appliedSoFar = 0
+        for (const r of receipts) {
+          if (needed <= 0) break
+          const paid = Math.max(0, parseNumber((r as any).amount, 0) - parseNumber((r as any).discount, 0))
+          const existingAllocs = await MoneyReceiptAllocation.find({ moneyReceiptId: (r as any)._id }).session(session).lean()
+          const appliedExisting = (existingAllocs || []).reduce((s, a: any) => s + Math.max(0, parseNumber(a.appliedAmount, 0)), 0)
+          const remain = Math.max(0, paid - appliedExisting)
+          if (remain <= 0) continue
+          const apply = Math.min(needed, remain)
+          await new MoneyReceiptAllocation({
+            moneyReceiptId: (r as any)._id,
+            invoiceId,
+            clientId: inv.clientId,
+            companyId: inv.companyId,
+            voucherNo: String((r as any).voucherNo || ""),
+            appliedAmount: apply,
+            paymentDate: String((r as any).paymentDate || inv.salesDate || now),
+            createdAt: now,
+            updatedAt: now,
+          }).save({ session })
+          const newAllocatedTotal = appliedExisting + apply
+          const newRemaining = Math.max(0, paid - newAllocatedTotal)
+          await MoneyReceipt.updateOne(
+            { _id: (r as any)._id },
+            { $set: { allocatedAmount: newAllocatedTotal, remainingAmount: newRemaining, updatedAt: now } },
+            { session }
+          )
+          appliedSoFar += apply
+          const newRecv = currentReceived + appliedSoFar
+          const status = newRecv >= netTotal ? "paid" : (newRecv > 0 ? "partial" : "due")
+          await Invoice.updateOne({ _id: inv._id }, { $set: { receivedAmount: newRecv, status, updatedAt: now } }, { session })
+          await new ClientTransaction({
+            date: String((r as any).paymentDate || inv.salesDate || now),
+            voucherNo: String((r as any).voucherNo || ""),
+            clientId: inv.clientId,
+            clientName: inv.clientName || "",
+            companyId: inv.companyId,
+            invoiceType: "INVOICE",
+            paymentTypeId: (r as any).accountId,
+            accountName: (r as any).accountName,
+            payType: (r as any).paymentMethod || undefined,
+            amount: apply,
+            direction: "receiv",
+            note: (r as any).note || undefined,
+            createdAt: now,
+            updatedAt: now,
+          }).save({ session })
+          needed -= apply
+        }
+      }
+
       resultOk = true
     })
 
@@ -345,6 +411,14 @@ export async function deleteInvoiceById(id: string, companyId?: string) {
         InvoicePassport.deleteMany({ invoiceId }).session(session),
       ])
 
+      // Reverse allocations applied to this invoice
+      const allocs = await MoneyReceiptAllocation.find({ invoiceId }).lean()
+      for (const a of (allocs || [])) {
+        await MoneyReceipt.updateOne({ _id: a.moneyReceiptId }, { $inc: { allocatedAmount: -Number(a.appliedAmount || 0), remainingAmount: Number(a.appliedAmount || 0) }, $set: { updatedAt: new Date().toISOString() } }, { session })
+        await ClientTransaction.deleteMany({ voucherNo: String(a.voucherNo || ""), clientId: inv.clientId, invoiceType: "INVOICE", direction: "receiv" }, { session })
+      }
+      await MoneyReceiptAllocation.deleteMany({ invoiceId }, { session })
+
       if (net && inv.clientId && Types.ObjectId.isValid(String(inv.clientId))) {
         await Client.updateOne({ _id: inv.clientId }, { $inc: { presentBalance: net }, $set: { updatedAt: new Date().toISOString() } }, { session })
       }
@@ -370,6 +444,12 @@ export async function deleteInvoiceById(id: string, companyId?: string) {
       InvoiceTransport.deleteMany({ invoiceId }),
       InvoicePassport.deleteMany({ invoiceId }),
     ])
+    const allocs = await MoneyReceiptAllocation.find({ invoiceId }).lean()
+    for (const a of (allocs || [])) {
+      await MoneyReceipt.updateOne({ _id: a.moneyReceiptId }, { $inc: { allocatedAmount: -Number(a.appliedAmount || 0), remainingAmount: Number(a.appliedAmount || 0) }, $set: { updatedAt: new Date().toISOString() } })
+      await ClientTransaction.deleteMany({ voucherNo: String(a.voucherNo || ""), clientId: inv.clientId, invoiceType: "INVOICE", direction: "receiv" })
+    }
+    await MoneyReceiptAllocation.deleteMany({ invoiceId })
     if (net && inv.clientId && Types.ObjectId.isValid(String(inv.clientId))) {
       await Client.updateOne({ _id: inv.clientId }, { $inc: { presentBalance: net }, $set: { updatedAt: new Date().toISOString() } })
     }
@@ -413,9 +493,9 @@ export async function listInvoices(params: { page?: number; pageSize?: number; s
     const invId = String((p as any).invoiceId)
     if (!passMap.has(invId)) passMap.set(invId, (p as any).passportNo || "")
   }
-  // Collect money receipt voucher numbers per invoice (from receipts and client transactions)
+  // Collect money receipt voucher numbers per invoice (from receipts and allocations)
   const receiptDocs = await MoneyReceipt.find({ invoiceId: { $in: invoiceIds } }).lean()
-  const txnDocs = await ClientTransaction.find({ relatedInvoiceId: { $in: invoiceIds }, direction: "receive" }).lean()
+  const allocDocs = await MoneyReceiptAllocation.find({ invoiceId: { $in: invoiceIds } }).lean()
   const mrSetMap = new Map<string, Set<string>>()
   for (const r of receiptDocs) {
     const invId = String((r as any).invoiceId)
@@ -425,9 +505,9 @@ export async function listInvoices(params: { page?: number; pageSize?: number; s
     s.add(voucher)
     mrSetMap.set(invId, s)
   }
-  for (const t of txnDocs) {
-    const invId = String((t as any).relatedInvoiceId || "")
-    const voucher = String((t as any).voucherNo || "")
+  for (const a of allocDocs) {
+    const invId = String((a as any).invoiceId || "")
+    const voucher = String((a as any).voucherNo || "")
     if (!invId || !voucher) continue
     const s = mrSetMap.get(invId) || new Set<string>()
     s.add(voucher)
@@ -671,6 +751,71 @@ export async function createInvoice(body: any, companyId?: string) {
         session ? { session } : undefined
       )
 
+      // Auto allocate advances to this invoice
+      const currentReceived = parseNumber(existing.receivedAmount, 0)
+      let needed = Math.max(0, netTotal - currentReceived)
+      let appliedSoFar = 0
+      if (needed > 0) {
+        const filter: any = { clientId: clientDoc._id, paymentTo: "advance" }
+        if (companyIdStr) {
+          filter.$or = [
+            { companyId: new Types.ObjectId(companyIdStr) },
+            { companyId: companyIdStr },
+          ]
+        }
+        const receipts = await MoneyReceipt.find(filter).sort({ createdAt: 1 }).lean()
+        for (const r of receipts) {
+          if (needed <= 0) break
+          const paid = Math.max(0, parseNumber((r as any).amount, 0) - parseNumber((r as any).discount, 0))
+          const existingAllocs = session
+            ? await MoneyReceiptAllocation.find({ moneyReceiptId: (r as any)._id }).session(session).lean()
+            : await MoneyReceiptAllocation.find({ moneyReceiptId: (r as any)._id }).lean()
+          const appliedExisting = (existingAllocs || []).reduce((s, a: any) => s + Math.max(0, parseNumber(a.appliedAmount, 0)), 0)
+          const remain = Math.max(0, paid - appliedExisting)
+          if (remain <= 0) continue
+          const apply = Math.min(needed, remain)
+          await new MoneyReceiptAllocation({
+            moneyReceiptId: (r as any)._id,
+            invoiceId,
+            clientId: clientDoc._id,
+            companyId: companyIdStr ? new Types.ObjectId(companyIdStr) : undefined,
+            voucherNo: String((r as any).voucherNo || ""),
+            appliedAmount: apply,
+            paymentDate: String((r as any).paymentDate || salesDate),
+            createdAt: now,
+            updatedAt: now,
+          }).save(session ? { session } : undefined)
+          const newAllocatedTotal = appliedExisting + apply
+          const newRemaining = Math.max(0, paid - newAllocatedTotal)
+          await MoneyReceipt.updateOne(
+            { _id: (r as any)._id },
+            { $set: { allocatedAmount: newAllocatedTotal, remainingAmount: newRemaining, updatedAt: now } },
+            session ? { session } : undefined
+          )
+          appliedSoFar += apply
+          const newRecv = currentReceived + appliedSoFar
+          const status = newRecv >= netTotal ? "paid" : (newRecv > 0 ? "partial" : "due")
+          await Invoice.updateOne({ _id: invoiceId }, { $set: { receivedAmount: newRecv, status, updatedAt: now } }, session ? { session } : undefined)
+          await new ClientTransaction({
+            date: String((r as any).paymentDate || salesDate),
+            voucherNo: String((r as any).voucherNo || ""),
+            clientId: clientDoc._id,
+            clientName: clientDoc.name || "",
+            companyId: companyIdStr ? new Types.ObjectId(companyIdStr) : undefined,
+            invoiceType: "INVOICE",
+            paymentTypeId: (r as any).accountId,
+            accountName: (r as any).accountName,
+            payType: (r as any).paymentMethod || undefined,
+            amount: apply,
+            direction: "receiv",
+            note: (r as any).note || undefined,
+            createdAt: now,
+            updatedAt: now,
+          }).save(session ? { session } : undefined)
+          needed -= apply
+        }
+      }
+
       const response = {
         invoice_id: Number(String(invoiceId).slice(-6)),
         invoice_org_agency: null,
@@ -687,7 +832,7 @@ export async function createInvoice(body: any, companyId?: string) {
         invoice_is_refund: 0,
         client_name: names.clientName || "",
         mobile: names.clientPhone || null,
-        invclientpayment_amount: String(receivedAmount.toFixed(2)),
+        invclientpayment_amount: String((parseNumber(existing.receivedAmount, 0) + appliedSoFar).toFixed(2)),
         money_receipt_num: "",
         passport_no: null,
         passport_name: null,
@@ -754,8 +899,69 @@ export async function createInvoice(body: any, companyId?: string) {
       session ? { session } : undefined
     )
 
-    const response = {
-      invoice_id: Number(String(invoiceId).slice(-6)),
+    // Auto allocate advances to this new invoice
+    let needed = Math.max(0, netTotal)
+    let receivedSoFar = 0
+    if (needed > 0) {
+      const filter: any = { clientId: clientDoc._id, paymentTo: "advance" }
+      if (companyIdStr) {
+        filter.$or = [
+          { companyId: new Types.ObjectId(companyIdStr) },
+          { companyId: companyIdStr },
+        ]
+      }
+      const receipts = await MoneyReceipt.find(filter).sort({ createdAt: 1 }).lean()
+      for (const r of receipts) {
+        if (needed <= 0) break
+        const paid = Math.max(0, parseNumber((r as any).amount, 0) - parseNumber((r as any).discount, 0))
+        const existingAllocs = await MoneyReceiptAllocation.find({ moneyReceiptId: (r as any)._id }).lean()
+        const appliedExisting = (existingAllocs || []).reduce((s, a: any) => s + Math.max(0, parseNumber(a.appliedAmount, 0)), 0)
+        const remain = Math.max(0, paid - appliedExisting)
+        if (remain <= 0) continue
+        const apply = Math.min(needed, remain)
+        await new MoneyReceiptAllocation({
+          moneyReceiptId: (r as any)._id,
+          invoiceId,
+          clientId: clientDoc._id,
+          companyId: companyIdStr ? new Types.ObjectId(companyIdStr) : undefined,
+          voucherNo: String((r as any).voucherNo || ""),
+          appliedAmount: apply,
+          paymentDate: String((r as any).paymentDate || salesDate),
+          createdAt: now,
+          updatedAt: now,
+        }).save(session ? { session } : undefined)
+        const newAllocatedTotal = appliedExisting + apply
+        const newRemaining = Math.max(0, paid - newAllocatedTotal)
+        await MoneyReceipt.updateOne(
+          { _id: (r as any)._id },
+          { $set: { allocatedAmount: newAllocatedTotal, remainingAmount: newRemaining, updatedAt: now } },
+          session ? { session } : undefined
+        )
+        receivedSoFar += apply
+        const status = receivedSoFar >= netTotal ? "paid" : (receivedSoFar > 0 ? "partial" : "due")
+        await Invoice.updateOne({ _id: invoiceId }, { $set: { receivedAmount: receivedSoFar, status, updatedAt: now } }, session ? { session } : undefined)
+          await new ClientTransaction({
+            date: String((r as any).paymentDate || salesDate),
+            voucherNo: String((r as any).voucherNo || ""),
+            clientId: clientDoc._id,
+            clientName: clientDoc.name || "",
+            companyId: companyIdStr ? new Types.ObjectId(companyIdStr) : undefined,
+            invoiceType: "INVOICE",
+            paymentTypeId: (r as any).accountId,
+            accountName: (r as any).accountName,
+            payType: (r as any).paymentMethod || undefined,
+            amount: apply,
+            direction: "receiv",
+            note: (r as any).note || undefined,
+            createdAt: now,
+            updatedAt: now,
+          }).save(session ? { session } : undefined)
+        needed -= apply
+      }
+    }
+
+      const response = {
+        invoice_id: Number(String(invoiceId).slice(-6)),
       invoice_org_agency: null,
       invoice_no: invoiceNo,
       net_total: String(netTotal.toFixed(2)),
@@ -770,8 +976,8 @@ export async function createInvoice(body: any, companyId?: string) {
       invoice_is_refund: 0,
       client_name: names.clientName || "",
       mobile: names.clientPhone || null,
-      invclientpayment_amount: String(receivedAmount.toFixed(2)),
-      money_receipt_num: "",
+        invclientpayment_amount: String((receivedSoFar || 0).toFixed(2)),
+        money_receipt_num: "",
       passport_no: null,
       passport_name: null,
       sales_by: names.salesByName || "",
