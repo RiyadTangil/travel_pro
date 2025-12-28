@@ -44,6 +44,7 @@ export function Sidebar() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [openMap, setOpenMap] = useState<Record<string, boolean>>({
     "Money Receipt": pathname.startsWith("/dashboard/money-receipts"),
+    "Expense": pathname.startsWith("/dashboard/expenses"),
   })
 
   const isActive = (path: string) => {
@@ -87,6 +88,20 @@ export function Sidebar() {
         {
           title: "Advance Return",
           href: "/dashboard/money-receipts/advance-return",
+        },
+      ],
+    },
+    {
+      title: "Expense",
+      icon: <FileText className="h-5 w-5" />,
+      children: [
+        {
+          title: "Expenses Head",
+          href: "/dashboard/expenses/head",
+        },
+        {
+          title: "Expenses History",
+          href: "/dashboard/expenses/history",
         },
       ],
     },
