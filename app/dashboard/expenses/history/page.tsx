@@ -218,14 +218,8 @@ export default function ExpenseHistoryPage() {
         onOpenChange={setOpenAdd}
         onSubmit={async (payload: any) => {
           try {
-            // Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 500))
-            const newRow: ExpenseRow = {
-              id: Date.now().toString(),
-              voucherNo: `EXP-00${rows.length + 3}`,
-              ...payload
-            }
-            setRows([newRow, ...rows])
+            await client.post("/api/expenses", payload)
+            await load()
             return true
           } catch {
             return false
@@ -249,10 +243,8 @@ export default function ExpenseHistoryPage() {
           if (!editingRow) return false
           try {
             setEditingId(editingRow.id)
-            // Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 500))
-            
-            setRows(rows.map(r => r.id === editingRow.id ? { ...r, ...payload } : r))
+            await client.put(`/api/expenses/${editingRow.id}`, payload)
+            await load()
             
             setEditingRow(null)
             setEditingId(null)
@@ -281,9 +273,8 @@ export default function ExpenseHistoryPage() {
                 if (!confirmDeleteId) return
                 setDeletingId(confirmDeleteId)
                 try {
-                  // Simulate API call
-                  await new Promise(resolve => setTimeout(resolve, 500))
-                  setRows(rows.filter(r => r.id !== confirmDeleteId))
+                  await client.delete(`/api/expenses/${confirmDeleteId}`)
+                  await load()
                 } catch {}
                 setDeletingId(null)
                 setConfirmDeleteId(null)

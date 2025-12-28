@@ -3,7 +3,7 @@ import { Schema, model, models, Types } from "mongoose"
 const ClientTransactionSchema = new Schema({
   date: { type: String, required: true },
   voucherNo: { type: String, required: true, index: true }, // MR-xxx / EX-xxx
-  clientId: { type: Types.ObjectId, ref: "Client", index: true, required: true },
+  clientId: { type: Types.ObjectId, ref: "Client", index: true, required: false },
   clientName: { type: String },
   companyId: { type: Types.ObjectId, ref: "Company", index: true },
   invoiceType: { type: String }, // matches dropdown values

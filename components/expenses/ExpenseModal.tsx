@@ -48,7 +48,7 @@ type Props = {
 
 export default function ExpenseModal({ open, onOpenChange, mode, initialValues, onSubmit }: Props) {
   const { data: session } = useSession()
-  const { register, setValue, handleSubmit, reset, watch, setError, control, formState: { errors } } = useForm<FormValues>({
+  const { register, setValue, handleSubmit, reset, watch, setError, clearErrors, control, formState: { errors } } = useForm<FormValues>({
     defaultValues: {
       tempHeadId: "",
       tempAmount: "",
@@ -72,6 +72,7 @@ export default function ExpenseModal({ open, onOpenChange, mode, initialValues, 
   const [paymentMethodOptions, setPaymentMethodOptions] = useState<AccountType[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [loadingHeads, setLoadingHeads] = useState(false)
+  const [loadingAccounts, setLoadingAccounts] = useState(false)
 
   const client = axios.create({
     baseURL: "",
@@ -96,6 +97,7 @@ export default function ExpenseModal({ open, onOpenChange, mode, initialValues, 
   useEffect(() => {
     if (!open) return
     const fetchAccounts = async () => {
+      setLoadingAccounts(true)
       try {
         const res = await client.get("/api/accounts?page=1&pageSize=100")
         const items = res.data?.items || []
@@ -106,7 +108,7 @@ export default function ExpenseModal({ open, onOpenChange, mode, initialValues, 
           lastBalance: typeof i.lastBalance === "number" ? i.lastBalance : Number(i.lastBalance || 0),
         }))
         setAccounts(mapped)
-      } catch { }
+      } catch { } finally { setLoadingAccounts(false) }
     }
     fetchAccounts()
   }, [open, session])
@@ -134,13 +136,15 @@ export default function ExpenseModal({ open, onOpenChange, mode, initialValues, 
 
   // Reset account if not in filtered list
   useEffect(() => {
+    if (loadingAccounts) return
+
     if (!paymentMethod) setValue("accountId", "")
     else {
       const acc = watch("accountId")
       const ids = filteredAccounts.map(a => a.id)
       if (acc && !ids.includes(acc)) setValue("accountId", "")
     }
-  }, [paymentMethod, accounts])
+  }, [paymentMethod, accounts, loadingAccounts])
 
   // Set available balance
   useEffect(() => {
@@ -155,10 +159,12 @@ export default function ExpenseModal({ open, onOpenChange, mode, initialValues, 
 
   // Calculate Total
   const items = watch("items")
+  const tempAmount = watch("tempAmount")
   useEffect(() => {
-    const total = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
-    setValue("totalAmount", total)
-  }, [items, setValue])
+    const itemsTotal = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
+    const currentTemp = Number(tempAmount) || 0
+    setValue("totalAmount", itemsTotal + currentTemp)
+  }, [items, tempAmount, setValue])
 
   useEffect(() => {
     if (initialValues) {
@@ -203,10 +209,34 @@ export default function ExpenseModal({ open, onOpenChange, mode, initialValues, 
 
     setValue("tempHeadId", "")
     setValue("tempAmount", "")
+    clearErrors("items")
   }
 
   const onSubmitInternal = async (vals: FormValues) => {
-    if (vals.items.length === 0) {
+    // Check if there are values in the temp fields and add them to items
+    let finalItems = [...vals.items]
+    const tempHeadId = vals.tempHeadId
+    const tempAmount = Number(vals.tempAmount)
+
+    if (tempHeadId || (tempAmount && tempAmount > 0)) {
+       if (!tempHeadId) {
+         setError("tempHeadId", { type: "required", message: "Head is required" })
+         return
+       }
+       if (!tempAmount || tempAmount <= 0) {
+         setError("tempAmount", { type: "required", message: "Amount must be greater than 0" })
+         return
+       }
+
+       const head = heads.find(h => h.id === tempHeadId)
+       finalItems.push({
+         headId: tempHeadId,
+         headName: head?.name || "",
+         amount: tempAmount
+       })
+    }
+
+    if (finalItems.length === 0) {
       setError("items", { type: "required", message: "At least one expense item is required" })
       return
     }
@@ -217,11 +247,14 @@ export default function ExpenseModal({ open, onOpenChange, mode, initialValues, 
     }
 
     const acc = filteredAccounts.find(a => a.id === vals.accountId)
+    const finalTotal = finalItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
     
     try {
       setSubmitting(true)
       const ok = await onSubmit({
         ...vals,
+        items: finalItems,
+        totalAmount: finalTotal,
         accountName: acc?.name || ""
       })
       if (ok) {
@@ -266,7 +299,7 @@ export default function ExpenseModal({ open, onOpenChange, mode, initialValues, 
                    value={watch("tempHeadId")}
                    onChange={(v) => {
                      setValue("tempHeadId", v)
-                     setError("tempHeadId", { type: undefined })
+                     clearErrors(["tempHeadId", "items"])
                    }}
                    options={heads.map(h => ({ label: h.name, value: h.id }))}
                    placeholder="Select Head"
@@ -283,7 +316,7 @@ export default function ExpenseModal({ open, onOpenChange, mode, initialValues, 
                    value={watch("tempAmount")}
                    onChange={(e) => {
                      setValue("tempAmount", e.target.value)
-                     setError("tempAmount", { type: undefined })
+                     clearErrors(["tempAmount", "items"])
                    }}
                  />
                  {errors.tempAmount && <div className="text-red-500 text-xs">{errors.tempAmount.message}</div>}
@@ -314,7 +347,7 @@ export default function ExpenseModal({ open, onOpenChange, mode, initialValues, 
                    ))}
                    <div className="flex justify-between items-center pt-2 border-t mt-2 font-bold">
                       <span>Total</span>
-                      <span className="mr-12">{watch("totalAmount").toFixed(2)}</span>
+                      <span className="mr-12">{Number(watch("totalAmount") || 0).toFixed(2)}</span>
                    </div>
                  </div>
                  {errors.items && <div className="text-red-500 text-xs mt-2">{errors.items.message}</div>}
