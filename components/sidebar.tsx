@@ -123,7 +123,20 @@ export function Sidebar() {
     {
       title: "Accounts",
       icon: <CreditCard className="h-5 w-5" />,
-      href: "/dashboard/accounts",
+      children: [
+        {
+          title: "Accounts List",
+          href: "/dashboard/accounts",
+        },
+        {
+          title: "Non Invoice Income",
+          href: "/dashboard/accounts/non-invoice-income",
+        },
+        {
+          title: "Transaction History",
+          href: "/dashboard/accounts/transactions",
+        },
+      ],
     },
     // {
     //   title: "Archived Clients",
@@ -144,6 +157,16 @@ export function Sidebar() {
       title: "Agent Profile",
       icon: <Users className="h-5 w-5" />,
       href: "/dashboard/agent-profile",
+    },
+    {
+      title: "Configuration",
+      icon: <Settings className="h-5 w-5" />,
+      children: [
+        {
+          title: "Companies",
+          href: "/dashboard/configuration/companies",
+        },
+      ],
     },
     {
       title: "Passport",
