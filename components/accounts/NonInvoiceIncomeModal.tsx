@@ -49,6 +49,7 @@ export default function NonInvoiceIncomeModal({ open, onOpenChange, mode, initia
   const [accounts, setAccounts] = useState<Array<{ id: string; name: string; type: AccountType }>>([])
   const [paymentMethodOptions, setPaymentMethodOptions] = useState<AccountType[]>([])
   const [submitting, setSubmitting] = useState(false)
+  const [loadingAccounts, setLoadingAccounts] = useState(false)
 
   const client = axios.create({
     baseURL: "",
@@ -70,6 +71,7 @@ export default function NonInvoiceIncomeModal({ open, onOpenChange, mode, initia
   useEffect(() => {
     if (!open) return
     const fetchAccounts = async () => {
+      setLoadingAccounts(true)
       try {
         const res = await client.get("/api/accounts?page=1&pageSize=100")
         const items = res.data?.items || []
@@ -78,7 +80,9 @@ export default function NonInvoiceIncomeModal({ open, onOpenChange, mode, initia
           name: i.bankName ? `${i.name} (${i.bankName})` : String(i.name || ""),
           type: String(i.type || "Cash") as AccountType,
         })))
-      } catch {}
+      } catch {} finally {
+        setLoadingAccounts(false)
+      }
     }
     fetchAccounts()
   }, [open, session])
@@ -104,13 +108,15 @@ export default function NonInvoiceIncomeModal({ open, onOpenChange, mode, initia
   )
 
   useEffect(() => {
+    if (loadingAccounts) return
+
     if (!paymentMethod) setValue("accountId", "")
     else {
       const acc = watch("accountId")
       const ids = filteredAccounts.map(a => a.id)
       if (acc && !ids.includes(acc)) setValue("accountId", "")
     }
-  }, [paymentMethod, accounts])
+  }, [paymentMethod, accounts, loadingAccounts])
 
   useEffect(() => {
     if (open) {
