@@ -133,6 +133,10 @@ export function Sidebar() {
           href: "/dashboard/accounts/non-invoice-income",
         },
         {
+          title: "Balance Transfer",
+          href: "/dashboard/accounts/balance-transfer",
+        },
+        {
           title: "Transaction History",
           href: "/dashboard/accounts/transactions",
         },
