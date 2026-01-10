@@ -58,6 +58,7 @@ export default function AccountsPage() {
           body: JSON.stringify({
             name: payload.name,
             type: payload.type,
+            accountTypeId: payload.accountTypeId,
             accountNo: payload.accountNo,
             bankName: payload.bankName,
             routingNo: payload.routingNo,
@@ -76,6 +77,7 @@ export default function AccountsPage() {
           body: JSON.stringify({
             name: payload.name,
             type: payload.type,
+            accountTypeId: payload.accountTypeId,
             accountNo: payload.accountNo,
             bankName: payload.bankName,
             routingNo: payload.routingNo,

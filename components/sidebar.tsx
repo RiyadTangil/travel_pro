@@ -137,6 +137,10 @@ export function Sidebar() {
           href: "/dashboard/accounts/balance-transfer",
         },
         {
+          title: "Balance Status",
+          href: "/dashboard/accounts/balance-status",
+        },
+        {
           title: "Transaction History",
           href: "/dashboard/accounts/transactions",
         },

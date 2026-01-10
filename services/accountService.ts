@@ -84,3 +84,26 @@ export async function createAccount(payload: CreatePayload, companyId?: string) 
   const res = await Account.create(doc)
   return { id: String(res._id) }
 }
+
+export async function getAllAccounts(companyId?: string) {
+  await connectMongoose()
+  const filter: any = {}
+  if (companyId && Types.ObjectId.isValid(String(companyId))) {
+    filter.companyId = new Types.ObjectId(String(companyId))
+  }
+  // Sort by Type first, then Name
+  const items = await Account.find(filter).sort({ type: 1, name: 1 }).lean()
+  return items.map((doc: any) => ({
+      id: String(doc._id),
+      name: doc.name,
+      type: doc.type,
+      accountTypeId: doc.accountTypeId ? String(doc.accountTypeId) : undefined,
+      accountNo: doc.accountNo,
+      bankName: doc.bankName,
+      routingNo: doc.routingNo,
+      cardNo: doc.cardNo,
+      branch: doc.branch,
+      lastBalance: typeof doc.lastBalance === 'number' ? doc.lastBalance : Number(doc.lastBalance || 0),
+      hasTrxn: !!doc.hasTrxn,
+  }))
+}

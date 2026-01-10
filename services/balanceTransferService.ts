@@ -324,10 +324,8 @@ export async function deleteBalanceTransfer(id: string, companyId?: string) {
     // Delete transactions
     const deletedTrx = await ClientTransaction.deleteMany({ voucherNo: existing.voucherNo, companyId: new Types.ObjectId(companyId) }, { session })
     if (deletedTrx.deletedCount === 0) {
-       // Optional: Log warning or handle as needed, but strictly speaking, if we enforce data integrity,
-       // we might expect transactions to exist. However, deleteMany returning 0 is not an error in Mongo.
-       // If you explicitly want to FAIL if no transaction is found (strict mode), uncomment below:
-       // throw new AppError("Associated transaction records not found", 404)
+       // Enforce strict data integrity
+       throw new AppError("Associated transaction records not found. Cannot delete Balance Transfer without transaction records.", 400)
     }
 
     await BalanceTransfer.findByIdAndDelete(id, { session })

@@ -19,7 +19,7 @@ interface AccountModalProps {
 }
 
 export default function AccountModal({ open, onOpenChange, initialItem, onSubmit, submitting }: AccountModalProps) {
-  const [types, setTypes] = useState<AccountType[]>([])
+  const [typeOptions, setTypeOptions] = useState<Array<{ id: string; name: string }>>([])
   const [type, setType] = useState<AccountType>("Cash")
   const [name, setName] = useState("")
   const [accountNo, setAccountNo] = useState("")
@@ -38,10 +38,10 @@ export default function AccountModal({ open, onOpenChange, initialItem, onSubmit
       try {
         const res = await fetch(`/api/account-types`, { signal: ctrl.signal })
         const data = await res.json()
-        const items: string[] = Array.isArray(data?.items) ? data.items.map((i: any) => String(i.name)) : []
-        setTypes(items.length ? items : ["Cash", "Bank", "Mobile banking", "Credit Card"])
+        const items = Array.isArray(data?.items) ? data.items : []
+        setTypeOptions(items)
       } catch {
-        setTypes(["Cash", "Bank", "Mobile banking", "Credit Card"])
+        setTypeOptions([])
       }
     })()
     return () => ctrl.abort()
@@ -66,18 +66,21 @@ export default function AccountModal({ open, onOpenChange, initialItem, onSubmit
   const isValid = useMemo(() => {
     if (!name.trim()) return false
     if (!lastBalance.trim()) return false
+    if (!typeOptions.find(t => t.name === type)) return false
     if (type === "Bank") return !!(accountNo && bankName && branch)
     if (type === "Mobile banking") return !!accountNo
     if (type === "Credit Card") return !!(cardNo)
     return true
-  }, [type, name, lastBalance, accountNo, bankName, branch, cardNo])
+  }, [type, name, lastBalance, accountNo, bankName, branch, cardNo, typeOptions])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!isValid) return
+    const selectedType = typeOptions.find(t => t.name === type)
     const payload: AccountItem = {
       id: initialItem?.id || String(Date.now()),
       type,
+      accountTypeId: selectedType?.id,
       name: name.trim(),
       lastBalance: Number(lastBalance || 0),
       accountNo: accountNo || undefined,
@@ -103,8 +106,8 @@ export default function AccountModal({ open, onOpenChange, initialItem, onSubmit
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {types.map((t) => (
-                  <SelectItem key={t} value={t}>{t}</SelectItem>
+                {typeOptions.map((t) => (
+                  <SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
