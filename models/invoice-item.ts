@@ -11,7 +11,7 @@ const InvoiceItemSchema = new Schema({
   totalSales: { type: Number, default: 0 },
   totalCost: { type: Number, default: 0 },
   profit: { type: Number, default: 0 },
-  vendorId: { type: String, index: true },
+  vendorId: { type: Schema.Types.ObjectId, ref: "Vendor", index: true },
   companyId: { type: String },
   id: { type: String },
   createdAt: { type: String },

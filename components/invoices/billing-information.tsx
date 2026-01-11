@@ -341,7 +341,7 @@ const BillingItemRow = memo(function BillingItemRow({ item, index, canRemove, pr
           </div>
 
           <div className="space-y-2">
-            <Label>Profit</Label>
+            <Label>Profit</Label>Payment To:
             <Input value={item.profit.toFixed(2)} readOnly />
           </div>
 

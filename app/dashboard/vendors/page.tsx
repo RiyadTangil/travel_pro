@@ -9,13 +9,11 @@ import { VendorViewModal } from "@/components/vendors/vendor-view-modal"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
 import type { Vendor } from "@/components/vendors/types"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
-
-const initialVendors: Vendor[] = [
-  { id: "1", name: "Sharif Bhai", mobilePrefix: "", mobile: "966-566180990", email: "test@email.com", presentBalance: { type: "due", amount: 1290000 }, fixedBalance: 0, active: true, products: [], createdBy: "Admin" ,creditLimit: 1000000},
-  { id: "2", name: "Anower Hossain", mobilePrefix: "", mobile: "88-01828804585", email: "", presentBalance: { type: "due", amount: 200 }, fixedBalance: 0, active: true, products: [], createdBy: "Admin" },
-  { id: "3", name: "Omor Faruk FAS", mobilePrefix: "", mobile: "88-01627613370", email: "", presentBalance: { type: "due", amount: 22000 }, fixedBalance: 0, active: true, products: [], createdBy: "Admin" },
-  { id: "4", name: "Abu Hena Bhai", mobilePrefix: "", mobile: "88-01819676758", email: "", presentBalance: { type: "due", amount: 0 }, fixedBalance: 0, active: true, products: [], createdBy: "Admin" },
-]
+import { DashboardHeader } from "@/components/dashboard/header"
+import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Plus } from "lucide-react"
+import { Input } from "@/components/ui/input"
 
 export default function VendorsPage() {
   const { data: session } = useSession()
@@ -148,37 +146,63 @@ export default function VendorsPage() {
   }
 
   return (
-    <div className="p-4">
-      <div className="mt-2">
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>Vendors</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-      </div>
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <header className="bg-white shadow-sm">
+        <div className="mx-auto px-4 py-4">
+          <DashboardHeader />
+        </div>
+      </header>
 
-      <div className="mt-4">
-        <VendorToolbar onAddVendor={() => { setEditVendor(undefined); setOpenAdd(true) }} search={search} onSearchChange={setSearch} />
-        {tableLoading && (
-          <div className="my-3 text-sm text-gray-600">Loading vendors...</div>
-        )}
-      <VendorTable
-        vendors={filtered}
-        onView={(v) => setViewVendor(v)}
-        onEdit={(v) => { setEditVendor(v); setOpenAdd(true) }}
-        onAddPayment={() => { /* Hook for real payment flow */ }}
-        onDelete={handleDelete}
-        onToggleStatus={handleToggleStatus}
-        loadingId={loadingId}
-        loadingAction={loadingAction}
-      />
-      </div>
+      <main className="flex-grow py-6">
+        <div className="mb-4 px-4">
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>Vendors</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
+        </div>
+
+        <div className="mx-4 mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
+           <Button onClick={() => { setEditVendor(undefined); setOpenAdd(true) }} className="bg-sky-500 hover:bg-sky-600">
+             <Plus className="w-4 h-4 mr-2" /> Add Vendor
+           </Button>
+
+           <div className="flex items-center gap-2">
+               <Input 
+                 placeholder="Search by vendor..." 
+                 value={search}
+                 onChange={(e) => setSearch(e.target.value)}
+                 className="w-64 bg-white"
+               />
+           </div>
+        </div>
+
+        <Card className="mx-4 border-none shadow-none bg-transparent">
+          <CardContent className="p-0">
+            <div className="bg-white rounded-md border shadow-sm overflow-hidden">
+              {tableLoading && (
+                <div className="p-4 text-sm text-gray-600 text-center">Loading vendors...</div>
+              )}
+              <VendorTable
+                vendors={filtered}
+                onView={(v) => setViewVendor(v)}
+                onEdit={(v) => { setEditVendor(v); setOpenAdd(true) }}
+                onAddPayment={() => { /* Hook for real payment flow */ }}
+                onDelete={handleDelete}
+                onToggleStatus={handleToggleStatus}
+                loadingId={loadingId}
+                loadingAction={loadingAction}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      </main>
 
       <VendorAddModal open={openAdd} onOpenChange={(v) => setOpenAdd(v)} initialData={editVendor} onSubmit={handleSubmit} productOptions={categories} />
       <VendorViewModal open={!!viewVendor} onOpenChange={() => setViewVendor(undefined)} vendor={viewVendor} />
@@ -196,6 +220,7 @@ export default function VendorsPage() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             {confirmAction ? (
               <AlertDialogAction
+                className="bg-red-500 hover:bg-red-600"
                 onClick={async () => {
                   setConfirmOpen(false)
                   await confirmAction()

@@ -141,6 +141,10 @@ export function Sidebar() {
           href: "/dashboard/accounts/balance-status",
         },
         {
+          title: "Investments",
+          href: "/dashboard/accounts/investments",
+        },
+        {
           title: "Transaction History",
           href: "/dashboard/accounts/transactions",
         },

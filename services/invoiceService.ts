@@ -324,14 +324,17 @@ export async function updateInvoiceById(id: string, body: any, companyId?: strin
 
       if (childItems.billingItems) {
         await InvoiceItem.deleteMany({ invoiceId })
-        const docs = childItems.billingItems.map((i: any, idx: number) => ({
-          ...stripId(i),
-          vendorId: i.vendorId || i.vendor || i.billing_comvendor || "",
-          invoiceId,
-          companyId: companyIdStr,
-          id: i.id || String(Date.now() + idx),
-          updatedAt: now,
-        }))
+        const docs = childItems.billingItems.map((i: any, idx: number) => {
+          const vId = i.vendorId || i.vendor || i.billing_comvendor
+          return {
+            ...stripId(i),
+            vendorId: (vId && Types.ObjectId.isValid(vId)) ? new Types.ObjectId(vId) : null,
+            invoiceId,
+            companyId: companyIdStr,
+            id: i.id || String(Date.now() + idx),
+            updatedAt: now,
+          }
+        })
         if (docs.length) await InvoiceItem.insertMany(docs)
       }
       if (childItems.tickets) {
@@ -596,18 +599,21 @@ export async function createInvoice(body: any, companyId?: string) {
   }
 
   // Normalize billing items
-  const billingItems = (Array.isArray(billing.items) ? billing.items : []).map((i: any) => ({
-    product: i.product || i.billing_product_id || "",
-    paxName: i.paxName || i.pax_name || "",
-    description: i.description || i.billing_description || "",
-    quantity: parseNumber(i.quantity ?? i.billing_quantity ?? 1),
-    unitPrice: parseNumber(i.unitPrice ?? i.billing_unit_price ?? 0),
-    costPrice: parseNumber(i.costPrice ?? i.billing_cost_price ?? 0),
-    totalSales: parseNumber(i.totalSales ?? i.billing_total_sales ?? i.billing_subtotal ?? 0),
-    totalCost: parseNumber(i.totalCost ?? 0),
-    profit: parseNumber(i.profit ?? i.billing_profit ?? 0),
-    vendorId: i.vendor || i.billing_comvendor || "",
-  }))
+  const billingItems = (Array.isArray(billing.items) ? billing.items : []).map((i: any) => {
+    const vId = i.vendor || i.billing_comvendor
+    return {
+      product: i.product || i.billing_product_id || "",
+      paxName: i.paxName || i.pax_name || "",
+      description: i.description || i.billing_description || "",
+      quantity: parseNumber(i.quantity ?? i.billing_quantity ?? 1),
+      unitPrice: parseNumber(i.unitPrice ?? i.billing_unit_price ?? 0),
+      costPrice: parseNumber(i.costPrice ?? i.billing_cost_price ?? 0),
+      totalSales: parseNumber(i.totalSales ?? i.billing_total_sales ?? i.billing_subtotal ?? 0),
+      totalCost: parseNumber(i.totalCost ?? 0),
+      profit: parseNumber(i.profit ?? i.billing_profit ?? 0),
+      vendorId: (vId && Types.ObjectId.isValid(vId)) ? new Types.ObjectId(vId) : null,
+    }
+  })
 
   const receivedAmount = 0
   const status = receivedAmount >= netTotal ? "paid" : receivedAmount > 0 ? "partial" : "due"
