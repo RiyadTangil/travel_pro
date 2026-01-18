@@ -46,15 +46,15 @@ export default function DashboardPage() {
           {/* Middle Section */}
           <div className="md:col-span-2 xl:col-span-2">
             <FlightSchedule />
-           <div className="mb-2">
-             <AccountBalanceDetails />
-           </div>
-           <div className="mb-2">
-             <BestClientList />
-           </div>
-           <div className="mb-2">
-             <BestEmployeeList />
-           </div>
+            <div className="mb-2">
+              <AccountBalanceDetails />
+            </div>
+            <div className="mb-2">
+              <BestClientList />
+            </div>
+            <div className="mb-2">
+              <BestEmployeeList />
+            </div>
           </div>
           <div className="md:col-span-2 xl:col-span-2">
             <div className="mb-2">
@@ -62,12 +62,12 @@ export default function DashboardPage() {
             </div>
             <ClientVendorDetails />
             <div className="my-2">
-              <ExpenseDetails  />
+              <ExpenseDetails />
             </div>
           </div>
 
-   
-      
+
+
 
         </div>
       </main>

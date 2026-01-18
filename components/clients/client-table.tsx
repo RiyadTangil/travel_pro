@@ -14,7 +14,9 @@ import {
   MapPin,
   Calendar,
   FileText,
+  ArrowRight,
 } from "lucide-react"
+import Link from "next/link"
 import type { B2CClient, B2BClient } from "@/hooks/use-clients"
 
 interface ClientTableProps {
@@ -159,7 +161,14 @@ export function ClientTable({
                   </TableCell>
                   <TableCell>
                     <div className="space-y-1">
-                      <div className="font-medium text-gray-900">{client.name}</div>
+                      <Link 
+                        href={`/dashboard/reports/client-ledger?clientId=${client._id}`}
+                        className="font-medium text-gray-900 hover:text-blue-600 hover:underline flex items-center gap-1 group"
+                        title="View Client Ledger"
+                      >
+                        {client.name}
+                        <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </Link>
                       <div className="text-sm text-gray-500">{client.email}</div>
                       {client.phone && (
                         <div className="text-sm text-gray-500">{client.phone}</div>

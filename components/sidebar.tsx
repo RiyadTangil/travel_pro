@@ -118,7 +118,20 @@ export function Sidebar() {
     {
       title: "Vendors",
       icon: <Archive className="h-5 w-5" />,
-      href: "/dashboard/vendors",
+      children: [
+        {
+          title: "Vendor List",
+          href: "/dashboard/vendors",
+        },
+        {
+          title: "Vendor Payment",
+          href: "/dashboard/vendors/payment",
+        },
+        {
+          title: "Advance Return",
+          href: "/dashboard/vendors/advance-return",
+        },
+      ],
     },
     {
       title: "Accounts",

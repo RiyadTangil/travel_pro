@@ -4,6 +4,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Vendor } from "./types"
+import Link from "next/link"
+import { ArrowRight } from "lucide-react"
 
 type Props = {
   vendors: Vendor[]
@@ -36,7 +38,16 @@ export function VendorTable({ vendors, onView, onEdit, onAddPayment, onDelete, o
           {vendors.map((v, idx) => (
             <TableRow key={v.id}>
               <TableCell>{idx + 1}</TableCell>
-              <TableCell>{v.name}</TableCell>
+              <TableCell>
+                <Link 
+                  href={`/dashboard/reports/vendor-ledger?vendorId=${v.id}`}
+                  className="font-medium text-gray-900 hover:text-blue-600 hover:underline flex items-center gap-1 group"
+                  title="View Vendor Ledger"
+                >
+                  {v.name}
+                  <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </Link>
+              </TableCell>
               <TableCell>{v.mobile}</TableCell>
               <TableCell>{v.email || ""}</TableCell>
               <TableCell>

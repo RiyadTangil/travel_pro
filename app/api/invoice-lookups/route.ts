@@ -57,7 +57,12 @@ export async function GET(request: Request) {
       ]
     }
     const accountsDocs = await db.collection("accounts").find(accQuery).sort({ createdAt: -1 }).limit(200).toArray()
-    const accounts = accountsDocs.map((a: any) => ({ id: String(a._id ?? a.id ?? a.name), name: String(a.name || ""), type: String(a.type || "") }))
+    const accounts = accountsDocs.map((a: any) => ({ 
+      id: String(a._id ?? a.id ?? a.name), 
+      name: String(a.name || ""), 
+      type: String(a.type || ""),
+      lastBalance: typeof a.lastBalance === 'number' ? a.lastBalance : Number(a.lastBalance || 0)
+    }))
 
     // Airports from static JSON (same normalization as /api/airports)
     const airportsData = (await import("../../../ariports.json")).default as any[]

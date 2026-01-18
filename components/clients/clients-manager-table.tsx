@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { InlineLoader } from "@/components/ui/loader"
+import Link from "next/link"
 
 type Client = {
   id: string
@@ -55,7 +56,11 @@ export default function ClientsManagerTable({ clients, onView, onEdit, onDelete,
             <tr key={c.id} className={cn(i % 2 === 0 ? "bg-white" : "bg-muted/30")}>
               <td className="px-3 py-2">{i + 1}</td>
               <td className="px-3 py-2">{(c as any).uniqueId ? String((c as any).uniqueId) : `CL-${pad(i + 1)}`}</td>
-              <td className="px-3 py-2 text-sky-700 font-medium">{c.name}</td>
+              <td className="px-3 py-2 text-sky-700 font-medium">
+
+                <Link href={`/dashboard/reports/client-ledger?clientId=${c.id}`} className="font-medium text-gray-900 hover:text-blue-600 hover:underline flex items-center gap-1 group" title="View Client Ledger">
+                  {c.name}
+                </Link></td>
               <td className="px-3 py-2 uppercase">{(c.type || "Individual").toString()}</td>
               <td className="px-3 py-2">{c.phone || ""}</td>
               <td className="px-3 py-2">{c.email || ""}</td>
@@ -69,7 +74,7 @@ export default function ClientsManagerTable({ clients, onView, onEdit, onDelete,
                     aria-label="Toggle active status"
                   />
                   {statusIds.includes(c.id) && <InlineLoader />}
-                 
+
                 </div>
               </td>
               <td className="px-3 py-2">

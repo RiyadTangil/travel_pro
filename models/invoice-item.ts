@@ -12,10 +12,17 @@ const InvoiceItemSchema = new Schema({
   totalCost: { type: Number, default: 0 },
   profit: { type: Number, default: 0 },
   vendorId: { type: Schema.Types.ObjectId, ref: "Vendor", index: true },
+  paidAmount: { type: Number, default: 0 },
+  dueAmount: { type: Number, default: 0 },
   companyId: { type: String },
   id: { type: String },
   createdAt: { type: String },
   updatedAt: { type: String },
-}, { collection: "invoice_items" })
+}, { collection: "invoice_items", strict: false })
+
+// Prevent model caching during development
+if (process.env.NODE_ENV === "development" && models.InvoiceItem) {
+  delete models.InvoiceItem
+}
 
 export const InvoiceItem = models.InvoiceItem || model("InvoiceItem", InvoiceItemSchema)

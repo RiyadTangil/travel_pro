@@ -9,7 +9,7 @@ type Vendor = { id: string; name: string; email?: string; mobile?: string }
 type Product = { id: string; name: string }
 type Airline = { id: string; name: string }
 type TransportType = { id: string; name: string; active?: boolean }
-type Account = { id: string; name: string; type: string }
+type Account = { id: string; name: string; type: string; lastBalance?: number }
 type Airport = { code: string; name: string; country?: string }
 
 let CACHE: { employees: Employee[]; agents: Agent[]; vendors: Vendor[]; products: Product[]; airlines: Airline[]; transportTypes: TransportType[]; accounts?: Account[]; airports?: Airport[] } | null = null

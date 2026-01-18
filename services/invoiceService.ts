@@ -141,6 +141,33 @@ export async function updateInvoiceById(id: string, body: any, companyId?: strin
       }
 
       if (childItems.billingItems) {
+        // 1. Fetch and Revert Old Items Impact
+        const existingItems = await InvoiceItem.find({ invoiceId }).session(session)
+        for (const item of existingItems) {
+          if (item.vendorId && (item.totalCost || 0) > 0) {
+            const vendor = await Vendor.findById(item.vendorId).session(session)
+            if (vendor) {
+              let currentNet = 0
+              if (vendor.presentBalance && typeof vendor.presentBalance === 'object') {
+                const pType = vendor.presentBalance.type
+                const pAmount = Number(vendor.presentBalance.amount || 0)
+                currentNet = (pType === 'advance' ? pAmount : -pAmount)
+              } else {
+                currentNet = Number(vendor.presentBalance || 0)
+              }
+              // Revert: Cost was subtracted (Due increased). So we ADD it back.
+              // NewNet = CurrentNet + OldCost
+              const newNet = currentNet + Number(item.totalCost || 0)
+              const newType = newNet >= 0 ? "advance" : "due"
+              const newAmount = Math.abs(newNet)
+              
+              await Vendor.findByIdAndUpdate(item.vendorId, { 
+                presentBalance: { type: newType, amount: newAmount } 
+              }, { session })
+            }
+          }
+        }
+
         await InvoiceItem.deleteMany({ invoiceId }).session(session)
         const docs = childItems.billingItems.map((i: any, idx: number) => ({
           ...stripId(i),
@@ -151,7 +178,35 @@ export async function updateInvoiceById(id: string, body: any, companyId?: strin
           id: i.id || String(Date.now() + idx),
           updatedAt: now,
         }))
-        if (docs.length) await InvoiceItem.insertMany(docs, { session })
+        if (docs.length) {
+          await InvoiceItem.insertMany(docs, { session })
+
+          // 2. Apply New Items Impact
+          for (const item of docs) {
+            if (item.vendorId && (item.totalCost || 0) > 0) {
+              const vendor = await Vendor.findById(item.vendorId).session(session)
+              if (vendor) {
+                let currentNet = 0
+                if (vendor.presentBalance && typeof vendor.presentBalance === 'object') {
+                  const pType = vendor.presentBalance.type
+                  const pAmount = Number(vendor.presentBalance.amount || 0)
+                  currentNet = (pType === 'advance' ? pAmount : -pAmount)
+                } else {
+                  currentNet = Number(vendor.presentBalance || 0)
+                }
+                
+                // Apply: Cost subtracts from balance (increases Due).
+                const newNet = currentNet - Number(item.totalCost || 0)
+                const newType = newNet >= 0 ? "advance" : "due"
+                const newAmount = Math.abs(newNet)
+
+                await Vendor.findByIdAndUpdate(item.vendorId, { 
+                  presentBalance: { type: newType, amount: newAmount } 
+                }, { session })
+              }
+            }
+          }
+        }
       }
       if (childItems.tickets) {
         await InvoiceTicket.deleteMany({ invoiceId }).session(session)
@@ -246,6 +301,11 @@ export async function updateInvoiceById(id: string, body: any, companyId?: strin
           const newRecv = currentReceived + appliedSoFar
           const status = newRecv >= netTotal ? "paid" : (newRecv > 0 ? "partial" : "due")
           await Invoice.updateOne({ _id: inv._id }, { $set: { receivedAmount: newRecv, status, updatedAt: now } }, { session })
+          // Avoid creating a new ClientTransaction for Advance Allocation
+          // Because the original MoneyReceipt already created a ClientTransaction (credit).
+          // Allocating it to an invoice is just internal bookkeeping, not a new flow of money from client.
+          // IF we create another transaction here, it duplicates the credit in the ledger.
+          /*
           await new ClientTransaction({
             date: String((r as any).paymentDate || inv.salesDate || now),
             voucherNo: String((r as any).voucherNo || ""),
@@ -262,6 +322,7 @@ export async function updateInvoiceById(id: string, body: any, companyId?: strin
             createdAt: now,
             updatedAt: now,
           }).save({ session })
+          */
           needed -= apply
         }
       }
@@ -404,6 +465,32 @@ export async function deleteInvoiceById(id: string, companyId?: string) {
 
       const invoiceId = String(inv._id)
       const net = Number(inv.netTotal || inv.billing?.netTotal || 0)
+
+      // Revert Vendor Balances
+      const existingItems = await InvoiceItem.find({ invoiceId }).session(session)
+      for (const item of existingItems) {
+        if (item.vendorId && (item.totalCost || 0) > 0) {
+          const vendor = await Vendor.findById(item.vendorId).session(session)
+          if (vendor) {
+            let currentNet = 0
+            if (vendor.presentBalance && typeof vendor.presentBalance === 'object') {
+              const pType = vendor.presentBalance.type
+              const pAmount = Number(vendor.presentBalance.amount || 0)
+              currentNet = (pType === 'advance' ? pAmount : -pAmount)
+            } else {
+              currentNet = Number(vendor.presentBalance || 0)
+            }
+            // Revert: Cost was subtracted (Due increased). So we ADD it back.
+            const newNet = currentNet + Number(item.totalCost || 0)
+            const newType = newNet >= 0 ? "advance" : "due"
+            const newAmount = Math.abs(newNet)
+            
+            await Vendor.findByIdAndUpdate(item.vendorId, { 
+              presentBalance: { type: newType, amount: newAmount } 
+            }, { session })
+          }
+        }
+      }
 
       await Invoice.deleteOne({ _id: inv._id }, { session })
       await Promise.all([
@@ -694,7 +781,38 @@ export async function createInvoice(body: any, companyId?: string) {
           await InvoiceItem.deleteMany({ invoiceId })
         }
         const docs = billingItems.map((i: any) => ({ ...i, invoiceId, companyId: companyIdStr, createdAt: now, updatedAt: now }))
-        if (docs.length) await InvoiceItem.insertMany(docs, session ? { session } : {})
+        if (docs.length) {
+          await InvoiceItem.insertMany(docs, session ? { session } : {})
+          
+          // Update Vendor Balances for Cost Price (Debit/Payable to Vendor)
+          for (const item of docs) {
+            if (item.vendorId && item.totalCost > 0) {
+              const vendor = await Vendor.findById(item.vendorId).session(session)
+              if (vendor) {
+                let currentNet = 0
+                if (vendor.presentBalance && typeof vendor.presentBalance === 'object') {
+                  const pType = vendor.presentBalance.type
+                  const pAmount = Number(vendor.presentBalance.amount || 0)
+                  currentNet = (pType === 'advance' ? pAmount : -pAmount)
+                } else {
+                  currentNet = Number(vendor.presentBalance || 0)
+                }
+                
+                // Adding invoice cost increases PAYABLE (negative balance in this logic? or positive Due?)
+                // Based on createVendorPayment logic:
+                // Payment (money out) = adds to balance (reduces due/increases advance)
+                // So Invoice Cost (money owed) = subtracts from balance (increases due/reduces advance)
+                const newNet = currentNet - Number(item.totalCost)
+                const newType = newNet >= 0 ? "advance" : "due"
+                const newAmount = Math.abs(newNet)
+
+                await Vendor.findByIdAndUpdate(item.vendorId, { 
+                  presentBalance: { type: newType, amount: newAmount } 
+                }, { session })
+              }
+            }
+          }
+        }
       }
       if (Array.isArray(tickets) && tickets.length) {
         if (session) {
@@ -802,6 +920,11 @@ export async function createInvoice(body: any, companyId?: string) {
           const newRecv = currentReceived + appliedSoFar
           const status = newRecv >= netTotal ? "paid" : (newRecv > 0 ? "partial" : "due")
           await Invoice.updateOne({ _id: invoiceId }, { $set: { receivedAmount: newRecv, status, updatedAt: now } }, session ? { session } : undefined)
+          // Avoid creating a new ClientTransaction for Advance Allocation
+          // Because the original MoneyReceipt already created a ClientTransaction (credit).
+          // Allocating it to an invoice is just internal bookkeeping, not a new flow of money from client.
+          // IF we create another transaction here, it duplicates the credit in the ledger.
+          /*
           await new ClientTransaction({
             date: String((r as any).paymentDate || salesDate),
             voucherNo: String((r as any).voucherNo || ""),
@@ -818,6 +941,7 @@ export async function createInvoice(body: any, companyId?: string) {
             createdAt: now,
             updatedAt: now,
           }).save(session ? { session } : undefined)
+          */
           needed -= apply
         }
       }
@@ -854,10 +978,39 @@ export async function createInvoice(body: any, companyId?: string) {
     const invoiceId = String((result as any)._id)
 
     if (billingItems.length) {
-      await InvoiceItem.insertMany(
-        billingItems.map((i: any) => ({ ...i, invoiceId, companyId: companyIdStr, createdAt: now, updatedAt: now })),
-         session ? { session } : {}
-      )
+      const docs = billingItems.map((i: any) => ({ ...i, invoiceId, companyId: companyIdStr, createdAt: now, updatedAt: now }))
+      await InvoiceItem.insertMany(docs, session ? { session } : {})
+
+      // Update Vendor Balances for Cost Price (Debit/Payable to Vendor)
+      for (const item of docs) {
+        if (item.vendorId && item.totalCost > 0) {
+          const vendorQuery = Vendor.findById(item.vendorId)
+          if (session) vendorQuery.session(session)
+          const vendor = await vendorQuery
+          
+          if (vendor) {
+            let currentNet = 0
+            if (vendor.presentBalance && typeof vendor.presentBalance === 'object') {
+              const pType = vendor.presentBalance.type
+              const pAmount = Number(vendor.presentBalance.amount || 0)
+              currentNet = (pType === 'advance' ? pAmount : -pAmount)
+            } else {
+              currentNet = Number(vendor.presentBalance || 0)
+            }
+            
+            // Adding invoice cost increases PAYABLE (Due).
+            // Logic: Payment (Credit) adds to balance (reduces Due).
+            // Cost (Debit) subtracts from balance (increases Due).
+            const newNet = currentNet - Number(item.totalCost)
+            const newType = newNet >= 0 ? "advance" : "due"
+            const newAmount = Math.abs(newNet)
+
+            await Vendor.findByIdAndUpdate(item.vendorId, { 
+              presentBalance: { type: newType, amount: newAmount } 
+            }, session ? { session } : undefined)
+          }
+        }
+      }
     }
     if (Array.isArray(tickets) && tickets.length) {
       await InvoiceTicket.insertMany(
