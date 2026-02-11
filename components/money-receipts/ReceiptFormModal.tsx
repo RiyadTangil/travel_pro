@@ -315,7 +315,7 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
                     <FormItem>
                       <FormLabel>Present Due:</FormLabel>
                       <FormControl>
-                        <Input type="number" disabled value={field.value ?? 0} className={(Number(field.value ?? 0) < 0) ? "border-red-500" : undefined} />
+                        <Input type="number" disabled value={Number(field.value ?? 0) < 0 ? field.value :0} className={(Number(field.value ?? 0) < 0) ? "border-red-500" : undefined} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

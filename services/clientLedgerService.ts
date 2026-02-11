@@ -98,7 +98,8 @@ export async function getClientLedger(clientId: string, dateFrom?: string | null
       }
     }
   ])
-
+// console.log("txnFacet =>", txnFacet[0].curr)
+// console.log("invoiceFacet =>", invoiceFacet[0].curr)
   let preTxnDebit = 0  // payout
   let preTxnCredit = 0 // receiv
   
@@ -189,17 +190,27 @@ export async function getClientLedger(clientId: string, dateFrom?: string | null
     return { ...entry, balance: currentBalance }
   })
 
+  // Calculate total Debit/Credit including broughtForward
+  // If broughtForward > 0 (Due/Debit) -> add to Total Debit
+  // If broughtForward < 0 (Advance/Credit) -> add to Total Credit
+  const bfDebit = broughtForward > 0 ? broughtForward : 0
+  const bfCredit = broughtForward < 0 ? Math.abs(broughtForward) : 0
+
+  const entriesTotalDebit = finalLedger.reduce((sum, e) => sum + e.debit, 0)
+  const entriesTotalCredit = finalLedger.reduce((sum, e) => sum + e.credit, 0)
+
   return {
     client: { 
       name: client.name, 
       mobile: client.phone, 
       email: client.email, 
-      address: client.address 
+      address: client.address ,
+      note: client.designation 
     },
     broughtForward,
     entries: finalLedger,
-    totalDebit: finalLedger.reduce((sum, e) => sum + e.debit, 0),
-    totalCredit: finalLedger.reduce((sum, e) => sum + e.credit, 0),
+    totalDebit: entriesTotalDebit + bfDebit,
+    totalCredit: entriesTotalCredit + bfCredit,
     closingBalance: currentBalance
   }
 }

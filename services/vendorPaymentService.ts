@@ -113,8 +113,8 @@ async function updateVendorBalance(vendorId: string | Types.ObjectId, amountChan
     const newType = newNet >= 0 ? "advance" : "due"
     const newAmount = Math.abs(newNet)
 
-    await Vendor.findByIdAndUpdate(vendorId, { 
-      presentBalance: { type: newType, amount: newAmount } 
+    await Vendor.findByIdAndUpdate(vendorId, {
+      presentBalance: { type: newType, amount: newAmount }
     }, { session })
   }
 }
@@ -127,7 +127,7 @@ export async function createVendorPayment(data: any, companyId?: string) {
   try {
     const {
       invoiceId,
-      invoiceVendors, 
+      invoiceVendors,
       paymentTo,
       paymentMethod,
       accountId,
@@ -141,7 +141,8 @@ export async function createVendorPayment(data: any, companyId?: string) {
       note,
       voucher
     } = data
-
+console.log("invoiceVendors => ",invoiceVendors)
+console.log("data => ",data)
     if (paymentTo === "invoice" && (!invoiceVendors || !invoiceVendors.length)) {
       throw new AppError("No vendors selected for invoice payment", 400)
     }
@@ -182,7 +183,7 @@ export async function createVendorPayment(data: any, companyId?: string) {
 
     if (paymentTo === "invoice") {
       // Strategy: Fetch all items for the invoice and filter by vendor in memory to avoid type mismatch
-      const allInvoiceItems = await InvoiceItem.find({ 
+      const allInvoiceItems = await InvoiceItem.find({
         invoiceId: String(invoiceId)
       }).session(session)
 
@@ -192,15 +193,15 @@ export async function createVendorPayment(data: any, companyId?: string) {
 
         const vId = new Types.ObjectId(item.vendorId)
 
-        const vendorItems = allInvoiceItems.filter((i: any) => 
-            String(i.vendorId) === String(vId) || 
-            (i.vendorId && i.vendorId._id && String(i.vendorId._id) === String(vId))
+        const vendorItems = allInvoiceItems.filter((i: any) =>
+          String(i.vendorId) === String(vId) ||
+          (i.vendorId && i.vendorId._id && String(i.vendorId._id) === String(vId))
         )
 
         let remainingToPay = payAmount
         for (const invItem of vendorItems) {
           if (remainingToPay <= 0) break
-          
+
           const cost = Number(invItem.totalCost || 0)
           const paid = Number(invItem.paidAmount || 0)
           const due = cost - paid
@@ -209,12 +210,12 @@ export async function createVendorPayment(data: any, companyId?: string) {
             const allocation = Math.min(remainingToPay, due)
             const newPaid = paid + allocation
             const newDue = cost - newPaid
-            
+
             await InvoiceItem.findByIdAndUpdate(invItem._id, {
-                $set: { 
-                    paidAmount: newPaid,
-                    dueAmount: newDue
-                }
+              $set: {
+                paidAmount: newPaid,
+                dueAmount: newDue
+              }
             }, { session })
             remainingToPay -= allocation
           }
@@ -234,22 +235,26 @@ export async function createVendorPayment(data: any, companyId?: string) {
         { $inc: { lastBalance: -Number(totalAmount) } },
         { session, new: true }
       )
-      
+
       if (acc) {
+        // Determine vendorId for transaction
+        const transactionVendorId = vendorId || (invoiceVendors && invoiceVendors.length > 0 ? new Types.ObjectId(invoiceVendors[0].vendorId) : undefined);
+        console.log("transactionVendorId => ", transactionVendorId)
         await ClientTransaction.create([{
-            date: date,
-            voucherNo: voucherNo,
-            companyId: companyId ? new Types.ObjectId(companyId) : undefined,
-            invoiceType: "VENDOR_PAYMENT",
-            paymentTypeId: new Types.ObjectId(accountId),
-            accountName: acc.name,
-            payType: paymentMethod,
-            amount: totalAmount,
-            direction: "payout",
-            lastTotalAmount: acc.lastBalance,
-            note: note || `Vendor Payment for Invoice`,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
+          date: date,
+          voucherNo: voucherNo,
+          vendorId: transactionVendorId,
+          companyId: companyId ? new Types.ObjectId(companyId) : undefined,
+          invoiceType: "VENDOR_PAYMENT",
+          paymentTypeId: new Types.ObjectId(accountId),
+          accountName: acc.name,
+          payType: paymentMethod,
+          amount: totalAmount,
+          direction: "payout",
+          lastTotalAmount: acc.lastBalance,
+          note: note || `Vendor Payment for Invoice`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
         }], { session })
       }
     }
@@ -284,39 +289,39 @@ export async function updateVendorPayment(id: string, data: any, companyId?: str
 
         // 2. Revert InvoiceItem paid/due
         // Strategy: Fetch all items for the invoice and filter by vendor in memory to avoid type mismatch
-        const allInvoiceItems = await InvoiceItem.find({ 
+        const allInvoiceItems = await InvoiceItem.find({
           invoiceId: String(existing.invoiceId)
         }).session(session)
 
         const vendorItems = allInvoiceItems
-            .filter((i: any) => 
-                String(i.vendorId) === String(vId) || 
-                (i.vendorId && i.vendorId._id && String(i.vendorId._id) === String(vId))
-            )
-            .sort((a: any, b: any) => (String(a._id) > String(b._id) ? 1 : -1)) // Sort manually if needed
+          .filter((i: any) =>
+            String(i.vendorId) === String(vId) ||
+            (i.vendorId && i.vendorId._id && String(i.vendorId._id) === String(vId))
+          )
+          .sort((a: any, b: any) => (String(a._id) > String(b._id) ? 1 : -1)) // Sort manually if needed
 
         let remainingToRevert = paidAmount
         for (const invItem of vendorItems) {
-            if (remainingToRevert <= 0) break
-            const currentPaid = Number(invItem.paidAmount || 0)
-            if (currentPaid > 0) {
-                const revert = Math.min(remainingToRevert, currentPaid)
-                const newPaid = currentPaid - revert
-                const newDue = (Number(invItem.totalCost) || 0) - newPaid
-                
-                await InvoiceItem.findByIdAndUpdate(invItem._id, {
-                    $set: { 
-                        paidAmount: newPaid,
-                        dueAmount: newDue
-                    }
-                }, { session })
-                remainingToRevert -= revert
-            }
+          if (remainingToRevert <= 0) break
+          const currentPaid = Number(invItem.paidAmount || 0)
+          if (currentPaid > 0) {
+            const revert = Math.min(remainingToRevert, currentPaid)
+            const newPaid = currentPaid - revert
+            const newDue = (Number(invItem.totalCost) || 0) - newPaid
+
+            await InvoiceItem.findByIdAndUpdate(invItem._id, {
+              $set: {
+                paidAmount: newPaid,
+                dueAmount: newDue
+              }
+            }, { session })
+            remainingToRevert -= revert
+          }
         }
       }
     } else if (["overall", "advance"].includes(existing.paymentTo) && existing.vendorId) {
-        // Revert balance for overall/advance
-        await updateVendorBalance(existing.vendorId, -Number(existing.amount), session)
+      // Revert balance for overall/advance
+      await updateVendorBalance(existing.vendorId, -Number(existing.amount), session)
     }
 
     // 3. Revert Account Balance & Transaction
@@ -326,34 +331,35 @@ export async function updateVendorPayment(id: string, data: any, companyId?: str
         { $inc: { lastBalance: Number(existing.totalAmount) } },
         { session }
       )
-      
+
       // Remove old transaction
-      await ClientTransaction.deleteOne({ voucherNo: existing.voucherNo }).session(session)
+      await ClientTransaction.deleteMany({ voucherNo: existing.voucherNo }).session(session)
     }
 
     // Now apply new data (Delete old record logic is done, now effectively create new with same ID)
     // But we update the existing record instead of deleting/creating
-    
+
     // We can reuse createVendorPayment logic but that creates new ID and Voucher.
     // So we replicate logic here for "Re-Apply"
-    
+
     const {
-        invoiceId,
-        invoiceVendors,
-        paymentTo,
-        paymentMethod,
-        accountId,
-        amount,
-        vendorAit,
-        totalAmount,
-        receiptNo,
-        referPassport,
-        passportNo,
-        date,
-        note
+      invoiceId,
+      invoiceVendors,
+      paymentTo,
+      paymentMethod,
+      accountId,
+      amount,
+      vendorAit,
+      totalAmount,
+      receiptNo,
+      referPassport,
+      passportNo,
+      date,
+      note
     } = data
 
     existing.invoiceId = invoiceId ? new Types.ObjectId(invoiceId) : undefined
+    existing.vendorId = data.vendorId ? new Types.ObjectId(data.vendorId) : undefined
     existing.paymentTo = paymentTo
     existing.paymentMethod = paymentMethod
     existing.accountId = accountId ? new Types.ObjectId(accountId) : undefined
@@ -366,81 +372,85 @@ export async function updateVendorPayment(id: string, data: any, companyId?: str
     existing.referPassport = referPassport
     existing.passportNo = passportNo
     existing.invoiceVendors = invoiceVendors?.map((v: any) => ({
-        vendorId: new Types.ObjectId(v.vendorId),
-        amount: Number(v.amount)
+      vendorId: new Types.ObjectId(v.vendorId),
+      amount: Number(v.amount)
     }))
     existing.updatedAt = new Date().toISOString()
-    
+
     await existing.save({ session })
 
     // Apply new effects
     if (paymentTo === "invoice" && invoiceVendors) {
-        for (const item of invoiceVendors) {
-            const payAmount = Number(item.amount)
-            if (payAmount <= 0) continue
-            const vId = new Types.ObjectId(item.vendorId)
+      for (const item of invoiceVendors) {
+        const payAmount = Number(item.amount)
+        if (payAmount <= 0) continue
+        const vId = new Types.ObjectId(item.vendorId)
 
-            // Update Vendor Balance
-            await updateVendorBalance(vId, payAmount, session)
+        // Update Vendor Balance
+        await updateVendorBalance(vId, payAmount, session)
 
-            // Update Invoice Items
-            const allInvoiceItems = await InvoiceItem.find({ 
-                invoiceId: String(invoiceId)
-            }).session(session)
+        // Update Invoice Items
+        const allInvoiceItems = await InvoiceItem.find({
+          invoiceId: String(invoiceId)
+        }).session(session)
 
-            const vendorItems = allInvoiceItems.filter((i: any) => 
-                String(i.vendorId) === String(vId) || 
-                (i.vendorId && i.vendorId._id && String(i.vendorId._id) === String(vId))
-            )
+        const vendorItems = allInvoiceItems.filter((i: any) =>
+          String(i.vendorId) === String(vId) ||
+          (i.vendorId && i.vendorId._id && String(i.vendorId._id) === String(vId))
+        )
 
-            let remainingToPay = payAmount
-            for (const invItem of vendorItems) {
-                if (remainingToPay <= 0) break
-                const cost = Number(invItem.totalCost || 0)
-                const paid = Number(invItem.paidAmount || 0)
-                const due = cost - paid
+        let remainingToPay = payAmount
+        for (const invItem of vendorItems) {
+          if (remainingToPay <= 0) break
+          const cost = Number(invItem.totalCost || 0)
+          const paid = Number(invItem.paidAmount || 0)
+          const due = cost - paid
 
-                if (due > 0) {
-                    const allocation = Math.min(remainingToPay, due)
-                    const newPaid = paid + allocation
-                    const newDue = cost - newPaid
-                    
-                    await InvoiceItem.findByIdAndUpdate(invItem._id, {
-                        $set: { 
-                            paidAmount: newPaid,
-                            dueAmount: newDue
-                        }
-                    }, { session })
-                    remainingToPay -= allocation
-                }
-            }
+          if (due > 0) {
+            const allocation = Math.min(remainingToPay, due)
+            const newPaid = paid + allocation
+            const newDue = cost - newPaid
+
+            await InvoiceItem.findByIdAndUpdate(invItem._id, {
+              $set: {
+                paidAmount: newPaid,
+                dueAmount: newDue
+              }
+            }, { session })
+            remainingToPay -= allocation
+          }
         }
+      }
     }
 
     if (accountId) {
-        const acc = await Account.findByIdAndUpdate(
-            accountId,
-            { $inc: { lastBalance: -Number(totalAmount) } },
-            { session, new: true }
-        )
+      const acc = await Account.findByIdAndUpdate(
+        accountId,
+        { $inc: { lastBalance: -Number(totalAmount) } },
+        { session, new: true }
+      )
 
-        if (acc) {
-            await ClientTransaction.create([{
-                date: date,
-                voucherNo: existing.voucherNo, // Keep original voucher
-                companyId: companyId ? new Types.ObjectId(companyId) : undefined,
-                invoiceType: "VENDOR_PAYMENT",
-                paymentTypeId: new Types.ObjectId(accountId),
-                accountName: acc.name,
-                payType: paymentMethod,
-                amount: totalAmount,
-                direction: "payout",
-                lastTotalAmount: acc.lastBalance,
-                note: note || `Vendor Payment Updated`,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            }], { session })
-        }
+      if (acc) {
+        // Determine vendorId for transaction
+        const transactionVendorId = data.vendorId ? new Types.ObjectId(data.vendorId) : (invoiceVendors && invoiceVendors.length > 0 ? new Types.ObjectId(invoiceVendors[0].vendorId) : undefined);
+
+        await ClientTransaction.create([{
+          date: date,
+          voucherNo: existing.voucherNo, // Keep original voucher
+          vendorId: transactionVendorId,
+          companyId: companyId ? new Types.ObjectId(companyId) : undefined,
+          invoiceType: "VENDOR_PAYMENT",
+          paymentTypeId: new Types.ObjectId(accountId),
+          accountName: acc.name,
+          payType: paymentMethod,
+          amount: totalAmount,
+          direction: "payout",
+          lastTotalAmount: acc.lastBalance,
+          note: note || `Vendor Payment Updated`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }], { session })
+      }
     }
 
     await session.commitTransaction()
@@ -470,52 +480,52 @@ export async function deleteVendorPayment(id: string, companyId?: string) {
 
         const vendor = await Vendor.findById(vId).session(session)
         if (vendor) {
-            let currentNet = 0
-            if (vendor.presentBalance && typeof vendor.presentBalance === 'object') {
-                const pType = vendor.presentBalance.type
-                const pAmount = Number(vendor.presentBalance.amount || 0)
-                currentNet = (pType === 'advance' ? pAmount : -pAmount)
-            } else {
-                currentNet = Number(vendor.presentBalance || 0)
-            }
+          let currentNet = 0
+          if (vendor.presentBalance && typeof vendor.presentBalance === 'object') {
+            const pType = vendor.presentBalance.type
+            const pAmount = Number(vendor.presentBalance.amount || 0)
+            currentNet = (pType === 'advance' ? pAmount : -pAmount)
+          } else {
+            currentNet = Number(vendor.presentBalance || 0)
+          }
 
-            const newNet = currentNet - paidAmount
-            const newType = newNet >= 0 ? "advance" : "due"
-            const newAmount = Math.abs(newNet)
+          const newNet = currentNet - paidAmount
+          const newType = newNet >= 0 ? "advance" : "due"
+          const newAmount = Math.abs(newNet)
 
-            await Vendor.findByIdAndUpdate(vId, { 
-                presentBalance: { type: newType, amount: newAmount } 
-            }, { session })
+          await Vendor.findByIdAndUpdate(vId, {
+            presentBalance: { type: newType, amount: newAmount }
+          }, { session })
         }
 
-        const allInvoiceItems = await InvoiceItem.find({ 
+        const allInvoiceItems = await InvoiceItem.find({
           invoiceId: String(existing.invoiceId)
         }).session(session)
 
         const vendorItems = allInvoiceItems
-            .filter((i: any) => 
-                String(i.vendorId) === String(vId) || 
-                (i.vendorId && i.vendorId._id && String(i.vendorId._id) === String(vId))
-            )
-            .sort((a: any, b: any) => (String(a._id) > String(b._id) ? 1 : -1))
+          .filter((i: any) =>
+            String(i.vendorId) === String(vId) ||
+            (i.vendorId && i.vendorId._id && String(i.vendorId._id) === String(vId))
+          )
+          .sort((a: any, b: any) => (String(a._id) > String(b._id) ? 1 : -1))
 
         let remainingToRevert = paidAmount
         for (const invItem of vendorItems) {
-            if (remainingToRevert <= 0) break
-            const currentPaid = Number(invItem.paidAmount || 0)
-            if (currentPaid > 0) {
-                const revert = Math.min(remainingToRevert, currentPaid)
-                const newPaid = currentPaid - revert
-                const newDue = (Number(invItem.totalCost) || 0) - newPaid
-                
-                await InvoiceItem.findByIdAndUpdate(invItem._id, {
-                    $set: { 
-                        paidAmount: newPaid,
-                        dueAmount: newDue
-                    }
-                }, { session })
-                remainingToRevert -= revert
-            }
+          if (remainingToRevert <= 0) break
+          const currentPaid = Number(invItem.paidAmount || 0)
+          if (currentPaid > 0) {
+            const revert = Math.min(remainingToRevert, currentPaid)
+            const newPaid = currentPaid - revert
+            const newDue = (Number(invItem.totalCost) || 0) - newPaid
+
+            await InvoiceItem.findByIdAndUpdate(invItem._id, {
+              $set: {
+                paidAmount: newPaid,
+                dueAmount: newDue
+              }
+            }, { session })
+            remainingToRevert -= revert
+          }
         }
       }
     }
@@ -526,12 +536,12 @@ export async function deleteVendorPayment(id: string, companyId?: string) {
         { $inc: { lastBalance: Number(existing.totalAmount) } },
         { session }
       )
-      
-      await ClientTransaction.deleteOne({ voucherNo: existing.voucherNo }).session(session)
+
+      await ClientTransaction.deleteMany({ voucherNo: existing.voucherNo }).session(session)
     }
 
     await VendorPayment.deleteOne({ _id: id }).session(session)
-    
+
     await session.commitTransaction()
     return { success: true }
   } catch (error) {
@@ -545,7 +555,7 @@ export async function deleteVendorPayment(id: string, companyId?: string) {
 export async function listVendorPayments({ page = 1, pageSize = 20, search = "", companyId }: any) {
   await connectMongoose()
   const skip = (page - 1) * pageSize
-  
+
   const query: any = {}
   if (companyId) query.companyId = companyId
   if (search) {

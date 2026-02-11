@@ -10,13 +10,10 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { format } from "date-fns"
 import { Search } from "lucide-react"
 import { useInvoiceLookups } from "@/hooks/useInvoiceLookups"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
-import { Check, ChevronsUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { DateRange } from "react-day-picker"
-import { Calendar as CalendarIcon } from "lucide-react"
-import { Calendar } from "@/components/ui/calendar"
+import { useSearchParams } from "next/navigation"
+import ClientSelect from "@/components/clients/client-select"
+import { DateInput } from "@/components/ui/date-input"
 
 interface LedgerEntry {
   id: string
@@ -40,16 +37,15 @@ interface ClientDetails {
   mobile: string
   email: string
   address: string
+  note: string
 }
-
-import { useSearchParams } from "next/navigation"
 
 export default function ClientLedgerPage() {
   const { lookups } = useInvoiceLookups()
   const searchParams = useSearchParams()
   const [selectedClient, setSelectedClient] = useState("")
-  const [openClientSelect, setOpenClientSelect] = useState(false)
-  const [dateRange, setDateRange] = useState<DateRange | undefined>()
+  const [dateFrom, setDateFrom] = useState<Date | undefined>()
+  const [dateTo, setDateTo] = useState<Date | undefined>()
   
   const [loading, setLoading] = useState(false)
   const [ledgerData, setLedgerData] = useState<{
@@ -74,7 +70,7 @@ export default function ClientLedgerPage() {
     if (selectedClient) {
       fetchLedger()
     }
-  }, [selectedClient]) // Add dateRange dependency if you want auto-refetch on date change too
+  }, [selectedClient])
 
   const fetchLedger = async () => {
     if (!selectedClient) return
@@ -84,11 +80,11 @@ export default function ClientLedgerPage() {
       const params = new URLSearchParams()
       params.append("clientId", selectedClient)
       
-      if (dateRange?.from) {
-        params.append("dateFrom", format(dateRange.from, "yyyy-MM-dd"))
+      if (dateFrom) {
+        params.append("dateFrom", format(dateFrom, "yyyy-MM-dd"))
       }
-      if (dateRange?.to) {
-        params.append("dateTo", format(dateRange.to, "yyyy-MM-dd"))
+      if (dateTo) {
+        params.append("dateTo", format(dateTo, "yyyy-MM-dd"))
       }
 
       const res = await fetch(`/api/reports/client-ledger?${params.toString()}`)
@@ -135,91 +131,20 @@ export default function ClientLedgerPage() {
             {/* Client Select */}
             <div className="space-y-2 w-full md:w-[300px]">
               <Label>Select Client <span className="text-red-500">*</span></Label>
-              <Popover open={openClientSelect} onOpenChange={setOpenClientSelect}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={openClientSelect}
-                    className="w-full justify-between"
-                  >
-                    {selectedClient
-                      ? lookups?.clients?.find((c) => c.id === selectedClient)?.name
-                      : "Select client..."}
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[300px] p-0">
-                  <Command>
-                    <CommandInput placeholder="Search client..." />
-                    <CommandList>
-                      <CommandEmpty>No client found.</CommandEmpty>
-                      <CommandGroup>
-                        {lookups?.clients?.map((client) => (
-                          <CommandItem
-                            key={client.id}
-                            value={client.name}
-                            onSelect={() => {
-                              setSelectedClient(client.id)
-                              setOpenClientSelect(false)
-                            }}
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                selectedClient === client.id ? "opacity-100" : "opacity-0"
-                              )}
-                            />
-                            {client.name}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
+              <ClientSelect
+                value={selectedClient}
+                onChange={(id) => setSelectedClient(id || "")}
+                preloaded={lookups?.clients}
+                placeholder="Select client..."
+              />
             </div>
 
             {/* Date Range */}
             <div className="space-y-2">
               <Label>Date Range</Label>
-              <div className="grid gap-2">
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      id="date"
-                      variant={"outline"}
-                      className={cn(
-                        "w-[300px] justify-start text-left font-normal",
-                        !dateRange && "text-muted-foreground"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {dateRange?.from ? (
-                        dateRange.to ? (
-                          <>
-                            {format(dateRange.from, "LLL dd, y")} -{" "}
-                            {format(dateRange.to, "LLL dd, y")}
-                          </>
-                        ) : (
-                          format(dateRange.from, "LLL dd, y")
-                        )
-                      ) : (
-                        <span>Pick a date</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      initialFocus
-                      mode="range"
-                      defaultMonth={dateRange?.from}
-                      selected={dateRange}
-                      onSelect={setDateRange}
-                      numberOfMonths={2}
-                    />
-                  </PopoverContent>
-                </Popover>
+              <div className="flex gap-2">
+                <DateInput value={dateFrom} onChange={setDateFrom} placeholder="From Date" />
+                <DateInput value={dateTo} onChange={setDateTo} placeholder="To Date" />
               </div>
             </div>
 
@@ -278,12 +203,16 @@ export default function ClientLedgerPage() {
                   {ledgerData && (
                     <tr className="bg-gray-50 font-medium">
                       <td colSpan={9} className="px-4 py-2 text-right">Balance Brought Forward:</td>
-                      <td className="px-4 py-2 text-right">-</td>
-                      <td className="px-4 py-2 text-right">-</td>
+                      <td className="px-4 py-2 text-right text-red-600">
+                        {ledgerData.broughtForward > 0 ? formatCurrency(ledgerData.broughtForward) : ""}
+                      </td>
+                      <td className="px-4 py-2 text-right text-green-600">
+                        {ledgerData.broughtForward < 0 ? formatCurrency(Math.abs(ledgerData.broughtForward)) : ""}
+                      </td>
                       <td className={cn("px-4 py-2 text-right", getBalanceColor(ledgerData.broughtForward))}>
                         {getBalanceText(ledgerData.broughtForward)}
                       </td>
-                      <td></td>
+                      <td className="px-4 py-2">{ledgerData.client?.note}</td>
                     </tr>
                   )}
 

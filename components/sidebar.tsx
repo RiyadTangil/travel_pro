@@ -45,6 +45,11 @@ export function Sidebar() {
   const [openMap, setOpenMap] = useState<Record<string, boolean>>({
     "Money Receipt": pathname.startsWith("/dashboard/money-receipts"),
     "Expense": pathname.startsWith("/dashboard/expenses"),
+    "Vendors": pathname.startsWith("/dashboard/vendors"),
+    "Accounts": pathname.startsWith("/dashboard/accounts"),
+    "Reports": pathname.startsWith("/dashboard/reports"),
+    "Ledgers": pathname.includes("/reports/client-ledger") || pathname.includes("/reports/vendor-ledger") || pathname.includes("/reports/combined-ledgers") || pathname.includes("/reports/agent-ledger"),
+    "Total Due/Advance": pathname.includes("/reports/total-due-advance"),
   })
 
   const isActive = (path: string) => {
@@ -203,11 +208,50 @@ export function Sidebar() {
       icon: <Users className="h-5 w-5" />,
       href: "/dashboard/employee",
     },
-    // {
-    //   title: "Reports",
-    //   icon: <BarChart2 className="h-5 w-5" />,
-    //   href: "/dashboard/reports",
-    // },
+    {
+      title: "Reports",
+      icon: <BarChart2 className="h-5 w-5" />,
+      children: [
+        {
+          title: "Ledgers",
+          children: [
+            {
+              title: "Client Ledger",
+              href: "/dashboard/reports/client-ledger",
+            },
+            {
+              title: "Vendor Ledger",
+              href: "/dashboard/reports/vendor-ledger",
+            },
+            {
+              title: "Combined Ledgers",
+              href: "/dashboard/reports/combined-ledgers",
+            },
+            {
+              title: "Agent Ledger",
+              href: "/dashboard/reports/agent-ledger",
+            },
+          ]
+        },
+        {
+          title: "Total Due/Advance",
+          children: [
+            {
+              title: "Clients",
+              href: "/dashboard/reports/total-due-advance/clients",
+            },
+            {
+              title: "Vendors",
+              href: "/dashboard/reports/total-due-advance/vendors",
+            },
+            {
+              title: "Combined Clients",
+              href: "/dashboard/reports/total-due-advance/combined-clients",
+            },
+          ]
+        },
+      ],
+    },
   ]
 
   return (
@@ -253,7 +297,11 @@ export function Sidebar() {
                 const hasChildren = Array.isArray((item as any).children) && (item as any).children.length > 0
 
                 const isParentActive = hasChildren
-                  ? ((item as any).children as Array<{ href: string }>).some((child) => {
+                  ? ((item as any).children as Array<any>).some((child) => {
+                      if (child.children && Array.isArray(child.children)) {
+                         return child.children.some((sub: any) => pathname === sub.href || pathname.startsWith(sub.href + "?"))
+                      }
+                      if (!child.href) return false
                       const u = new URL(child.href, "http://localhost")
                       const base = u.pathname
                       if (pathname !== base) return false
@@ -320,7 +368,53 @@ export function Sidebar() {
                         )}
                       >
                         <div className="mt-1 space-y-1 pl-3">
-                          {((item as any).children as Array<{ title: string; href: string }>).map((child) => {
+                          {((item as any).children as Array<any>).map((child) => {
+                            if (child.children && Array.isArray(child.children)) {
+                               const isOpen = !!openMap[child.title]
+                               return (
+                                  <Collapsible
+                                     key={child.title}
+                                     open={isOpen}
+                                     onOpenChange={(v) => setOpenMap((m) => ({ ...m, [child.title]: v }))}
+                                     className="pl-2"
+                                  >
+                                     <CollapsibleTrigger asChild>
+                                        <button
+                                           type="button"
+                                           className={cn(
+                                              "w-full flex items-center gap-3 px-3 py-2 rounded-md transition-all text-gray-600 hover:bg-gray-100",
+                                           )}
+                                        >
+                                           <span>{child.title}</span>
+                                           <div className="ml-auto">
+                                              {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                                           </div>
+                                        </button>
+                                     </CollapsibleTrigger>
+                                     <CollapsibleContent>
+                                         <div className="mt-1 space-y-1 pl-3">
+                                            {child.children.map((subChild: any) => {
+                                               const active = pathname === subChild.href || pathname.startsWith(subChild.href + "?")
+                                               return (
+                                                  <Link
+                                                     key={subChild.href}
+                                                     href={subChild.href}
+                                                     className={cn(
+                                                        "flex items-center gap-3 px-3 py-2 rounded-md transition-all text-sm",
+                                                        active ? "bg-primary/10 text-primary font-medium" : "text-gray-600 hover:bg-gray-100",
+                                                     )}
+                                                     onClick={() => setMobileOpen(false)}
+                                                  >
+                                                     <span>{subChild.title}</span>
+                                                  </Link>
+                                               )
+                                            })}
+                                         </div>
+                                     </CollapsibleContent>
+                                  </Collapsible>
+                               )
+                            }
+
                             const u = new URL(child.href, "http://localhost")
                             const base = u.pathname
                             const qs = u.searchParams

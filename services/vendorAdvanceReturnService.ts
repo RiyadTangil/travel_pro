@@ -95,12 +95,8 @@ export async function createVendorAdvanceReturn(data: any) {
       companyId: new Types.ObjectId(companyId),
       date: returnDate,
       voucherNo,
-      clientId: undefined, // It's vendor
-      // We might need a vendorId field in ClientTransaction if we want to show it in specific vendor logs, 
-      // but ClientTransaction seems to be the main ledger. 
-      // For now, we follow pattern. If ClientTransaction doesn't have vendorId, we might rely on description.
-      // But user said "ClientTransaction collection".
-      // Let's check ClientTransaction model later. For now assume it stores text.
+      clientId: undefined, 
+      vendorId: new Types.ObjectId(vendorId), // Storing vendorId
       accountName,
       paymentTypeId: new Types.ObjectId(accountId),
       payType: paymentMethod,
@@ -172,6 +168,7 @@ export async function updateVendorAdvanceReturn(id: string, data: any) {
       companyId: new Types.ObjectId(companyId),
       date: returnDate,
       voucherNo: existing.voucherNo, // Keep original voucher
+      vendorId: new Types.ObjectId(vendorId), // Storing vendorId
       accountName,
       paymentTypeId: new Types.ObjectId(accountId),
       payType: paymentMethod,

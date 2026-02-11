@@ -11,8 +11,9 @@ type Airline = { id: string; name: string }
 type TransportType = { id: string; name: string; active?: boolean }
 type Account = { id: string; name: string; type: string; lastBalance?: number }
 type Airport = { code: string; name: string; country?: string }
+type Client = { id: string; name: string; uniqueId?: number; email?: string; phone?: string; presentBalance?: number; invoiceDue?: number }
 
-let CACHE: { employees: Employee[]; agents: Agent[]; vendors: Vendor[]; products: Product[]; airlines: Airline[]; transportTypes: TransportType[]; accounts?: Account[]; airports?: Airport[] } | null = null
+let CACHE: { employees: Employee[]; agents: Agent[]; vendors: Vendor[]; products: Product[]; airlines: Airline[]; transportTypes: TransportType[]; accounts?: Account[]; airports?: Airport[]; clients?: Client[] } | null = null
 let loadingPromise: Promise<any> | null = null
 
 export function useInvoiceLookups() {
