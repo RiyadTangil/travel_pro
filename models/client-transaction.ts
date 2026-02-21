@@ -12,7 +12,9 @@ const ClientTransactionSchema = new Schema({
   accountName: { type: String },
   payType: { type: String }, // e.g. CASH / BANK / MOBILE
   amount: { type: Number, required: true },
-  direction: { type: String, enum: ["receiv", "payout"], required: true },
+  direction: { type: String, enum: ["receiv", "payout", "invoice"], required: true },
+  transactionType: { type: String, enum: ["invoice", "money_receipt", "return", "opening_balance"], default: "money_receipt" },
+  invoiceId: { type: Types.ObjectId, ref: "Invoice", index: true },
   lastTotalAmount: { type: Number, default: 0 },
   note: { type: String },
   createdAt: { type: String },

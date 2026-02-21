@@ -21,6 +21,7 @@ const InvoiceSchema = new Schema({
   clientName: { type: String },
   clientPhone: { type: String },
   salesByName: { type: String },
+  invoiceType: { type: String, enum: ["standard", "visa", "non_commission"], default: "standard", index: true },
   agentName: { type: String },
   billing: { type: BillingSummarySchema, default: () => ({}) },
   showPrevDue: { type: Boolean, default: false },
