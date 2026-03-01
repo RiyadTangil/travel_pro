@@ -64,6 +64,7 @@ const billingItemSchema = z.object({
 const billingSchema = z.object({
   items: z.array(billingItemSchema),
   subtotal: z.number(),
+  totalCost: z.number().optional().default(0),
   discount: z.number(),
   serviceCharge: z.number(),
   vatTax: z.number(),

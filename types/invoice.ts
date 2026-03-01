@@ -6,6 +6,7 @@ export interface Invoice {
   salesDate: string
   dueDate: string
   salesPrice: number
+  totalCost?: number
   receivedAmount: number
   dueAmount: number
   mrNo: string
@@ -61,17 +62,25 @@ export interface InvoiceFormData {
   }>
   billing: {
     items: Array<{
-      particulars: string
+      product: string
+      paxName: string
+      description: string
       quantity: number
       unitPrice: number
-      discountPct: number
-      taxPct: number
-      lineTotal: number
+      costPrice: number
+      totalSales: number
+      totalCost: number
+      profit: number
+      vendor: string
     }>
     subtotal: number
-    totalDiscount: number
-    totalTax: number
-    grandTotal: number
+    totalCost: number
+    discount: number
+    serviceCharge: number
+    vatTax: number
+    netTotal: number
+    note?: string
+    reference?: string
   }
   moneyReceipt: {
     receiptNo: string

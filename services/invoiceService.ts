@@ -107,6 +107,7 @@ export async function updateInvoiceById(id: string, body: any, companyId?: strin
         dueDate: typeof general.dueDate !== 'undefined' ? general.dueDate : inv.dueDate,
         billing: {
           subtotal: typeof billing.subtotal !== 'undefined' ? billing.subtotal : (inv.billing?.subtotal ?? 0),
+          totalCost: typeof billing.totalCost !== 'undefined' ? billing.totalCost : (inv.billing?.totalCost ?? 0),
           discount: typeof billing.discount !== 'undefined' ? billing.discount : (inv.billing?.discount ?? 0),
           serviceCharge: typeof billing.serviceCharge !== 'undefined' ? billing.serviceCharge : (inv.billing?.serviceCharge ?? 0),
           vatTax: typeof billing.vatTax !== 'undefined' ? billing.vatTax : (inv.billing?.vatTax ?? 0),
@@ -352,6 +353,7 @@ export async function updateInvoiceById(id: string, body: any, companyId?: strin
         dueDate: typeof general.dueDate !== 'undefined' ? general.dueDate : inv.dueDate,
         billing: {
           subtotal: typeof billing.subtotal !== 'undefined' ? billing.subtotal : (inv.billing?.subtotal ?? 0),
+          totalCost: typeof billing.totalCost !== 'undefined' ? billing.totalCost : (inv.billing?.totalCost ?? 0),
           discount: typeof billing.discount !== 'undefined' ? billing.discount : (inv.billing?.discount ?? 0),
           serviceCharge: typeof billing.serviceCharge !== 'undefined' ? billing.serviceCharge : (inv.billing?.serviceCharge ?? 0),
           vatTax: typeof billing.vatTax !== 'undefined' ? billing.vatTax : (inv.billing?.vatTax ?? 0),
@@ -613,6 +615,7 @@ export async function listInvoices(params: { page?: number; pageSize?: number; s
     salesDate: d.salesDate,
     dueDate: d.dueDate || "",
     salesPrice: parseNumber(d.netTotal, 0),
+    totalCost: parseNumber(d.billing?.totalCost || 0, 0),
     receivedAmount: parseNumber(d.receivedAmount, 0),
     dueAmount: Math.max(0, parseNumber(d.netTotal, 0) - parseNumber(d.receivedAmount, 0)),
     mrNo: Array.from(mrSetMap.get(String(d._id)) || new Set<string>()).join(", ") || d.mrNo || "",
@@ -646,6 +649,7 @@ export async function createInvoice(body: any, companyId?: string) {
   const showDiscount = !!(general.invoice_show_discount || body.showDiscount)
 
   const subtotal = parseNumber(billing.subtotal ?? body.invoice_sub_total ?? (Array.isArray(billing.items) ? billing.items.reduce((s: number, i: any) => s + parseNumber(i.billing_subtotal ?? i.totalSales ?? 0), 0) : 0))
+  const totalCost = parseNumber(billing.totalCost ?? (Array.isArray(billing.items) ? billing.items.reduce((s: number, i: any) => s + parseNumber(i.totalCost ?? 0), 0) : 0))
   const discount = parseNumber(billing.discount ?? body.billing_discount ?? body.discount ?? 0)
   const serviceCharge = parseNumber(billing.serviceCharge ?? body.service_charge ?? 0)
   const vatTax = parseNumber(billing.vatTax ?? body.vat_tax ?? 0)
@@ -715,7 +719,7 @@ export async function createInvoice(body: any, companyId?: string) {
     agentId: agentId,
     companyId: companyId ? new Types.ObjectId(companyId) : undefined,
     ...names,
-    billing: { subtotal, discount, serviceCharge, vatTax, netTotal, note, reference },
+    billing: { subtotal, totalCost, discount, serviceCharge, vatTax, netTotal, note, reference },
     showPrevDue,
     showDiscount,
     agentCommission,

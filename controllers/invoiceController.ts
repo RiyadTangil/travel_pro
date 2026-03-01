@@ -73,6 +73,7 @@ export async function updateById(id: string, body: any, companyId?: string) {
     const billingSchema = z.object({
       items: z.array(billingItemSchema).optional().default([]),
       subtotal: z.number().optional(),
+      totalCost: z.number().optional(),
       discount: z.number().optional(),
       serviceCharge: z.number().optional(),
       vatTax: z.number().optional(),

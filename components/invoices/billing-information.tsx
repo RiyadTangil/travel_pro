@@ -72,10 +72,10 @@ interface BillingInformationProps {
   onRequestAddVendor?: () => void
   onChange?: (payload: {
     items: BillingItem[]
-    totals: { subtotal: number; discount: number; serviceCharge: number; vatTax: number; netTotal: number; agentCommission: number; invoiceDue: number; presentBalance: number; note?: string; reference?: string }
+    totals: { subtotal: number; totalCost: number; discount: number; serviceCharge: number; vatTax: number; netTotal: number; agentCommission: number; invoiceDue: number; presentBalance: number; note?: string; reference?: string }
   }) => void
   initialItems?: BillingItem[]
-  initialTotals?: { subtotal?: number; discount?: number; serviceCharge?: number; vatTax?: number; netTotal?: number; agentCommission?: number; invoiceDue?: number; presentBalance?: number; note?: string; reference?: string }
+  initialTotals?: { subtotal?: number; totalCost?: number; discount?: number; serviceCharge?: number; vatTax?: number; netTotal?: number; agentCommission?: number; invoiceDue?: number; presentBalance?: number; note?: string; reference?: string }
   vendorPreloaded?: Array<{ id: string; name: string; email?: string; mobile?: string }>
   productOptionsExternal?: string[]
 }
@@ -153,7 +153,7 @@ export function BillingInformation({ onRequestAddVendor, onChange, initialItems,
     const handle = setTimeout(() => {
       onChange?.({
         items,
-        totals: { subtotal: totalSalesAll, discount, serviceCharge, vatTax, netTotal, agentCommission, invoiceDue, presentBalance, note, reference }
+        totals: { subtotal: totalSalesAll, totalCost: totalCostAll, discount, serviceCharge, vatTax, netTotal, agentCommission, invoiceDue, presentBalance, note, reference }
       })
     }, 120)
     return () => clearTimeout(handle)

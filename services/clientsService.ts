@@ -2,11 +2,15 @@ import { isValidObjectId, Types } from "mongoose"
 import connectMongoose from "@/lib/mongoose"
 import { Client } from "@/models/client"
 
-export async function listClients(params: { page?: number; limit?: number; search?: string; categoryId?: string; userId?: string; status?: string }) {
+export async function listClients(params: { page?: number; limit?: number; search?: string; categoryId?: string; userId?: string; status?: string; companyId?: string }) {
   await connectMongoose()
   const page = Math.max(1, Number(params.page) || 1)
   const limit = Math.max(1, Math.min(100, Number(params.limit) || 10))
   const filter: any = { isDeleted: { $ne: true } }
+  
+  if (params.companyId) {
+    filter.companyId = isValidObjectId(params.companyId) ? new Types.ObjectId(params.companyId) : params.companyId
+  }
   const search = (params.search || "").trim()
   if (search) {
     filter.$or = [
@@ -72,6 +76,7 @@ export async function createClient(body: any) {
     creditLimit: creditLimitNum,
     presentBalance: typeof body.presentBalance === "number" ? body.presentBalance : computedPresentBalance,
     walkingCustomer: body.walkingCustomer || "No",
+    companyId: isValidObjectId(body.companyId) ? new Types.ObjectId(body.companyId) : body.companyId,
     active: true,
     createdAt: now,
     updatedAt: now,

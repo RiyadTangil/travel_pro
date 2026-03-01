@@ -6,6 +6,7 @@ const BillingSummarySchema = new Schema({
   serviceCharge: { type: Number, default: 0 },
   vatTax: { type: Number, default: 0 },
   netTotal: { type: Number, default: 0 },
+  totalCost: { type: Number, default: 0 },
   note: { type: String, default: "" },
   reference: { type: String, default: "" },
 }, { _id: false })

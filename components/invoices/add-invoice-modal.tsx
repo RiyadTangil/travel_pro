@@ -90,7 +90,7 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
     billing: [],
     moneyReceipt: {}
   })
-  const [billingData, setBillingData] = useState<{ items: any[]; totals: { subtotal: number; discount: number; serviceCharge: number; vatTax: number; netTotal: number; agentCommission?: number; invoiceDue?: number; presentBalance?: number; note?: string; reference?: string } } | null>(null)
+  const [billingData, setBillingData] = useState<{ items: any[]; totals: { subtotal: number; totalCost: number; discount: number; serviceCharge: number; vatTax: number; netTotal: number; agentCommission?: number; invoiceDue?: number; presentBalance?: number; note?: string; reference?: string } } | null>(null)
   const [passportData, setPassportData] = useState<any[]>([])
   const [ticketData, setTicketData] = useState<any[]>([])
   const [hotelData, setHotelData] = useState<any[]>([])
@@ -286,7 +286,9 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
       status,
       salesBy: "Unknown",
       mrNo: receivedAmount > 0 ? generateMRNumber() : "",
-      notes: ""
+      totalCost: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     }
   }
 
@@ -317,6 +319,7 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
             billing: {
               items: billingItems,
               subtotal: billingData?.totals?.subtotal || 0,
+              totalCost: billingData?.totals?.totalCost || 0,
               discount: billingData?.totals?.discount || 0,
               serviceCharge: billingData?.totals?.serviceCharge || 0,
               vatTax: billingData?.totals?.vatTax || 0,
@@ -371,6 +374,7 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
               salesDate: created.invoice_sales_date?.slice(0, 10) || new Date().toISOString().slice(0, 10),
               dueDate: created.invoice_due_date || "",
               salesPrice: net,
+              totalCost: Number(created.invoice_total_vendor_price || 0),
               receivedAmount: recAmt,
               dueAmount: Math.max(0, net - recAmt),
               mrNo: created.money_receipt_num || "",

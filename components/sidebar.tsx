@@ -50,6 +50,7 @@ export function Sidebar() {
     "Reports": pathname.startsWith("/dashboard/reports"),
     "Ledgers": pathname.includes("/reports/client-ledger") || pathname.includes("/reports/vendor-ledger") || pathname.includes("/reports/combined-ledgers") || pathname.includes("/reports/agent-ledger"),
     "Total Due/Advance": pathname.includes("/reports/total-due-advance"),
+    "Sales Report": pathname.includes("/reports/daily_sales_report") || pathname.includes("/reports/sales-earning") || pathname.includes("/reports/airline-wise-sales") || pathname.includes("/reports/salesman-product") || pathname.includes("/reports/sales-collection") || pathname.includes("/reports/purchase-payment") || pathname.includes("/reports/salesman-wise-collection") || pathname.includes("/reports/daily-sales-purchase") || pathname.includes("/reports/salesman-wise-client-due"),
   })
 
   const isActive = (path: string) => {
@@ -247,6 +248,68 @@ export function Sidebar() {
             {
               title: "Combined Clients",
               href: "/dashboard/reports/total-due-advance/combined-clients",
+            },
+          ]
+        },
+        {
+          title: "Sales Report",
+          children: [
+            {
+              title: "Sales Report",
+              href: "/dashboard/reports/daily_sales_report",
+            },
+            {
+              title: "Sales & Earning",
+              href: "/dashboard/reports/monthly_sales_and_earning",
+            },
+            {
+              title: "Airline Wise Sales",
+              href: "/dashboard/reports/airline-wise-sales",
+            },
+            {
+              title: "Salesman & Product",
+              href: "/dashboard/reports/sales_report_item_and_salesman",
+            },
+            {
+              title: "Sales & Collection",
+              href: "/dashboard/reports/sales-collection",
+            },
+            {
+              title: "Purchase & Payment",
+              href: "/dashboard/reports/vendor_wise_purchase_and_payment",
+            },
+            {
+              title: "Salesman's Wise Collection",
+              href: "/dashboard/reports/sales_man_collection_report",
+            },
+            {
+              title: "Daily Sales & Purchase",
+              href: "/dashboard/reports/daily-sales-purchase",
+            },
+            {
+              title: "Salesman-Wise Client Due",
+              href: "/dashboard/reports/salesman-wise-client-due",
+            },
+          ]
+        },
+        {
+          title: "Profit / Loss",
+          children: [
+            {
+              title: "Over All Profit / Loss",
+              href: "/dashboard/reports/over_all_profit_loss",
+            },
+            {
+              title: "Visa Wise Profit / Loss",
+              href: "/dashboard/reports/visa-wise-profit-loss",
+            },
+            {
+              title: "Group Wise Profit / Loss",
+              href: "/dashboard/reports/group-wise-profit-loss",
+            },
+            {
+              title: "Ticket Wise Profit / Loss",
+              href: "/dashboard/reports/ticket-wise-profit-loss",
             },
           ]
         },

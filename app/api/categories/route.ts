@@ -1,16 +1,20 @@
 import { NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 
 // Mongo-backed categories API
 // Collection: categories
 
 export async function GET(request: Request) {
   try {
+    const session = await getServerSession(authOptions as any)
+    const companyIdFromSession = session?.user?.companyId || null
     const { searchParams } = new URL(request.url)
     const page = Number(searchParams.get("page") || 1)
     const pageSize = Number(searchParams.get("pageSize") || 10)
     const skip = (page - 1) * pageSize
-    const companyId = request.headers.get("x-company-id") || null
+    const companyId = request.headers.get("x-company-id") || companyIdFromSession
 
     const client = await clientPromise
     const db = client.db("manage_agency")

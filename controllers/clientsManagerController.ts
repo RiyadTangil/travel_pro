@@ -20,7 +20,7 @@ const createSchema = z.object({
   walkingCustomer: z.enum(["No", "Yes"]).optional(),
 })
 
-export async function list(params: { page?: number; limit?: number; search?: string; categoryId?: string; userId?: string; status?: string }) {
+export async function list(params: { page?: number; limit?: number; search?: string; categoryId?: string; userId?: string; status?: string; companyId?: string }) {
   try {
     const data = await listClients(params)
     return ok({ clients: data.clients, pagination: data.pagination })
