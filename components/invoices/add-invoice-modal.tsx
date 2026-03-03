@@ -33,7 +33,8 @@ import { Invoice } from "@/types/invoice"
 import { generateMRNumber } from "@/data/invoices"
 import { VendorAddModal } from "@/components/vendors/vendor-add-modal"
 import { useSession } from "next-auth/react"
-import { toast } from "@/components/ui/use-toast"
+import { useToast } from "@/components/ui/use-toast"
+import { cn } from "@/lib/utils"
 
 interface AddInvoiceModalProps {
   isOpen: boolean
@@ -71,6 +72,7 @@ export const toYmd = (d: Date): string => {
 export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoice, lookups }: AddInvoiceModalProps) {
   // Parse 'YYYY-MM-DD' as local date to avoid -1 day shifts
   const { data: session } = useSession()
+  const { toast } = useToast()
   const [clientId, setClientId] = useState<string | undefined>()
   const [employeeId, setEmployeeId] = useState<string | undefined>()
   const [employeeName, setEmployeeName] = useState<string>("")
@@ -95,7 +97,40 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
   const [ticketData, setTicketData] = useState<any[]>([])
   const [hotelData, setHotelData] = useState<any[]>([])
   const [transportData, setTransportData] = useState<any[]>([])
+  const [moneyReceiptData, setMoneyReceiptData] = useState<any>(null)
   const [loadingInitial, setLoadingInitial] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
+
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {}
+    if (!clientId) newErrors.clientId = "Client is required"
+    if (!employeeId) newErrors.employeeId = "Sales By is required"
+    if (!invoiceNo) newErrors.invoiceNo = "Invoice No is required"
+    if (!salesDate) newErrors.salesDate = "Sales Date is required"
+
+    // Billing validation
+    const billingItems = billingData?.items || []
+    if (billingItems.length === 0) {
+      newErrors.billing = "At least one billing item is required"
+    } else {
+      billingItems.forEach((item: any, index: number) => {
+        if (!item.product) newErrors[`billing_${index}_product`] = "Product required"
+        if (Number(item.unitPrice) <= 0) newErrors[`billing_${index}_unitPrice`] = "Price required"
+        if (Number(item.costPrice) > 0 && !(item.vendor || "").trim()) newErrors[`billing_${index}_vendor`] = "Vendor required"
+      })
+    }
+
+    // Money Receipt validation (only if payment method is selected)
+    if (moneyReceiptData?.paymentMethod) {
+      if (!moneyReceiptData.accountId) newErrors.accountId = "Account required"
+      if (!moneyReceiptData.amount || moneyReceiptData.amount <= 0) newErrors.amount = "Amount required"
+      if (!moneyReceiptData.paymentDate) newErrors.paymentDate = "Date required"
+      if (moneyReceiptData.paymentMethod === "Mobile banking" && !moneyReceiptData.transNo) newErrors.transNo = "Trans No required"
+    }
+
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
   const [initialBillingItems, setInitialBillingItems] = useState<any[] | undefined>(undefined)
   const [initialBillingTotals, setInitialBillingTotals] = useState<any | undefined>(undefined)
   const [passportsInitial, setPassportsInitial] = useState<any[] | undefined>(undefined)
@@ -260,51 +295,30 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
     setHotelData([])
     setTransportData([])
     setBillingData(null)
+    setMoneyReceiptData(null)
+    setErrors({})
   }, [isOpen, initialInvoice?.id])
 
-  const buildInvoice = (): Invoice => {
-    const invoiceNo = (document.getElementById("general[invoiceNo]") as HTMLInputElement | null)?.value?.trim() || ""
-    const salesDateIso = salesDate ? salesDate.toISOString() : new Date().toISOString()
-
-    // Basic defaults until sections are fully wired
-    const salesPrice = 0
-    const receivedAmount = 0
-    const dueAmount = salesPrice - receivedAmount
-
-    const status: Invoice['status'] = dueAmount <= 0 ? 'paid' : receivedAmount > 0 ? 'partial' : 'due'
-
-    return {
-      id: Date.now().toString(),
-      invoiceNo,
-      clientName: "Unknown Client",
-      clientPhone: "",
-      passportNo: "",
-      salesDate: salesDateIso,
-      salesPrice,
-      receivedAmount,
-      dueAmount,
-      status,
-      salesBy: "Unknown",
-      mrNo: receivedAmount > 0 ? generateMRNumber() : "",
-      totalCost: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    }
-  }
+ 
 
   const handleCreate = () => {
     const invoiceNoInput = (document.getElementById("general[invoiceNo]") as HTMLInputElement | null)?.value?.trim()
-    if (!clientId) { alert("Select Client is required."); return }
-    if (!employeeId) { alert("Sales By is required."); return }
-    if (!invoiceNoInput) { alert("Invoice No is required."); return }
-    if (!salesDate) { alert("Sales Date is required."); return }
-    // Vendor required only if Cost Price has a value (> 0)
+    
+    if (!validateForm()) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all mandatory fields correctly.",
+        variant: "destructive",
+      })
+      return
+    }
+
     const billingItems = billingData?.items || []
-    const missingVendor = billingItems.some((i) => Number(i.costPrice) > 0 && !(i.vendor || "").trim())
-    if (missingVendor) { alert("Vendor is required when Cost Price is provided."); return }
 
     setSubmitting(true)
       ; (async () => {
+        // Passport info is not mandatory according to user requirement
+        // But we still pass it if present
         try {
           const payload = {
             general: {
@@ -331,6 +345,7 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
             ticket: ticketData,
             hotel: hotelData,
             transport: transportData,
+            moneyReceipt: moneyReceiptData,
           }
           const url = initialInvoice?.id ? `/api/invoices/${initialInvoice.id}` : `/api/invoices`
           const method = initialInvoice?.id ? "PUT" : "POST"
@@ -420,7 +435,7 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
             <div className="space-y-6 py-4">
               {/* General Information */}
               <Card>
-                <CardHeader className="flex items-center justify-between space-y-0">
+                <CardHeader className="flex items-center justify-start space-y-0">
                   <CardTitle className="text-base">General Information</CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -429,34 +444,57 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
                       <Label htmlFor="general[client]">Select Client <span className="text-red-500">*</span></Label>
                       <ClientSelect
                         value={clientId}
-                        onChange={(id) => setClientId(id)}
+                        onChange={(id) => {
+                          setClientId(id)
+                          if (id) setErrors(prev => ({ ...prev, clientId: "" }))
+                        }}
                         preloaded={clientsPreloaded}
                         onRequestAdd={onRequestAddClientCb}
                         placeholder="Select client"
+                        className={cn(errors.clientId && "border-red-500")}
                       />
+                      {errors.clientId && <p className="text-xs text-red-500 font-medium">{errors.clientId}</p>}
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="general[salesBy]">Sales By <span className="text-red-500">*</span></Label>
                       <EmployeeSelect
                         value={employeeId}
-                        onChange={(id) => setEmployeeId(id)}
-                        // onChange={(id, selected) => { setEmployeeId(id); setEmployeeName(selected?.name || "") }}
-
+                        onChange={(id) => {
+                          setEmployeeId(id)
+                          if (id) setErrors(prev => ({ ...prev, employeeId: "" }))
+                        }}
                         preloaded={employeesPreloadedAll}
                         onRequestAdd={onRequestAddEmployeeCb}
                         placeholder="Select staff"
+                        className={cn(errors.employeeId && "border-red-500")}
                       />
+                      {errors.employeeId && <p className="text-xs text-red-500 font-medium">{errors.employeeId}</p>}
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="general[invoiceNo]">Invoice No<span className="text-red-500"> *</span></Label>
-                      <Input id="general[invoiceNo]" value={invoiceNo} readOnly placeholder="Auto-generated from backend" />
+                      <Input 
+                        id="general[invoiceNo]" 
+                        value={invoiceNo} 
+                        readOnly 
+                        placeholder="Auto-generated" 
+                        className={cn(errors.invoiceNo && "border-red-500 bg-red-50")}
+                      />
+                      {errors.invoiceNo && <p className="text-xs text-red-500 font-medium">{errors.invoiceNo}</p>}
                     </div>
 
                     <div className="space-y-2">
                       <Label>Sales Date <span className="text-red-500">*</span></Label>
-                      <DateInput value={salesDate} onChange={setSalesDate} />
+                      <DateInput 
+                        value={salesDate} 
+                        onChange={(d) => {
+                          setSalesDate(d)
+                          if (d) setErrors(prev => ({ ...prev, salesDate: "" }))
+                        }} 
+                        className={cn(errors.salesDate && "border-red-500")}
+                      />
+                      {errors.salesDate && <p className="text-xs text-red-500 font-medium">{errors.salesDate}</p>}
                     </div>
 
                     <div className="space-y-2">
@@ -479,23 +517,23 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
               </Card>
 
               {/* Passport Information */}
-              <MemoPassportInformation initialEntries={passportsInitial} onChange={onPassportChange} passportsPreloaded={passportsPreloadedMemo} />
+              <MemoPassportInformation initialEntries={passportsInitial} onChange={onPassportChange} passportsPreloaded={passportsPreloadedMemo} errors={errors} />
 
               <Separator />
 
               {/* Ticket Information */}
-              <MemoTicketInformation initialEntries={ticketsInitial} onChange={onTicketChange} airlineOptionsExternal={airlineOptionsExternalMemo} airportListExternal={airportsMemo}
+              <MemoTicketInformation initialEntries={ticketsInitial} onChange={onTicketChange} airlineOptionsExternal={airlineOptionsExternalMemo} airportListExternal={airportsMemo} errors={errors}
               />
 
               <Separator />
 
               {/* Hotel Information */}
-              <MemoHotelInformation initialEntries={hotelsInitial} onChange={onHotelChange} />
+              <MemoHotelInformation initialEntries={hotelsInitial} onChange={onHotelChange} errors={errors} />
 
               <Separator />
 
               {/* Transport Information */}
-              <MemoTransportInformation initialEntries={transportsInitial} onChange={onTransportChange} transportTypeNamesExternal={transportTypeNamesMemo} />
+              <MemoTransportInformation initialEntries={transportsInitial} onChange={onTransportChange} transportTypeNamesExternal={transportTypeNamesMemo} errors={errors} />
 
               <Separator />
 
@@ -507,12 +545,15 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
                 initialTotals={initialBillingTotals}
                 vendorPreloaded={vendorsPreloadedAll}
                 productOptionsExternal={productOptionsExternalMemo}
+                errors={errors}
               />
 
               <Separator />
 
               {/* Money Receipt */}
-              <MemoMoneyReceipt accountsPreloaded={accountsPreloadedMemo} />
+              {!initialInvoice?.id && (
+                <MemoMoneyReceipt accountsPreloaded={accountsPreloadedMemo} onChange={(p) => setMoneyReceiptData(p)} errors={errors} />
+              )}
             </div>
           </ScrollArea>
 

@@ -14,6 +14,7 @@ const InvoiceHotelSchema = new Schema({
   nights: { type: Number },
   companyId: { type: String },
   id: { type: String },
+  isDeleted: { type: Boolean, default: false, index: true },
   createdAt: { type: String },
   updatedAt: { type: String },
 }, { collection: "invoice_hotels" })

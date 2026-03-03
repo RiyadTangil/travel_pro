@@ -26,7 +26,7 @@ export async function getMonthlySalesEarning(params: SalesEarningParams) {
     companyId
   } = params
 
-  const query: any = {}
+  const query: any = { isDeleted: { $ne: true } }
 
   if (companyId) {
     query.companyId = new Types.ObjectId(companyId)

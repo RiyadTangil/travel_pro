@@ -22,7 +22,7 @@ export async function getSalesCollectionReport(params: SalesCollectionParams) {
     companyId
   } = params
 
-  const query: any = {}
+  const query: any = { isDeleted: { $ne: true } }
 
   if (clientId && Types.ObjectId.isValid(clientId)) {
     query.clientId = new Types.ObjectId(clientId)

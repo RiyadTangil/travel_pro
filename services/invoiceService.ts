@@ -23,11 +23,11 @@ export async function getInvoiceById(id: string, companyId?: string) {
   const invIdStr = String(inv._id)
   // Fetch children with compatibility for existing String invoiceId
   const [items, tickets, hotels, transports, passports] = await Promise.all([
-    InvoiceItem.find({ invoiceId: invIdStr }).lean(),
-    InvoiceTicket.find({ invoiceId: invIdStr }).lean(),
-    InvoiceHotel.find({ invoiceId: invIdStr }).lean(),
-    InvoiceTransport.find({ invoiceId: invIdStr }).lean(),
-    InvoicePassport.find({ invoiceId: invIdStr }).lean(),
+    InvoiceItem.find({ invoiceId: invIdStr, isDeleted: { $ne: true } }).lean(),
+    InvoiceTicket.find({ invoiceId: invIdStr, isDeleted: { $ne: true } }).lean(),
+    InvoiceHotel.find({ invoiceId: invIdStr, isDeleted: { $ne: true } }).lean(),
+    InvoiceTransport.find({ invoiceId: invIdStr, isDeleted: { $ne: true } }).lean(),
+    InvoicePassport.find({ invoiceId: invIdStr, isDeleted: { $ne: true } }).lean(),
   ])
 
   // Collect vendor references
@@ -453,130 +453,49 @@ export async function updateInvoiceById(id: string, body: any, companyId?: strin
   }
 }
 
-export async function deleteInvoiceById(id: string, companyId?: string) {
-  await connectMongoose()
-  if (!Types.ObjectId.isValid(id)) throw new AppError("Invalid ID", 400)
-
-  const session = await mongoose.startSession()
-  try {
-    let resultOk = false
-    await session.withTransaction(async () => {
-      const inv = await Invoice.findById(id).session(session)
-      if (!inv) throw new AppError("Not found", 404)
-      if (companyId && String(inv.companyId || "") !== String(companyId)) throw new AppError("Not found", 404)
-
-      const invoiceId = String(inv._id)
-      const net = Number(inv.netTotal || inv.billing?.netTotal || 0)
-
-      // Revert Vendor Balances
-      const existingItems = await InvoiceItem.find({ invoiceId }).session(session)
-      for (const item of existingItems) {
-        if (item.vendorId && (item.totalCost || 0) > 0) {
-          const vendor = await Vendor.findById(item.vendorId).session(session)
-          if (vendor) {
-            let currentNet = 0
-            if (vendor.presentBalance && typeof vendor.presentBalance === 'object') {
-              const pType = vendor.presentBalance.type
-              const pAmount = Number(vendor.presentBalance.amount || 0)
-              currentNet = (pType === 'advance' ? pAmount : -pAmount)
-            } else {
-              currentNet = Number(vendor.presentBalance || 0)
-            }
-            // Revert: Cost was subtracted (Due increased). So we ADD it back.
-            const newNet = currentNet + Number(item.totalCost || 0)
-            const newType = newNet >= 0 ? "advance" : "due"
-            const newAmount = Math.abs(newNet)
-            
-            await Vendor.findByIdAndUpdate(item.vendorId, { 
-              presentBalance: { type: newType, amount: newAmount } 
-            }, { session })
-          }
-        }
-      }
-
-      await Invoice.deleteOne({ _id: inv._id }, { session })
-      await Promise.all([
-        InvoiceItem.deleteMany({ invoiceId }).session(session),
-        InvoiceTicket.deleteMany({ invoiceId }).session(session),
-        InvoiceHotel.deleteMany({ invoiceId }).session(session),
-        InvoiceTransport.deleteMany({ invoiceId }).session(session),
-        InvoicePassport.deleteMany({ invoiceId }).session(session),
-      ])
-
-      // Reverse allocations applied to this invoice
-      const allocs = await MoneyReceiptAllocation.find({ invoiceId }).lean()
-      for (const a of (allocs || [])) {
-        await MoneyReceipt.updateOne({ _id: a.moneyReceiptId }, { $inc: { allocatedAmount: -Number(a.appliedAmount || 0), remainingAmount: Number(a.appliedAmount || 0) }, $set: { updatedAt: new Date().toISOString() } }, { session })
-        await ClientTransaction.deleteMany({ voucherNo: String(a.voucherNo || ""), clientId: inv.clientId, invoiceType: "INVOICE", direction: "receiv" }, { session })
-      }
-      await MoneyReceiptAllocation.deleteMany({ invoiceId }, { session })
-
-      if (net && inv.clientId && Types.ObjectId.isValid(String(inv.clientId))) {
-        await Client.updateOne({ _id: inv.clientId }, { $inc: { presentBalance: net }, $set: { updatedAt: new Date().toISOString() } }, { session })
-      }
-
-      resultOk = true
-    })
-    if (resultOk) return { ok: true }
-    return { ok: false }
-  } catch (err) {
-    // Fallback if transactions are unsupported
-    const inv = await Invoice.findById(id)
-    if (!inv) throw new AppError("Not found", 404)
-    if (companyId && String(inv.companyId || "") !== String(companyId)) throw new AppError("Not found", 404)
-
-    const invoiceId = String(inv._id)
-    const net = Number(inv.netTotal || inv.billing?.netTotal || 0)
-
-    await Invoice.deleteOne({ _id: inv._id })
-    await Promise.all([
-      InvoiceItem.deleteMany({ invoiceId }),
-      InvoiceTicket.deleteMany({ invoiceId }),
-      InvoiceHotel.deleteMany({ invoiceId }),
-      InvoiceTransport.deleteMany({ invoiceId }),
-      InvoicePassport.deleteMany({ invoiceId }),
-    ])
-    const allocs = await MoneyReceiptAllocation.find({ invoiceId }).lean()
-    for (const a of (allocs || [])) {
-      await MoneyReceipt.updateOne({ _id: a.moneyReceiptId }, { $inc: { allocatedAmount: -Number(a.appliedAmount || 0), remainingAmount: Number(a.appliedAmount || 0) }, $set: { updatedAt: new Date().toISOString() } })
-      await ClientTransaction.deleteMany({ voucherNo: String(a.voucherNo || ""), clientId: inv.clientId, invoiceType: "INVOICE", direction: "receiv" })
-    }
-    await MoneyReceiptAllocation.deleteMany({ invoiceId })
-    if (net && inv.clientId && Types.ObjectId.isValid(String(inv.clientId))) {
-      await Client.updateOne({ _id: inv.clientId }, { $inc: { presentBalance: net }, $set: { updatedAt: new Date().toISOString() } })
-    }
-    return { ok: true }
-  } finally {
-    session.endSession()
-  }
-}
-
 function parseNumber(n: any, def = 0): number { const x = Number(n); return isFinite(x) ? x : def }
 
-export async function listInvoices(params: { page?: number; pageSize?: number; search?: string; status?: string; dateFrom?: string; dateTo?: string; clientId?: string }) {
+export async function listInvoices(params: {
+  page?: number
+  pageSize?: number
+  search?: string
+  status?: string
+  dateFrom?: string
+  dateTo?: string
+  clientId?: string
+  companyId?: string
+}) {
   await connectMongoose()
-  const { page = 1, pageSize = 20, search = "", status = "", dateFrom, dateTo, clientId } = params || {}
-  const filter: any = {}
-  if (search) {
+  const page = Math.max(1, Number(params.page) || 1)
+  const pageSize = Math.max(1, Math.min(100, Number(params.pageSize) || 20))
+  const skip = (page - 1) * pageSize
+
+  const filter: any = { isDeleted: { $ne: true } }
+  if (params.companyId) filter.companyId = new Types.ObjectId(params.companyId)
+  if (params.clientId) filter.clientId = new Types.ObjectId(params.clientId)
+  if (params.status) filter.status = params.status
+  if (params.search) {
     filter.$or = [
-      { invoiceNo: { $regex: search, $options: "i" } },
-      { clientName: { $regex: search, $options: "i" } },
-      { passportNo: { $regex: search, $options: "i" } },
-      { salesByName: { $regex: search, $options: "i" } },
+      { invoiceNo: { $regex: params.search, $options: "i" } },
+      { clientName: { $regex: params.search, $options: "i" } },
+      { salesByName: { $regex: params.search, $options: "i" } },
     ]
   }
-  if (status) filter.status = status
-  if (dateFrom || dateTo) {
+  if (params.dateFrom || params.dateTo) {
     filter.salesDate = {}
-    if (dateFrom) (filter.salesDate as any).$gte = dateFrom
-    if (dateTo) (filter.salesDate as any).$lte = dateTo
-  }
-  if (clientId && Types.ObjectId.isValid(clientId)) {
-    filter.clientId = new Types.ObjectId(clientId)
+    if (params.dateFrom) filter.salesDate.$gte = params.dateFrom
+    if (params.dateTo) filter.salesDate.$lte = params.dateTo
   }
 
-  const total = await Invoice.countDocuments(filter)
-  const docs = await Invoice.find(filter).sort({ createdAt: -1 }).skip((page - 1) * pageSize).limit(pageSize).lean()
+  const [docs, total] = await Promise.all([
+    Invoice.find(filter)
+      .sort({ salesDate: -1, createdAt: -1 })
+      .skip(skip)
+      .limit(pageSize)
+      .lean(),
+    Invoice.countDocuments(filter)
+  ])
+
   // Populate passport numbers for table view
   const invoiceIds = docs.map((d: any) => String(d._id))
   const passportDocs = await InvoicePassport.find({ invoiceId: { $in: invoiceIds } }).lean()
@@ -585,6 +504,7 @@ export async function listInvoices(params: { page?: number; pageSize?: number; s
     const invId = String((p as any).invoiceId)
     if (!passMap.has(invId)) passMap.set(invId, (p as any).passportNo || "")
   }
+
   // Collect money receipt voucher numbers per invoice (from receipts and allocations)
   const receiptDocs = await MoneyReceipt.find({ invoiceId: { $in: invoiceIds } }).lean()
   const allocDocs = await MoneyReceiptAllocation.find({ invoiceId: { $in: invoiceIds } }).lean()
@@ -606,7 +526,7 @@ export async function listInvoices(params: { page?: number; pageSize?: number; s
     mrSetMap.set(invId, s)
   }
 
-  const items = docs.map((d: any) => ({
+  const invoices = docs.map((d: any) => ({
     id: String(d._id),
     clientId: String(d.clientId || ""),
     invoiceNo: d.invoiceNo,
@@ -618,21 +538,140 @@ export async function listInvoices(params: { page?: number; pageSize?: number; s
     totalCost: parseNumber(d.billing?.totalCost || 0, 0),
     receivedAmount: parseNumber(d.receivedAmount, 0),
     dueAmount: Math.max(0, parseNumber(d.netTotal, 0) - parseNumber(d.receivedAmount, 0)),
-    mrNo: Array.from(mrSetMap.get(String(d._id)) || new Set<string>()).join(", ") || d.mrNo || "",
-    passportNo: passMap.get(String(d._id)) || d.passportNo || "",
+    mrNo: Array.from(mrSetMap.get(String(d._id)) || new Set<string>()).join(", "),
+    passportNo: passMap.get(String(d._id)) || "",
     salesBy: d.salesByName || "",
-    agent: d.agentName || "",
     status: d.status || "due",
     createdAt: d.createdAt || new Date().toISOString(),
     updatedAt: d.updatedAt || new Date().toISOString(),
   }))
-  return { items, pagination: { page, pageSize, total } }
+
+  return {
+    items: invoices,
+    pagination: {
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize)
+    }
+  }
 }
+
+export async function deleteInvoiceById(id: string, companyId?: string) {
+  await connectMongoose()
+  if (!Types.ObjectId.isValid(id)) throw new AppError("Invalid ID", 400)
+
+  const session = await mongoose.startSession()
+  try {
+    let resultOk = false
+    await session.withTransaction(async () => {
+      const inv = await Invoice.findById(id).session(session)
+      if (!inv) throw new AppError("Not found", 404)
+      if (companyId && String(inv.companyId || "") !== String(companyId)) throw new AppError("Not found", 404)
+
+      const invoiceId = String(inv._id)
+      const now = new Date().toISOString()
+
+      // 1. Fetch items and aggregate costs by vendor to avoid N+1
+      const existingItems = await InvoiceItem.find({ invoiceId }).session(session)
+      const vendorCostsMap = new Map<string, number>()
+      
+      for (const item of existingItems) {
+        if (item.vendorId && (item.totalCost || 0) > 0) {
+          const vId = String(item.vendorId)
+          vendorCostsMap.set(vId, (vendorCostsMap.get(vId) || 0) + Number(item.totalCost || 0))
+        }
+      }
+
+      // 2. Bulk update vendors
+      if (vendorCostsMap.size > 0) {
+        const vendorIds = Array.from(vendorCostsMap.keys())
+        const vendors = await Vendor.find({ _id: { $in: vendorIds } }).session(session)
+        
+        for (const vendor of vendors) {
+          const revertAmount = vendorCostsMap.get(String(vendor._id)) || 0
+          let currentNet = 0
+          if (vendor.presentBalance && typeof vendor.presentBalance === 'object') {
+            const pType = vendor.presentBalance.type
+            const pAmount = Number(vendor.presentBalance.amount || 0)
+            currentNet = (pType === 'advance' ? pAmount : -pAmount)
+          } else {
+            currentNet = Number(vendor.presentBalance || 0)
+          }
+          
+          // Reverting the cost: Invoice cost subtracted from balance, so we ADD it back
+          const newNet = currentNet + revertAmount
+          const newType = newNet >= 0 ? "advance" : "due"
+          const newAmount = Math.abs(newNet)
+          
+          vendor.presentBalance = { type: newType, amount: newAmount }
+          vendor.updatedAt = now
+          await vendor.save({ session })
+        }
+      }
+
+      // 3. Adjust Client Balance (reverting the invoice net total impact)
+      const net = Number(inv.netTotal || inv.billing?.netTotal || 0)
+      if (net !== 0 && inv.clientId) {
+        // Invoice increases client due (negative impact on balance), so we add it back
+        await Client.updateOne(
+          { _id: inv.clientId }, 
+          { $inc: { presentBalance: net }, $set: { updatedAt: now } }, 
+          { session }
+        )
+      }
+
+      // 4. Cascading Soft Delete for all related tables
+      const softDeleteFilter = { invoiceId }
+      const softDeleteUpdate = { $set: { isDeleted: true, updatedAt: now } }
+      
+      await Promise.all([
+        InvoiceItem.updateMany(softDeleteFilter, softDeleteUpdate, { session }),
+        InvoiceTicket.updateMany(softDeleteFilter, softDeleteUpdate, { session }),
+        InvoiceHotel.updateMany(softDeleteFilter, softDeleteUpdate, { session }),
+        InvoiceTransport.updateMany(softDeleteFilter, softDeleteUpdate, { session }),
+        InvoicePassport.updateMany(softDeleteFilter, softDeleteUpdate, { session }),
+        // Soft delete the invoice itself
+        Invoice.updateOne({ _id: inv._id }, softDeleteUpdate, { session })
+      ])
+
+      resultOk = true
+    })
+    return { ok: resultOk }
+  } catch (err: any) {
+    console.error("deleteInvoiceById error:", err)
+    throw err
+  } finally {
+    session.endSession()
+  }
+}
+
 
 export async function createInvoice(body: any, companyId?: string) {
   await connectMongoose()
   const general = body.general || body
   const billing = body.billing || { items: body.billing_information || [] }
+  const billingItemsRaw = Array.isArray(billing.items) ? billing.items : []
+
+  // 1. Backend Validation
+  if (!general.client && !general.invoice_combclient_id) throw new AppError("Client is required", 400)
+  if (!general.salesBy && !general.invoice_sales_man_id) throw new AppError("Sales person is required", 400)
+  if (!general.salesDate && !general.invoice_sales_date) throw new AppError("Sales date is required", 400)
+  
+  if (billingItemsRaw.length === 0) {
+    throw new AppError("At least one billing item is required", 400)
+  }
+
+  for (const item of billingItemsRaw) {
+    if (!item.product && !item.billing_product_id) throw new AppError("Product is required for all billing items", 400)
+    if (parseNumber(item.unitPrice ?? item.billing_unit_price, 0) <= 0) throw new AppError("Unit price must be greater than zero", 400)
+    const cost = parseNumber(item.costPrice ?? item.billing_cost_price, 0)
+    const vId = item.vendor || item.billing_comvendor || item.vendorId
+    if (cost > 0 && !vId) {
+      throw new AppError("Vendor is required when cost price is provided", 400)
+    }
+  }
+
   let tickets = body.ticket || body.ticketInfo || []
   const hotels = body.hotel || body.hotel_information || []
   let transports = body.transport || body.transport_information || []
@@ -1123,8 +1162,34 @@ export async function createInvoice(body: any, companyId?: string) {
       }
     }
 
-      const response = {
-        invoice_id: Number(String(invoiceId).slice(-6)),
+    // Money Receipt logic
+    let moneyReceiptNo = ""
+    const moneyReceipt = body.moneyReceipt
+    if (moneyReceipt?.paymentMethod && moneyReceipt?.amount > 0) {
+      const { createMoneyReceipt } = await import("./moneyReceiptService")
+      const mrPayload = {
+        clientId: clientDoc._id,
+        invoiceId: invoiceId,
+        paymentTo: "invoice",
+        amount: moneyReceipt.amount,
+        discount: moneyReceipt.discount || 0,
+        paymentDate: moneyReceipt.paymentDate || salesDate,
+        paymentMethod: moneyReceipt.paymentMethod,
+        accountId: moneyReceipt.accountId,
+        note: moneyReceipt.note,
+        manualReceiptNo: moneyReceipt.receiptNo
+      }
+      const mrResult = await createMoneyReceipt(mrPayload, companyIdStr)
+      if (mrResult.ok) {
+        moneyReceiptNo = mrResult.created.receipt_vouchar_no
+        // Re-fetch received so far to include the new receipt
+        const updatedInv = await Invoice.findById(invoiceId).lean()
+        if (updatedInv) receivedSoFar = parseNumber(updatedInv.receivedAmount, 0)
+      }
+    }
+
+    const response = {
+      invoice_id: Number(String(invoiceId).slice(-6)),
       invoice_org_agency: null,
       invoice_no: invoiceNo,
       net_total: String(netTotal.toFixed(2)),
@@ -1139,8 +1204,8 @@ export async function createInvoice(body: any, companyId?: string) {
       invoice_is_refund: 0,
       client_name: names.clientName || "",
       mobile: names.clientPhone || null,
-        invclientpayment_amount: String((receivedSoFar || 0).toFixed(2)),
-        money_receipt_num: "",
+      invclientpayment_amount: String((receivedSoFar || 0).toFixed(2)),
+      money_receipt_num: moneyReceiptNo,
       passport_no: null,
       passport_name: null,
       sales_by: names.salesByName || "",

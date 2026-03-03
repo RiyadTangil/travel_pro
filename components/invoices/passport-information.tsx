@@ -53,9 +53,10 @@ interface PassportInformationProps {
   initialEntries?: PassportEntry[]
   onChange?: (entries: PassportEntry[]) => void
   passportsPreloaded?: PreloadedPassportItem[]
+  errors?: Record<string, string>
 }
 
-export function PassportInformation({ initialEntries, onChange, passportsPreloaded }: PassportInformationProps) {
+export function PassportInformation({ initialEntries, onChange, passportsPreloaded, errors }: PassportInformationProps) {
   const parseYmdLocal = (s?: string): Date | undefined => {
     if (!s) return undefined
     const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})/.exec(s)
@@ -256,24 +257,21 @@ export function PassportInformation({ initialEntries, onChange, passportsPreload
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-gray-900">Passport Information</h3>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          onClick={addPassportEntry}
+          className="text-blue-600 border-blue-600 hover:bg-blue-50 h-8 w-8"
+          title="Add Passport"
+        >
+          <Plus className="h-4 w-4" />
+        </Button>
       </div>
 
       {passportEntries.map((entry, index) => (
         <PassportRow key={entry.id} entry={entry} index={index} />
       ))}
-
-      <div className="flex justify-end">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={addPassportEntry}
-          className="text-blue-600 border-blue-600 hover:bg-blue-50"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Passport
-        </Button>
-      </div>
 
       <PassportModal
         open={openAddPassport}

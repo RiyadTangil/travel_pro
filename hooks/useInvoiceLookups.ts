@@ -24,8 +24,12 @@ export function useInvoiceLookups() {
 
   useEffect(() => {
     if (CACHE) { setData(CACHE); setLoading(false); return }
+    if (!session?.user?.companyId) {
+      setLoading(false)
+      return
+    }
     if (!loadingPromise) {
-      loadingPromise = fetch(`/api/invoice-lookups`, { cache: "no-store", headers: { "x-company-id": session?.user?.companyId ?? "" } })
+      loadingPromise = fetch(`/api/invoice-lookups`, { cache: "no-store", headers: { "x-company-id": session.user.companyId } })
         .then((r) => r.json())
         .then((json) => { CACHE = json; return json })
         .catch((e) => { setError(String(e)); CACHE = null })

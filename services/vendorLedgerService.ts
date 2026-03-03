@@ -37,7 +37,7 @@ export async function getVendorLedger(vendorId: string, dateFrom?: string | null
 
   // Fetch Invoice Items (Costs)
   const invoiceFacet = await InvoiceItem.aggregate([
-    { $match: { vendorId: vendorObjectId } },
+    { $match: { vendorId: vendorObjectId, isDeleted: { $ne: true } } },
     {
       $facet: {
         pre: [

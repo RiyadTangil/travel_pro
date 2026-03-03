@@ -16,6 +16,7 @@ const InvoiceItemSchema = new Schema({
   dueAmount: { type: Number, default: 0 },
   companyId: { type: String },
   id: { type: String },
+  isDeleted: { type: Boolean, default: false, index: true },
   createdAt: { type: String },
   updatedAt: { type: String },
 }, { collection: "invoice_items", strict: false })

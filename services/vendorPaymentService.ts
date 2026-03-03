@@ -17,7 +17,7 @@ export async function getUniqueVendorInvoices(companyId?: string) {
   await connectMongoose()
 
   const pipeline: any[] = [
-    { $match: { vendorId: { $exists: true, $ne: null } } }
+    { $match: { vendorId: { $exists: true, $ne: null }, isDeleted: { $ne: true } } }
   ]
 
   if (companyId) {
@@ -50,7 +50,11 @@ export async function getVendorSummaryByInvoice(invoiceId: string) {
   // ... (unchanged)
   await connectMongoose()
 
-  const items = await InvoiceItem.find({ invoiceId: invoiceId, vendorId: { $exists: true, $ne: null } })
+  const items = await InvoiceItem.find({ 
+    invoiceId: invoiceId, 
+    vendorId: { $exists: true, $ne: null },
+    isDeleted: { $ne: true } 
+  })
     .populate('vendorId', 'name email mobile')
     .lean()
 

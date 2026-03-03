@@ -32,6 +32,7 @@ const InvoiceSchema = new Schema({
   netTotal: { type: Number, default: 0 },
   receivedAmount: { type: Number, default: 0 },
   status: { type: String, default: "due" },
+  isDeleted: { type: Boolean, default: false, index: true },
   createdAt: { type: String },
   updatedAt: { type: String },
 }, { collection: "invoices" })

@@ -98,7 +98,7 @@ export function InvoiceRow({
       </TableCell>
       
       <TableCell>
-        <InvoiceActions invoice={invoice} onView={onView} onEdit={onEdit} onDelete={onDelete} onMoneyReceipt={onMoneyReceipt} />
+        <InvoiceActions status={invoice.status} invoice={invoice} onView={onView} onEdit={onEdit} onDelete={onDelete} onMoneyReceipt={onMoneyReceipt} />
       </TableCell>
     </TableRow>
   )

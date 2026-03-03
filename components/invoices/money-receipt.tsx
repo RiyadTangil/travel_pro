@@ -33,7 +33,7 @@ function useAccountOptions(preloaded?: AccountOptionItem[]) {
   return options
 }
 
-export function MoneyReceipt({ accountsPreloaded }: { accountsPreloaded?: AccountOptionItem[] }) {
+export function MoneyReceipt({ accountsPreloaded, onChange, errors = {} }: { accountsPreloaded?: AccountOptionItem[]; onChange?: (data: any) => void; errors?: Record<string, string> }) {
   const accounts = useAccountOptions(accountsPreloaded)
   const [paymentMethod, setPaymentMethod] = useState<AccountType | "">("")
   const [paymentMethodOptions, setPaymentMethodOptions] = useState<AccountType[]>([])
@@ -53,6 +53,16 @@ export function MoneyReceipt({ accountsPreloaded }: { accountsPreloaded?: Accoun
       .filter(a => (paymentMethod ? a.type === paymentMethod : false))
       .map(a => a.name)
   ), [accounts, paymentMethod])
+
+  const handlePaymentMethodChange = useCallback((v: string) => setPaymentMethod(v as AccountType || ""), [])
+  const handleAccountChange = useCallback((v: string) => setAccount(v), [])
+  const handleTransNoChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => setTransNo(e.target.value), [])
+  const handleAmountChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => setAmount(e.target.value), [])
+  const handleDiscountChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => setDiscount(e.target.value), [])
+  const handleReceiptNoChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => setReceiptNo(e.target.value), [])
+  const handleNoteChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => setNote(e.target.value), [])
+  const handleShowPrevDueChange = useCallback((v: string) => setShowPrevDue(v), [])
+  const handleShowDiscountChange = useCallback((v: string) => setShowDiscount(v), [])
 
   useEffect(() => {
     let active = true
@@ -80,6 +90,26 @@ export function MoneyReceipt({ accountsPreloaded }: { accountsPreloaded?: Accoun
     }
   }, [paymentMethod])
 
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      const selectedAccountDoc = accounts.find(a => a.name === account)
+      onChange?.({
+        paymentMethod,
+        accountId: selectedAccountDoc?.id,
+        accountName: account,
+        amount: Number(amount) || 0,
+        discount: Number(discount) || 0,
+        transNo,
+        paymentDate,
+        receiptNo,
+        note,
+        showPrevDue,
+        showDiscount
+      })
+    }, 120)
+    return () => clearTimeout(handle)
+  }, [paymentMethod, account, amount, discount, transNo, paymentDate, receiptNo, note, showPrevDue, showDiscount, accounts, onChange])
+
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold text-gray-900">Money Receipt</h3>
@@ -97,8 +127,10 @@ export function MoneyReceipt({ accountsPreloaded }: { accountsPreloaded?: Accoun
                   placeholder="Select Payment Method"
                   options={paymentMethodOptions}
                   value={paymentMethod}
-                  onValueChange={useCallback((v) => setPaymentMethod(v as AccountType || ""), [])}
+                  onValueChange={handlePaymentMethodChange}
+                  className={errors.paymentMethod ? "border-red-500" : ""}
                 />
+                {errors.paymentMethod && <p className="text-[10px] text-red-500 font-medium">{errors.paymentMethod}</p>}
               </div>
               <div className="space-y-2">
                 <Label>Account: {isRequired && <span className="text-red-500">*</span>}</Label>
@@ -106,42 +138,61 @@ export function MoneyReceipt({ accountsPreloaded }: { accountsPreloaded?: Accoun
                   placeholder="Select Account"
                   options={filteredAccountNames}
                   value={account}
-                  onValueChange={useCallback(setAccount, [])}
+                  onValueChange={handleAccountChange}
                   disabled={!paymentMethod}
+                  className={errors.accountId ? "border-red-500" : ""}
                 />
+                {errors.accountId && <p className="text-[10px] text-red-500 font-medium">{errors.accountId}</p>}
               </div>
               {paymentMethod === "Mobile banking" && (
                 <div className="space-y-2">
                   <Label>Trans No: {isRequired && <span className="text-red-500">*</span>}</Label>
-                  <Input placeholder="Trans No:" value={transNo} onChange={useCallback((e) => setTransNo(e.target.value), [])} />
+                  <Input 
+                    placeholder="Trans No:" 
+                    value={transNo} 
+                    onChange={handleTransNoChange}
+                    className={errors.transNo ? "border-red-500" : ""}
+                  />
+                  {errors.transNo && <p className="text-[10px] text-red-500 font-medium">{errors.transNo}</p>}
                 </div>
               )}
               <div className="space-y-2">
                 <Label>Amount: {isRequired && <span className="text-red-500">*</span>}</Label>
-                <Input placeholder="Amount" value={amount} onChange={useCallback((e) => setAmount(e.target.value), [])} />
+                <Input 
+                  placeholder="Amount" 
+                  value={amount} 
+                  onChange={handleAmountChange}
+                  className={errors.amount ? "border-red-500" : ""}
+                />
+                {errors.amount && <p className="text-[10px] text-red-500 font-medium">{errors.amount}</p>}
               </div>
               <div className="space-y-2">
                 <Label>Discount:</Label>
-                <Input placeholder="Discount" value={discount} onChange={useCallback((e) => setDiscount(e.target.value), [])} />
+                <Input placeholder="Discount" value={discount} onChange={handleDiscountChange} />
               </div>
               <div className="space-y-2">
                 <Label>Payment Date: {isRequired && <span className="text-red-500">*</span>}</Label>
-                <DateInput value={paymentDate ? new Date(paymentDate) : undefined} onChange={(d) => setPaymentDate(d ? d.toISOString().slice(0,10) : "")} />
+                <DateInput 
+                  value={paymentDate ? new Date(paymentDate) : undefined} 
+                  onChange={(d) => setPaymentDate(d ? d.toISOString().slice(0,10) : "")}
+                  className={errors.paymentDate ? "border-red-500" : ""}
+                />
+                {errors.paymentDate && <p className="text-[10px] text-red-500 font-medium">{errors.paymentDate}</p>}
               </div>
               <div className="space-y-2">
                 <Label>Reciept no</Label>
-                <Input placeholder="Reciept no" value={receiptNo} onChange={useCallback((e) => setReceiptNo(e.target.value), [])} />
+                <Input placeholder="Reciept no" value={receiptNo} onChange={handleReceiptNoChange} />
               </div>
               <div className="space-y-2">
                 <Label>Note:</Label>
-                <Input placeholder="Note" value={note} onChange={useCallback((e) => setNote(e.target.value), [])} />
+                <Input placeholder="Note" value={note} onChange={handleNoteChange} />
               </div>
             </div>
 
             <div className="flex items-start justify-end gap-10">
               <div>
                 <Label className="mb-2 block">Show Prev Due in this invoice?</Label>
-                <RadioGroup value={showPrevDue} onValueChange={useCallback(setShowPrevDue, [])} className="flex items-center gap-6">
+                <RadioGroup value={showPrevDue} onValueChange={handleShowPrevDueChange} className="flex items-center gap-6">
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="yes" id="prevdue-yes" />
                     <Label htmlFor="prevdue-yes">Yes</Label>
@@ -154,7 +205,7 @@ export function MoneyReceipt({ accountsPreloaded }: { accountsPreloaded?: Accoun
               </div>
               <div>
                 <Label className="mb-2 block">Show discount in this invoice?</Label>
-                <RadioGroup value={showDiscount} onValueChange={useCallback(setShowDiscount, [])} className="flex items-center gap-6">
+                <RadioGroup value={showDiscount} onValueChange={handleShowDiscountChange} className="flex items-center gap-6">
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="yes" id="discount-yes" />
                     <Label htmlFor="discount-yes">Yes</Label>

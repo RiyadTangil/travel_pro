@@ -78,9 +78,10 @@ interface BillingInformationProps {
   initialTotals?: { subtotal?: number; totalCost?: number; discount?: number; serviceCharge?: number; vatTax?: number; netTotal?: number; agentCommission?: number; invoiceDue?: number; presentBalance?: number; note?: string; reference?: string }
   vendorPreloaded?: Array<{ id: string; name: string; email?: string; mobile?: string }>
   productOptionsExternal?: string[]
+  errors?: Record<string, string>
 }
 
-export function BillingInformation({ onRequestAddVendor, onChange, initialItems, initialTotals, vendorPreloaded, productOptionsExternal }: BillingInformationProps) {
+export function BillingInformation({ onRequestAddVendor, onChange, initialItems, initialTotals, vendorPreloaded, productOptionsExternal, errors = {} }: BillingInformationProps) {
   const [items, setItems] = useState<BillingItem[]>([{ id: "1", ...initialItem }])
   // Always call hooks in a consistent order; avoid conditional hook calls.
   const productOptionsInternal = useProductOptions()
@@ -180,6 +181,7 @@ export function BillingInformation({ onRequestAddVendor, onChange, initialItems,
           onUpdate={updateItem}
           onRemove={removeItem}
           onRequestAddVendor={onRequestAddVendor}
+          errors={errors}
         />
       ))}
       {/* Bottom totals and adjustments section matching target UI */}
@@ -244,9 +246,10 @@ type BillingItemRowProps = {
   onUpdate: (id: string, field: keyof Omit<BillingItem, 'id'>, rawValue: string) => void
   onRemove: (id: string) => void
   onRequestAddVendor?: () => void
+  errors?: Record<string, string>
 }
 
-const BillingItemRow = memo(function BillingItemRow({ item, index, canRemove, productOptions, vendorPreloaded, onUpdate, onRemove, onRequestAddVendor }: BillingItemRowProps) {
+const BillingItemRow = memo(function BillingItemRow({ item, index, canRemove, productOptions, vendorPreloaded, onUpdate, onRemove, onRequestAddVendor, errors = {} }: BillingItemRowProps) {
   return (
     <Card className="relative">
       <CardHeader className="pb-4">
@@ -274,7 +277,9 @@ const BillingItemRow = memo(function BillingItemRow({ item, index, canRemove, pr
               options={productOptions}
               value={item.product}
               onValueChange={(value) => onUpdate(item.id, 'product', value)}
+              className={errors[`billing_${index}_product`] ? "border-red-500" : ""}
             />
+            {errors[`billing_${index}_product`] && <p className="text-[10px] text-red-500 font-medium">{errors[`billing_${index}_product`]}</p>}
           </div>
 
           <div className="space-y-2">
@@ -315,7 +320,9 @@ const BillingItemRow = memo(function BillingItemRow({ item, index, canRemove, pr
               step="0.01"
               value={item.unitPrice}
               onChange={(e) => onUpdate(item.id, 'unitPrice', e.target.value)}
+              className={errors[`billing_${index}_unitPrice`] ? "border-red-500" : ""}
             />
+            {errors[`billing_${index}_unitPrice`] && <p className="text-[10px] text-red-500 font-medium">{errors[`billing_${index}_unitPrice`]}</p>}
           </div>
 
           <div className="space-y-2">
@@ -353,7 +360,9 @@ const BillingItemRow = memo(function BillingItemRow({ item, index, canRemove, pr
               preloaded={vendorPreloaded}
               onRequestAdd={onRequestAddVendor}
               placeholder="Select Vendor"
+              className={errors[`billing_${index}_vendor`] ? "border-red-500" : ""}
             />
+            {errors[`billing_${index}_vendor`] && <p className="text-[10px] text-red-500 font-medium">{errors[`billing_${index}_vendor`]}</p>}
           </div>
         </div>
       </CardContent>

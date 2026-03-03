@@ -13,6 +13,7 @@ const InvoicePassportSchema = new Schema({
   companyId: { type: String },
   passportId: { type: String },
   id: { type: String },
+  isDeleted: { type: Boolean, default: false, index: true },
   createdAt: { type: String },
   updatedAt: { type: String },
 }, { collection: "invoice_passports" })

@@ -26,7 +26,7 @@ export async function getItemSalesmanReport(params: ItemSalesmanParams) {
     companyId
   } = params
 
-  const match: any = {}
+  const match: any = { isDeleted: { $ne: true } }
 
   if (companyId) {
     match.companyId = companyId // Stored as string in InvoiceItem

@@ -37,9 +37,10 @@ interface TicketInformationProps {
   onChange?: (entries: TicketEntry[]) => void
   airlineOptionsExternal?: string[]
   airportListExternal?: Array<{ code: string; name: string; country?: string }>
+  errors?: Record<string, string>
 }
 
-export function TicketInformation({ initialEntries, onChange, airlineOptionsExternal, airportListExternal }: TicketInformationProps) {
+export function TicketInformation({ initialEntries, onChange, airlineOptionsExternal, airportListExternal, errors }: TicketInformationProps) {
   const parseYmdLocal = (s?: string): Date | undefined => {
     if (!s) return undefined
     const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})/.exec(s)
@@ -114,6 +115,16 @@ export function TicketInformation({ initialEntries, onChange, airlineOptionsExte
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-gray-900">Ticket Information</h3>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          onClick={addTicketEntry}
+          className="text-blue-600 border-blue-600 hover:bg-blue-50 h-8 w-8"
+          title="Add Ticket"
+        >
+          <Plus className="h-4 w-4" />
+        </Button>
       </div>
 
       {ticketEntries.map((entry, index) => (
@@ -126,21 +137,9 @@ export function TicketInformation({ initialEntries, onChange, airlineOptionsExte
           onUpdate={updateTicketEntry}
           airlineOptions={airlineOptions}
           airportListExternal={airportListExternal}
+          errors={errors}
         />
       ))}
-
-      <div className="flex justify-end">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={addTicketEntry}
-          className="text-blue-600 border-blue-600 hover:bg-blue-50"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Ticket
-        </Button>
-      </div>
     </div>
   )
 }

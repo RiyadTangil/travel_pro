@@ -40,7 +40,7 @@ export async function getOverallProfitLoss(params: ProfitLossParams) {
   }
 
   // 1. Sales Income Section
-  const salesMatch = { ...match }
+  const salesMatch = { ...match, isDeleted: { $ne: true } }
   if (Object.keys(invoiceDateFilter).length > 0) {
     salesMatch.salesDate = invoiceDateFilter
   }

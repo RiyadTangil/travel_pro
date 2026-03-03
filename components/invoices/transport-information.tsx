@@ -35,9 +35,10 @@ interface TransportInformationProps {
   initialEntries?: TransportEntry[]
   onChange?: (entries: TransportEntry[]) => void
   transportTypeNamesExternal?: string[]
+  errors?: Record<string, string>
 }
 
-export function TransportInformation({ initialEntries, onChange, transportTypeNamesExternal }: TransportInformationProps) {
+export function TransportInformation({ initialEntries, onChange, transportTypeNamesExternal, errors }: TransportInformationProps) {
   const { items: transportTypes } = useTransportTypes(true, !!transportTypeNamesExternal)
   const [transportEntries, setTransportEntries] = useState<TransportEntry[]>([
     { id: "1", ...initialTransportEntry }
@@ -83,6 +84,16 @@ export function TransportInformation({ initialEntries, onChange, transportTypeNa
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-gray-900">Transport Information</h3>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          onClick={addTransportEntry}
+          className="text-blue-600 border-blue-600 hover:bg-blue-50 h-8 w-8"
+          title="Add Transport"
+        >
+          <Plus className="h-4 w-4" />
+        </Button>
       </div>
 
       {transportEntries.map((entry, index) => (
@@ -94,21 +105,9 @@ export function TransportInformation({ initialEntries, onChange, transportTypeNa
           onRemove={removeTransportEntry}
           onUpdate={updateTransportEntry}
           transportTypeOptions={transportTypeOptions}
+          errors={errors}
         />
       ))}
-
-      <div className="flex justify-end">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={addTransportEntry}
-          className="text-blue-600 border-blue-600 hover:bg-blue-50"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Transport
-        </Button>
-      </div>
     </div>
   )
 }
@@ -120,9 +119,10 @@ interface TransportRowProps {
   onRemove: (id: string) => void
   onUpdate: (id: string, field: keyof Omit<TransportEntry, 'id'>, value: string) => void
   transportTypeOptions: string[]
+      errors?: Record<string, string>
 }
 
-function TransportRowBase({ entry, index, entriesLength, onRemove, onUpdate, transportTypeOptions }: TransportRowProps) {
+function TransportRowBase({ entry, index, entriesLength, onRemove, onUpdate, transportTypeOptions, errors }: TransportRowProps) {
   return (
     <Card key={entry.id} className="relative">
       <CardHeader className="pb-4">

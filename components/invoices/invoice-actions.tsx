@@ -12,7 +12,7 @@ interface InvoiceActionsProps {
   onMoneyReceipt?: (invoice: Invoice) => void
 }
 
-export function InvoiceActions({ invoice, onView, onEdit, onDelete, onMoneyReceipt }: InvoiceActionsProps) {
+export function InvoiceActions({ status, invoice, onView, onEdit, onDelete, onMoneyReceipt }: InvoiceActionsProps) {
   return (
     <div className="flex items-center gap-2">
       <Button variant="secondary" size="sm" onClick={() => onView?.(invoice)} className="h-8">
@@ -23,11 +23,13 @@ export function InvoiceActions({ invoice, onView, onEdit, onDelete, onMoneyRecei
         <FileEdit className="h-4 w-4 mr-2" />
         Edit
       </Button>
-      <Button variant="destructive" size="sm" onClick={() => onDelete?.(invoice)} className="h-8">
-        <Trash2 className="h-4 w-4 mr-2" />
-        Delete
-      </Button>
-      {invoice.status !== 'paid' && (
+      {status === 'due' && (
+        <Button variant="destructive" size="sm" onClick={() => onDelete?.(invoice)} className="h-8">
+          <Trash2 className="h-4 w-4 mr-2" />
+          Delete
+        </Button>
+      )}
+      {status !== 'paid' && (
         <Button variant="outline" size="sm" onClick={() => onMoneyReceipt?.(invoice)} className="h-8">
           <Receipt className="h-4 w-4 mr-2" />
           Money Receipt

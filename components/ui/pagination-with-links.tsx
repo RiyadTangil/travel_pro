@@ -9,12 +9,20 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 interface PaginationWithLinksProps {
   totalCount: number
   pageSize: number
   page: number
   setPage: (page: number) => void
+  onPageSizeChange?: (pageSize: number) => void
 }
 
 export function PaginationWithLinks({
@@ -22,10 +30,9 @@ export function PaginationWithLinks({
   pageSize,
   page,
   setPage,
+  onPageSizeChange,
 }: PaginationWithLinksProps) {
   const totalPages = Math.ceil(totalCount / pageSize)
-
-  if (totalPages <= 1) return null
 
   const renderPageNumbers = () => {
     const items = []
@@ -113,22 +120,46 @@ export function PaginationWithLinks({
   }
 
   return (
-    <Pagination className="justify-end mt-4 print:hidden">
-      <PaginationContent>
-        <PaginationItem>
-          <PaginationPrevious
-            onClick={() => setPage(Math.max(1, page - 1))}
-            className={page === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
-          />
-        </PaginationItem>
-        {renderPageNumbers()}
-        <PaginationItem>
-          <PaginationNext
-            onClick={() => setPage(Math.min(totalPages, page + 1))}
-            className={page === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
-          />
-        </PaginationItem>
-      </PaginationContent>
-    </Pagination>
+    <div className="flex items-center justify-end gap-4 mt-4 print:hidden">
+      {onPageSizeChange && (
+        <div className="flex items-center gap-2">
+          <Select
+            value={pageSize.toString()}
+            onValueChange={(v) => onPageSizeChange(Number(v))}
+          >
+            <SelectTrigger className="h-8 w-[110px]">
+              <SelectValue placeholder={`${pageSize} / page`} />
+            </SelectTrigger>
+            <SelectContent side="top">
+              {[10, 20, 50, 100].map((size) => (
+                <SelectItem key={size} value={size.toString()}>
+                  {size} / page
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <Pagination className="justify-end m-0 w-auto">
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious
+                onClick={() => setPage(Math.max(1, page - 1))}
+                className={page === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+              />
+            </PaginationItem>
+            {renderPageNumbers()}
+            <PaginationItem>
+              <PaginationNext
+                onClick={() => setPage(Math.min(totalPages, page + 1))}
+                className={page === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+      )}
+    </div>
   )
 }

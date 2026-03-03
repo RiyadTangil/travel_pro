@@ -1,41 +1,51 @@
 import { NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
+import { getServerSession, Session } from "next-auth"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import connectMongoose from "@/lib/mongoose"
 import { list, create } from "@/controllers/invoicesController"
+import { createInvoice, listInvoices } from "@/services/invoiceService"
+import { AppError } from "@/errors/AppError"
 
-// GET /api/invoices - list
 export async function GET(request: Request) {
   try {
-    await connectMongoose()
+    const session = await getServerSession(authOptions as any) as Session | null
+    const companyId = session?.user?.companyId
+    if (!companyId) return NextResponse.json({ error: "Unauthorized: Company ID required" }, { status: 401 })
+
     const { searchParams } = new URL(request.url)
-    const page = Number(searchParams.get("page") || 1)
-    const pageSize = Number(searchParams.get("pageSize") || 20)
-    const search = (searchParams.get("search") || "").trim()
-    const status = (searchParams.get("status") || "").trim()
-    const dateFrom = searchParams.get("dateFrom") || undefined
-    const dateTo = searchParams.get("dateTo") || undefined
-    const clientId = (searchParams.get("clientId") || "").trim() || undefined
-    return await list({ page, pageSize, search, status, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, clientId })
-  } catch (error) {
-    console.error("Invoices GET error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    const params = {
+      page: Number(searchParams.get("page") || 1),
+      pageSize: Number(searchParams.get("pageSize") || 20),
+      search: searchParams.get("search") || undefined,
+      status: searchParams.get("status") || undefined,
+      dateFrom: searchParams.get("dateFrom") || undefined,
+      dateTo: searchParams.get("dateTo") || undefined,
+      clientId: searchParams.get("clientId") || undefined,
+      companyId: String(companyId)
+    }
+
+    const result = await listInvoices(params)
+    return NextResponse.json(result)
+  } catch (error: any) {
+    console.error("GET Invoices Error:", error)
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }
 
-
-
-// POST /api/invoices - create
 export async function POST(request: Request) {
   try {
-    await connectMongoose()
-    const session = await getServerSession(authOptions as any)
-    const companyId = (session as any)?.user?.companyId || undefined
+    const session = await getServerSession(authOptions as any) as Session | null
+    const companyId = session?.user?.companyId
+    if (!companyId) return NextResponse.json({ error: "Unauthorized: Company ID required" }, { status: 401 })
+
     const body = await request.json()
-    return await create(body, companyId)
-  } catch (error) {
-    console.error("Invoices POST error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    const result = await createInvoice(body, String(companyId))
+    return NextResponse.json(result)
+  } catch (error: any) {
+    console.error("POST Invoice Error:", error)
+    const status = error instanceof AppError ? error.status : 500
+    const message = error instanceof AppError ? error.message : "Internal Server Error"
+    return NextResponse.json({ error: message }, { status })
   }
 }
 

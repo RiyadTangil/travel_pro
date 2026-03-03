@@ -35,9 +35,10 @@ const roomTypeOptions = [
 interface HotelInformationProps {
   initialEntries?: HotelEntry[]
   onChange?: (entries: HotelEntry[]) => void
+  errors?: Record<string, string>
 }
 
-export function HotelInformation({ initialEntries, onChange }: HotelInformationProps) {
+export function HotelInformation({ initialEntries, onChange, errors }: HotelInformationProps) {
 
   const [hotelEntries, setHotelEntries] = useState<HotelEntry[]>([
     { id: "1", ...initialHotelEntry }
@@ -77,6 +78,16 @@ export function HotelInformation({ initialEntries, onChange }: HotelInformationP
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-gray-900">Hotel Information</h3>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          onClick={addHotelEntry}
+          className="text-blue-600 border-blue-600 hover:bg-blue-50 h-8 w-8"
+          title="Add Hotel"
+        >
+          <Plus className="h-4 w-4" />
+        </Button>
       </div>
 
       {hotelEntries.map((entry, index) => (
@@ -87,21 +98,9 @@ export function HotelInformation({ initialEntries, onChange }: HotelInformationP
           entriesLength={hotelEntries.length}
           onRemove={removeHotelEntry}
           onUpdate={updateHotelEntry}
+          errors={errors}
         />
       ))}
-
-      <div className="flex justify-end">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={addHotelEntry}
-          className="text-blue-600 border-blue-600 hover:bg-blue-50"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Hotel
-        </Button>
-      </div>
     </div>
   )
 }
@@ -112,9 +111,10 @@ interface HotelRowProps {
   entriesLength: number
   onRemove: (id: string) => void
   onUpdate: (id: string, field: keyof Omit<HotelEntry, 'id'>, value: string) => void
+  errors?: Record<string, string>
 }
 
-function HotelRowBase({ entry, index, entriesLength, onRemove, onUpdate }: HotelRowProps) {
+function HotelRowBase({ entry, index, entriesLength, onRemove, onUpdate, errors }: HotelRowProps) {
   return (
     <Card key={entry.id} className="relative">
       <CardHeader className="pb-4">

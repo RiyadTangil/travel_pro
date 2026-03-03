@@ -23,7 +23,7 @@ export async function getVendorPurchasePaymentReport(params: VendorPurchasePayme
     companyId
   } = params
 
-  const match: any = {}
+  const match: any = { isDeleted: { $ne: true } }
   if (companyId) {
     match.companyId = companyId
   }
