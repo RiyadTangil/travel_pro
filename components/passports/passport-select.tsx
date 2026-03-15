@@ -67,7 +67,17 @@ export default function PassportSelect({ value, onChange, onRequestAdd, placehol
         const qs = new URLSearchParams({ page: "1", limit: "25", search }).toString()
         const res = await fetch(`/api/passports?${qs}`, { signal: controller.signal })
         const data = await res.json()
-        const list: PassportItem[] = (data.passports || []).map((p: any) => ({ id: p.id || String(p._id), passportNo: p.passportNo, name: p.name }))
+        const list: PassportItem[] = (data.passports || []).map((p: any) => ({ 
+          id: p.id || String(p._id), 
+          passportNo: p.passportNo, 
+          name: p.name,
+          paxType: p.paxType,
+          mobile: p.mobile,
+          email: p.email,
+          dob: p.dob,
+          dateOfIssue: p.dateOfIssue,
+          dateOfExpire: p.dateOfExpire
+        }))
         setItems(list)
       } catch (e) {
         if (process.env.NODE_ENV !== "production") console.error("PassportSelect load error", e)
@@ -98,7 +108,17 @@ export default function PassportSelect({ value, onChange, onRequestAdd, placehol
           const data = await res.json()
           const p = data.passport
           if (!p) return
-          const item: PassportItem = { id: p.id || String(p._id), passportNo: p.passportNo, name: p.name }
+          const item: PassportItem = { 
+            id: p.id || String(p._id), 
+            passportNo: p.passportNo, 
+            name: p.name,
+            paxType: p.paxType,
+            mobile: p.mobile,
+            email: p.email,
+            dob: p.dob,
+            dateOfIssue: p.dateOfIssue,
+            dateOfExpire: p.dateOfExpire
+          }
           if (isMounted) setItems(prev => {
             if (prev.some(pp => pp.id === item.id)) return prev
             return [item, ...prev]

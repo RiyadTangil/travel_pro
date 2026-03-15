@@ -1,7 +1,17 @@
 import { ok, fail } from "@/utils/api-response"
 import { isAppError } from "@/errors/AppError"
-import { listInvoices, createInvoice } from "@/services/invoiceService"
+import { listInvoices, createInvoice, createNonCommissionInvoice } from "@/services/invoiceService"
 import { z } from "zod"
+
+export async function createNonCommission(body: any, companyId: string) {
+  try {
+    const result = await createNonCommissionInvoice(body, companyId)
+    return ok(result)
+  } catch (e: any) {
+    if (isAppError(e)) return fail({ error: e.code || "error", message: e.message }, e.status)
+    return fail({ error: "internal_error", message: e.message || "Internal server error" }, 500)
+  }
+}
 
 // Zod validation schema for invoice creation aligning with frontend fields
 const ticketSchema = z.object({

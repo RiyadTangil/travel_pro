@@ -73,7 +73,6 @@ export function TimeInput({ value, onChange, placeholder = "Pick a time", classN
             className
           )}
           onClick={() => setOpen(true)}
-          onWheel={(e) => { e.preventDefault(); adjustByWheel(e.deltaY < 0 ? -1 : 1) }}
         >
           <span className={cn("truncate", !value && "text-gray-500")}>
             {toDisplay(value)}

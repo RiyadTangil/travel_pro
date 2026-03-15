@@ -146,8 +146,8 @@ export function PassportInformation({ initialEntries, onChange, passportsPreload
                   }
                   // Set from selected if available to avoid network
                   updatePassportEntry(entry.id, 'passportId' as any, id)
-                  updatePassportEntry(entry.id, 'passportNo', selected?.passportNo || '')
                   if (selected) {
+                    updatePassportEntry(entry.id, 'passportNo', selected.passportNo || '')
                     if (selected.name) updatePassportEntry(entry.id, 'name', selected.name)
                     if (selected.paxType) updatePassportEntry(entry.id, 'paxType', selected.paxType)
                     if (selected.mobile) updatePassportEntry(entry.id, 'contactNo', selected.mobile)
@@ -277,15 +277,53 @@ export function PassportInformation({ initialEntries, onChange, passportsPreload
         open={openAddPassport}
         onClose={() => setOpenAddPassport(false)}
         onSubmit={async (payload) => {
-          // naive add: after adding passport, set into the first entry without id
-          const createdId = payload.passportNo
-          setPassportEntries(prev => prev.map(p => {
-            if (!p.passportId) {
-              return { ...p, passportId: createdId, passportNo: payload.passportNo, name: payload.name || p.name }
+          try {
+            const res = await fetch('/api/passports', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.message || 'Failed to create passport')
+            
+            const createdPassport = data.passport
+            if (createdPassport?.id) {
+              setPassportEntries(prev => {
+                // Find the first empty entry or one without passportId
+                const emptyIndex = prev.findIndex(p => !p.passportId)
+                if (emptyIndex !== -1) {
+                  return prev.map((p, i) => i === emptyIndex ? {
+                    ...p,
+                    passportId: createdPassport.id,
+                    passportNo: createdPassport.passportNo,
+                    name: createdPassport.name || p.name,
+                    paxType: createdPassport.paxType || p.paxType,
+                    contactNo: createdPassport.mobile || p.contactNo,
+                    email: createdPassport.email || p.email,
+                    dateOfBirth: createdPassport.dob || p.dateOfBirth,
+                    dateOfIssue: createdPassport.dateOfIssue || p.dateOfIssue,
+                    dateOfExpire: createdPassport.dateOfExpire || p.dateOfExpire
+                  } : p)
+                }
+                // If no empty entry, add a new one
+                return [...prev, {
+                  id: Date.now().toString(),
+                  passportId: createdPassport.id,
+                  passportNo: createdPassport.passportNo,
+                  name: createdPassport.name || "",
+                  paxType: createdPassport.paxType || "",
+                  contactNo: createdPassport.mobile || "",
+                  email: createdPassport.email || "",
+                  dateOfBirth: createdPassport.dob || "",
+                  dateOfIssue: createdPassport.dateOfIssue || "",
+                  dateOfExpire: createdPassport.dateOfExpire || ""
+                }]
+              })
             }
-            return p
-          }))
-          setOpenAddPassport(false)
+            setOpenAddPassport(false)
+          } catch (error: any) {
+            console.error("Failed to add passport:", error)
+          }
         }}
       />
     </div>

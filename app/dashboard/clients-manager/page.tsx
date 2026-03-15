@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { DashboardHeader } from "@/components/dashboard/header"
 import {
@@ -20,6 +21,7 @@ import { toast } from "@/components/ui/use-toast"
 import Loader from "@/components/ui/loader"
 
 export default function ClientsManagerPage() {
+  const { data: session } = useSession()
   const [clients, setClients] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [filters, setFilters] = useState<{ categoryId?: string; userId?: string; search?: string }>({})
@@ -117,8 +119,14 @@ export default function ClientsManagerPage() {
       setSaving(true)
       const res = await fetch(`/api/clients-manager`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        headers: { 
+          "Content-Type": "application/json",
+          ...(session?.user?.companyId ? { "x-company-id": String(session.user.companyId) } : {})
+        },
+        body: JSON.stringify({
+          ...payload,
+          ...(session?.user?.companyId ? { companyId: String(session.user.companyId) } : {})
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to add client")

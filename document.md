@@ -8,3 +8,6 @@ page-1. moneyreceipt
     c.Advance- client table,money recpt table, client transeciton table, account table,allowed limitless amount,
         if any due invoice then allowed to adjust with  invoice table and client balance (client table) if not then added with client balance (client table)only 
         from the money receipt adv doest get auto adjust but get auto adjusted if make invoice .and give add invoice adjustmetn btn in details page
+    c. adjust with due
+    d. specific ticket
+2.Show balance -> dashboard/money-receipts -> will show balanceabout in the pdf

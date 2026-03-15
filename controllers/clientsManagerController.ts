@@ -18,6 +18,7 @@ const createSchema = z.object({
   openingBalanceAmount: z.string().optional().or(z.literal("")),
   creditLimit: z.union([z.string(), z.number()]).optional().or(z.literal("")),
   walkingCustomer: z.enum(["No", "Yes"]).optional(),
+  companyId: z.string().min(1, "Company is required"),
 })
 
 export async function list(params: { page?: number; limit?: number; search?: string; categoryId?: string; userId?: string; status?: string; companyId?: string }) {

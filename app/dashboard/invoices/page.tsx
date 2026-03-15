@@ -10,7 +10,6 @@ import { InvoiceFilters } from "@/components/invoices/invoice-filters"
 import { InvoiceStats } from "@/components/invoices/invoice-stats"
 // import { dummyInvoices } from "@/data/invoices"
 import { Invoice, InvoiceFilters as IInvoiceFilters, InvoiceStats as IInvoiceStats } from "@/types/invoice"
-import { useInvoiceLookups } from "@/hooks/useInvoiceLookups"
 
 import { PaginationWithLinks } from "@/components/ui/pagination-with-links"
 import { useToast } from "@/components/ui/use-toast"
@@ -39,7 +38,6 @@ export default function InvoicesPage() {
     totalPages: 0
   })
 
-  const { lookups } = useInvoiceLookups()
   const [filters, setFilters] = useState<IInvoiceFilters>({
     search: "",
     status: "",
@@ -210,7 +208,6 @@ export default function InvoicesPage() {
         onClose={() => { setIsModalOpen(false); setEditingInvoice(undefined) }}
         onInvoiceAdded={handleAddInvoice}
         initialInvoice={editingInvoice}
-        lookups={lookups || undefined}
       />
 
       <MoneyReceiptModal

@@ -448,7 +448,6 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
                           setClientId(id)
                           if (id) setErrors(prev => ({ ...prev, clientId: "" }))
                         }}
-                        preloaded={clientsPreloaded}
                         onRequestAdd={onRequestAddClientCb}
                         placeholder="Select client"
                         className={cn(errors.clientId && "border-red-500")}
@@ -464,7 +463,6 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
                           setEmployeeId(id)
                           if (id) setErrors(prev => ({ ...prev, employeeId: "" }))
                         }}
-                        preloaded={employeesPreloadedAll}
                         onRequestAdd={onRequestAddEmployeeCb}
                         placeholder="Select staff"
                         className={cn(errors.employeeId && "border-red-500")}
@@ -507,7 +505,6 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
                       <AgentSelect
                         value={agentId}
                         onChange={(id) => setAgentId(id)}
-                        preloaded={agentsPreloaded}
                         onRequestAdd={onRequestAddAgentCb}
                         placeholder="Select agent"
                       />
@@ -517,7 +514,7 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
               </Card>
 
               {/* Passport Information */}
-              <MemoPassportInformation initialEntries={passportsInitial} onChange={onPassportChange} passportsPreloaded={passportsPreloadedMemo} errors={errors} />
+              <MemoPassportInformation initialEntries={passportsInitial} onChange={onPassportChange} errors={errors} />
 
               <Separator />
 
@@ -573,9 +570,84 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
       </Dialog>
       {/* Initial data loaded via useEffect when editing */}
       {/* Modals for adding new entries */}
-      <AddClientModal open={openAddClient} onOpenChange={(v) => setOpenAddClient(v)} onSubmit={async () => { setOpenAddClient(false) }} />
-      <EmployeeModal open={openAddEmployee} onClose={() => setOpenAddEmployee(false)} onSubmit={async () => { setOpenAddEmployee(false) }} />
-      <AgentModal open={openAddAgent} onClose={() => setOpenAddAgent(false)} onSubmit={async () => { setOpenAddAgent(false) }} />
+      <AddClientModal 
+        open={openAddClient} 
+        onOpenChange={(v) => setOpenAddClient(v)} 
+        onSubmit={async (payload) => { 
+          try {
+            const res = await fetch('/api/clients-manager', {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                ...(session?.user?.companyId ? { 'x-company-id': String(session.user.companyId) } : {})
+              },
+              body: JSON.stringify({
+                ...payload,
+                ...(session?.user?.companyId ? { companyId: String(session.user.companyId) } : {})
+              })
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.message || 'Failed to create client')
+            
+            if (data.client?.id) {
+              setClientId(data.client.id)
+              setErrors(prev => ({ ...prev, clientId: "" }))
+              toast({ title: "Success", description: "Client created successfully" })
+            }
+            setOpenAddClient(false)
+          } catch (error: any) {
+            toast({ title: "Error", description: error.message, variant: "destructive" })
+          }
+        }} 
+      />
+      <EmployeeModal 
+        open={openAddEmployee} 
+        onClose={() => setOpenAddEmployee(false)} 
+        onSubmit={async (payload) => { 
+          try {
+            const res = await fetch('/api/employees', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.message || 'Failed to create employee')
+            
+            if (data.id) {
+              setEmployeeId(data.id)
+              setEmployeeName(payload.name)
+              setErrors(prev => ({ ...prev, employeeId: "" }))
+              toast({ title: "Success", description: "Employee created successfully" })
+            }
+            setOpenAddEmployee(false)
+          } catch (error: any) {
+            toast({ title: "Error", description: error.message, variant: "destructive" })
+          }
+        }} 
+      />
+      <AgentModal 
+        open={openAddAgent} 
+        onClose={() => setOpenAddAgent(false)} 
+        onSubmit={async (payload) => { 
+          try {
+            const res = await fetch('/api/agents', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.message || 'Failed to create agent')
+            
+            if (data.id) {
+              setAgentId(data.id)
+              toast({ title: "Success", description: "Agent created successfully" })
+            }
+            setOpenAddAgent(false)
+          } catch (error: any) {
+            toast({ title: "Error", description: error.message, variant: "destructive" })
+          }
+        }} 
+      />
       <VendorAddModal
         open={openAddVendor}
         onOpenChange={(v) => setOpenAddVendor(v)}
