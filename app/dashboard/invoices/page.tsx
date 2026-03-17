@@ -66,10 +66,10 @@ export default function InvoicesPage() {
       setInvoices(data.items || [])
       setPagination(prev => ({
         ...prev,
-        page: data.pagination.page,
-        pageSize: data.pagination.pageSize,
-        total: data.pagination.total,
-        totalPages: Math.ceil(data.pagination.total / data.pagination.pageSize)
+        page: data.pagination?.page || 1,
+        pageSize: data.pagination?.pageSize || 20,
+        total: data.pagination?.total || 0,
+        totalPages: Math.ceil(data.pagination?.total || 0 / data.pagination?.pageSize || 20)
       }))
     } catch (e) {
       console.error("Load invoices error:", e)
