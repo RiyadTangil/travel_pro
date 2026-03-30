@@ -35,13 +35,14 @@ function validateRequired(body: any) {
 
 export async function GET(_: Request, { params }: { params: { id: string } }) {
   try {
-    if (!ObjectId.isValid(params.id)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 })
+    const { id } = await (params as any)
+    if (!ObjectId.isValid(id)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 })
     const session = await getServerSession(authOptions as any)
     const companyId = session?.user?.companyId || null
     const client = await clientPromise
     const db = client.db("manage_agency")
     const col = db.collection("employees")
-    const query: any = { _id: new ObjectId(params.id) }
+    const query: any = { _id: new ObjectId(id) }
     if (companyId) query.companyId = companyId
     const d = await col.findOne(query)
     if (!d) return NextResponse.json({ error: "Not found" }, { status: 404 })

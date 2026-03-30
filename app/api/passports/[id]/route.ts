@@ -7,7 +7,7 @@ const COLLECTION = "passports"
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const companyId = request.headers.get('x-company-id')
-    const { id } = params
+    const { id } = await params
     if (!ObjectId.isValid(id)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 })
     const client = await clientPromise
     const db = client.db("manage_agency")

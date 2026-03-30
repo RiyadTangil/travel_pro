@@ -1,6 +1,9 @@
 "use client"
 
-import { useState, useCallback, useMemo, useEffect, memo } from "react"
+import { useState, useCallback, useMemo, useEffect, memo, useRef } from "react"
+import { useForm, Controller } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import * as z from "zod"
 import {
   Dialog,
   DialogContent,
@@ -48,19 +51,72 @@ interface AddNonCommissionModalProps {
   initialInvoiceId?: string | null
 }
 
+const formSchema = z.object({
+  clientId: z.string().min(1, "Client is required"),
+  employeeId: z.string().min(1, "Sales person is required"),
+  agentId: z.string().optional(),
+  invoiceNo: z.string().min(1, "Invoice No is required"),
+  salesDate: z.date({ required_error: "Sales date is required" }),
+  dueDate: z.date().optional(),
+  billing: z.object({
+    discount: z.number().default(0),
+    serviceCharge: z.number().default(0),
+    vatTax: z.number().default(0),
+    agentCommission: z.number().default(0),
+    reference: z.string().default(""),
+    note: z.string().default(""),
+    showPrevDue: z.enum(["Yes", "No"]).default("No"),
+    showDiscount: z.enum(["Yes", "No"]).default("No"),
+  })
+})
+
+type FormData = z.infer<typeof formSchema>
+
 export function AddNonCommissionModal({ 
   isOpen, 
   onClose, 
   onInvoiceAdded, 
   initialInvoiceId 
 }: AddNonCommissionModalProps) {
+  // --- react-hook-form ---
+  const {
+    control,
+    handleSubmit,
+    reset,
+    setValue,
+    watch,
+    formState: { errors: formErrors, isSubmitting: submittingState },
+  } = useForm<FormData>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      clientId: "",
+      employeeId: "",
+      agentId: "",
+      invoiceNo: "",
+      salesDate: new Date(),
+      dueDate: undefined,
+      billing: {
+        discount: 0,
+        serviceCharge: 0,
+        vatTax: 0,
+        agentCommission: 0,
+        reference: "",
+        note: "",
+        showPrevDue: "No",
+        showDiscount: "No"
+      }
+    }
+  })
+
+  const clientId = watch("clientId")
+  const employeeId = watch("employeeId")
+  const agentId = watch("agentId")
+  const invoiceNo = watch("invoiceNo")
+  const salesDate = watch("salesDate")
+  const dueDate = watch("dueDate")
+  const billing = watch("billing")
+
   // --- General State ---
-  const [clientId, setClientId] = useState<string | undefined>()
-  const [employeeId, setEmployeeId] = useState<string | undefined>()
-  const [agentId, setAgentId] = useState<string | undefined>()
-  const [invoiceNo, setInvoiceNo] = useState("")
-  const [salesDate, setSalesDate] = useState<Date | undefined>(new Date())
-  const [dueDate, setDueDate] = useState<Date | undefined>()
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -68,46 +124,91 @@ export function AddNonCommissionModal({
   // List of added items (for the right summary table)
   const [items, setItems] = useState<InvoiceItem[]>([])
   const [resetKey, setResetKey] = useState(0)
-
-  // Billing state
-  const [billing, setBilling] = useState({
-    subtotal: 0,
-    discount: 0,
-    serviceCharge: 0,
-    vatTax: 0,
-    netTotal: 0,
-    agentCommission: 0,
-    reference: "",
-    note: "",
-    showPrevDue: "No",
-    showDiscount: "No"
-  })
+  const [editingItemId, setEditingItemId] = useState<string | null>(null)
+  const hasFetched = useRef(false)
 
   // --- API Data Hooks ---
   const [airlineOptions, setAirlineOptions] = useState<string[]>([])
   const [airportList, setAirportList] = useState<any[]>([])
+  const [passportsPreloaded, setPassportsPreloaded] = useState<any[]>([])
+  const [clientsPreloadedAll, setClientsPreloadedAll] = useState<any[]>([])
+  const [employeesPreloadedAll, setEmployeesPreloadedAll] = useState<any[]>([])
+  const [agentsPreloadedAll, setAgentsPreloadedAll] = useState<any[]>([])
 
   useEffect(() => {
-    if (!isOpen) return
+    if (!isOpen) {
+      hasFetched.current = false
+      // Clear state when modal closes
+      reset({
+        clientId: "",
+        employeeId: "",
+        agentId: "",
+        invoiceNo: "",
+        salesDate: new Date(),
+        dueDate: undefined,
+        billing: {
+          discount: 0,
+          serviceCharge: 0,
+          vatTax: 0,
+          agentCommission: 0,
+          note: "",
+          reference: "",
+          showPrevDue: "No",
+          showDiscount: "No"
+        }
+      })
+      setItems([])
+      setEditingItemId(null)
+      setTicketDetails({
+        ticketNo: "",
+        clientPrice: 0,
+        purchasePrice: 0,
+        extraFee: 0,
+        vendor: "",
+        airline: "",
+        ticketType: "",
+        route: "",
+        pnr: "",
+        gdsPnr: "",
+        paxName: "",
+        issueDate: new Date(),
+        airbusClass: ""
+      })
+      setPaxEntries([])
+      setFlightEntries([])
+      setErrors({})
+      return
+    }
+
     const fetchLookups = async () => {
       try {
-        const [airRes, portRes] = await Promise.all([
+        const [airRes, portRes, passRes, clientRes, empRes, agentRes] = await Promise.all([
           fetch('/api/airlines?limit=500'),
-          fetch('/api/airports?limit=500')
+          fetch('/api/airports?limit=500'),
+          fetch('/api/passports?limit=500'),
+          fetch('/api/clients-manager?limit=1000'),
+          fetch('/api/employees?limit=500'),
+          fetch('/api/agents?limit=500')
         ])
-        const [airData, portData] = await Promise.all([airRes.json(), portRes.json()])
+        const [airData, portData, passData, clientData, empData, agentData] = await Promise.all([
+          airRes.json(), portRes.json(), passRes.json(), clientRes.json(), empRes.json(), agentRes.json()
+        ])
         setAirlineOptions((airData.items || []).map((a: any) => a.name))
         setAirportList(portData.items || [])
+        setPassportsPreloaded(passData.items || [])
+        setClientsPreloadedAll(clientData.clients || [])
+        setEmployeesPreloadedAll(empData.employees || [])
+        setAgentsPreloadedAll(agentData.data || [])
       } catch (e) {
         console.error("Failed to fetch lookups", e)
       }
     }
     fetchLookups()
-  }, [isOpen])
+  }, [isOpen, reset])
 
   // Fetch invoice if in Edit mode
   useEffect(() => {
-    if (initialInvoiceId && isOpen) {
+    if (initialInvoiceId && isOpen && !hasFetched.current) {
       const fetchInvoice = async () => {
         setLoading(true)
         try {
@@ -115,20 +216,19 @@ export function AddNonCommissionModal({
           const data = await res.json()
           if (!res.ok) throw new Error(data.error || "Failed to fetch invoice")
 
+          hasFetched.current = true
           // Populate states
-          setClientId(data.clientId)
-          setEmployeeId(data.employeeId)
-          setAgentId(data.agentId)
-          setInvoiceNo(data.invoiceNo)
-          setSalesDate(data.salesDate ? new Date(data.salesDate) : new Date())
-          setDueDate(data.dueDate ? new Date(data.dueDate) : undefined)
+          setValue("clientId", data.clientId)
+          setValue("employeeId", data.employeeId)
+          setValue("agentId", data.agentId || "")
+          setValue("invoiceNo", data.invoiceNo)
+          setValue("salesDate", data.salesDate ? new Date(data.salesDate) : new Date())
+          if (data.dueDate) setValue("dueDate", new Date(data.dueDate))
           setItems(data.items || [])
-          setBilling({
-            subtotal: data.billing?.subtotal || 0,
+          setValue("billing", {
             discount: data.billing?.discount || 0,
             serviceCharge: data.billing?.serviceCharge || 0,
             vatTax: data.billing?.vatTax || 0,
-            netTotal: data.billing?.netTotal || 0,
             agentCommission: data.agentCommission || 0,
             note: data.billing?.note || "",
             reference: data.billing?.reference || "",
@@ -143,42 +243,23 @@ export function AddNonCommissionModal({
         }
       }
       fetchInvoice()
-    } else if (isOpen) {
-      // Reset for New mode
-      setClientId(undefined)
-      setEmployeeId(undefined)
-      setAgentId(undefined)
-      setInvoiceNo("")
-      setSalesDate(new Date())
-      setDueDate(undefined)
-      setItems([])
-      setBilling({
-        subtotal: 0,
-        discount: 0,
-        serviceCharge: 0,
-        vatTax: 0,
-        netTotal: 0,
-        agentCommission: 0,
-        note: "",
-        reference: "",
-        showPrevDue: "No",
-        showDiscount: "No"
-      })
-      
-      // Fetch next invoice number
+    } else if (isOpen && !initialInvoiceId) {
+      // Fetch next invoice number for NEW mode
       const fetchNextNo = async () => {
         try {
-          const res = await fetch('/api/invoices/next-no')
+          const res = await fetch('/api/invoices/next-no?type=non_commission')
           const data = await res.json()
           if (data.nextInvoiceNo) {
-            const numPart = data.nextInvoiceNo.match(/\d+$/)?.[0] || "0001"
-            setInvoiceNo(`ANC-${numPart}`)
+            setValue("invoiceNo", data.nextInvoiceNo)
           }
         } catch (e) {}
       }
       fetchNextNo()
     }
-  }, [initialInvoiceId, isOpen, onClose])
+    // Only run when isOpen changes or initialInvoiceId changes. 
+    // Do NOT add setValue, onClose to dependencies as they might be unstable in parent.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialInvoiceId, isOpen])
 
   // Data states for "current" item in forms
   const [ticketDetails, setTicketDetails] = useState<TicketDetailsData>({
@@ -211,10 +292,6 @@ export function AddNonCommissionModal({
     return totalClientPrice - (billing.discount || 0) + (billing.serviceCharge || 0) + (billing.vatTax || 0) + totalExtraFee
   }, [totalClientPrice, billing.discount, billing.serviceCharge, billing.vatTax, totalExtraFee])
 
-  useEffect(() => {
-    setBilling(prev => ({ ...prev, netTotal: calculatedNetTotal }))
-  }, [calculatedNetTotal])
-
   // --- Callbacks for sub-components ---
   const onTicketChange = useCallback((data: TicketDetailsData) => {
     setTicketDetails(data)
@@ -241,9 +318,9 @@ export function AddNonCommissionModal({
     if (!ticketDetails.paxName) newErrors.paxName = "Pax Name is required"
 
     // Pax (At least one pax name required if pax section is used)
-    paxEntries.forEach((p, i) => {
-      if (!p.name) newErrors[`pax[${i}].name`] = "Name is required"
-    })
+    // paxEntries.forEach((p, i) => {
+    //   if (!p.name) newErrors[`pax[${i}].name`] = "Name is required"
+    // })
 
     // Flight (Optional but if started must be valid)
     flightEntries.forEach((f, i) => {
@@ -269,15 +346,32 @@ export function AddNonCommissionModal({
 
     const currentProfit = (ticketDetails.clientPrice || 0) - (ticketDetails.purchasePrice || 0) + (ticketDetails.extraFee || 0)
     
-    const newItem: InvoiceItem = {
-      id: Date.now().toString(),
-      ticketDetails: { ...ticketDetails },
-      paxEntries: [...paxEntries],
-      flightEntries: [...flightEntries],
+    // We must ensure the item object sent to the list matches the shape expected by the API
+    const updatedItem: InvoiceItem = {
+      id: editingItemId || Date.now().toString(),
+      ticketDetails: JSON.parse(JSON.stringify(ticketDetails)),
+      paxEntries: JSON.parse(JSON.stringify(paxEntries)),
+      flightEntries: JSON.parse(JSON.stringify(flightEntries)),
       profit: currentProfit
     }
 
-    setItems(prev => [...prev, newItem])
+    if (editingItemId) {
+      // Update existing item in the list
+      setItems(prev => {
+        const newList = prev.map(item => item.id === editingItemId ? updatedItem : item)
+        console.log("Updated list (Edit):", newList)
+        return newList
+      })
+      setEditingItemId(null)
+      toast({ title: "Item Updated", description: "Item has been updated in the list" })
+    } else {
+      // Add new item to the list
+      setItems(prev => {
+        const newList = [...prev, updatedItem]
+        console.log("Updated list (Add):", newList)
+        return newList
+      })
+    }
     
     // Reset "current" form data but keep General Info
     setResetKey(prev => prev + 1)
@@ -302,14 +396,16 @@ export function AddNonCommissionModal({
   }
 
   const handleEditItem = (item: InvoiceItem) => {
-    // Move item data back to form and remove from list
+    // Populate form with item data
     setTicketDetails(item.ticketDetails)
     setPaxEntries(item.paxEntries)
     setFlightEntries(item.flightEntries)
-    setItems(prev => prev.filter(i => i.id !== item.id))
-    // Trigger resetKey to re-mount with new initial data if needed, 
-    // or we make them controlled. Let's force a resetKey change.
+    setEditingItemId(item.id)
+    
+    // Trigger resetKey to re-mount sub-components with the new initial data
     setResetKey(prev => prev + 1)
+    
+    toast({ title: "Editing Item", description: "You can now modify the item details in the form" })
   }
 
   const handleCopyItem = (item: InvoiceItem) => {
@@ -324,28 +420,29 @@ export function AddNonCommissionModal({
     setItems(prev => prev.filter(i => i.id !== id))
   }
 
-  const validateGlobal = () => {
-    const newErrors: Record<string, string> = {}
-    if (!clientId) newErrors.clientId = "Client is required"
-    if (!employeeId) newErrors.employeeId = "Sales By is required"
-    if (!salesDate) newErrors.salesDate = "Sales Date is required"
+  const handleCreate = handleSubmit(async (data: FormData) => {
     if (items.length === 0) {
       toast({ title: "Error", description: "Please add at least one item", variant: "destructive" })
-      return false
+      return
     }
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
-
-  const handleCreate = async () => {
-    if (!validateGlobal()) return
     
     setSubmitting(true)
     try {
       const payload = {
-        general: { clientId, employeeId, agentId, invoiceNo, salesDate, dueDate },
+        general: { 
+          clientId: data.clientId, 
+          employeeId: data.employeeId, 
+          agentId: data.agentId, 
+          invoiceNo: data.invoiceNo, 
+          salesDate: data.salesDate, 
+          dueDate: data.dueDate 
+        },
         items,
-        billing,
+        billing: {
+          ...data.billing,
+          subtotal: totalClientPrice,
+          netTotal: calculatedNetTotal,
+        },
       }
       
       const url = initialInvoiceId 
@@ -358,24 +455,20 @@ export function AddNonCommissionModal({
         body: JSON.stringify(payload)
       })
       
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed to save invoice')
+      const resData = await res.json()
+      if (!res.ok) throw new Error(resData.error || 'Failed to save invoice')
       
       toast({ title: "Success", description: `Non-Commission Invoice ${initialInvoiceId ? 'updated' : 'created'} successfully` })
-      onInvoiceAdded?.(data)
+      onInvoiceAdded?.(resData)
       onClose()
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" })
     } finally {
       setSubmitting(false)
     }
-  }
+  })
 
   const handleCreatePreview = async () => {
-    if (!validateGlobal()) return
-    
-    // For preview, we could call a specific preview endpoint or just open a PDF
-    // For now, let's just trigger the create logic as a placeholder
     handleCreate()
   }
 
@@ -383,10 +476,10 @@ export function AddNonCommissionModal({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-[98vw] w-[98vw] h-[95vh] max-h-[95vh] p-0 flex flex-col overflow-hidden bg-gray-50">
         <DialogHeader className="px-6 py-3 border-b bg-white flex flex-row items-center justify-between shrink-0">
-          <DialogTitle className="text-lg font-bold text-gray-800">Add Non-Commission Invoice</DialogTitle>
-          <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8">
-            <X className="h-4 w-4" />
-          </Button>
+          <DialogTitle className="text-lg font-bold text-gray-800">
+            {initialInvoiceId ? "Edit Non-Commission Invoice" : "Add Non-Commission Invoice"}
+          </DialogTitle>
+          
         </DialogHeader>
 
         <div className="flex-1 flex overflow-hidden">
@@ -397,57 +490,88 @@ export function AddNonCommissionModal({
               <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs font-semibold text-gray-600">Search Client <span className="text-red-500">*</span></Label>
-                  <ClientSelect 
-                    value={clientId} 
-                    onChange={id => {
-                      setClientId(id)
-                      if (id) setErrors(prev => ({ ...prev, clientId: "" }))
-                    }} 
-                    placeholder="Search Client"
-                    className={cn("h-9 text-xs", errors.clientId && "border-red-500")}
+                  <Controller
+                    name="clientId"
+                    control={control}
+                    render={({ field }) => (
+                      <ClientSelect 
+                        value={field.value} 
+                        onChange={id => field.onChange(id)} 
+                        placeholder="Search Client"
+                        className={cn("h-9 text-xs", formErrors.clientId && "border-red-500")}
+                        preloaded={clientsPreloadedAll}
+                        disabled={!!initialInvoiceId}
+                      />
+                    )}
                   />
-                  {errors.clientId && <p className="text-[10px] text-red-500 mt-0.5">{errors.clientId}</p>}
+                  {formErrors.clientId && <p className="text-[10px] text-red-500 mt-0.5">{formErrors.clientId.message}</p>}
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-semibold text-gray-600">Sales By <span className="text-red-500">*</span></Label>
-                  <EmployeeSelect 
-                    value={employeeId} 
-                    onChange={id => {
-                      setEmployeeId(id)
-                      if (id) setErrors(prev => ({ ...prev, employeeId: "" }))
-                    }} 
-                    placeholder="Select employee"
-                    className={cn("h-9 text-xs", errors.employeeId && "border-red-500")}
+                  <Controller
+                    name="employeeId"
+                    control={control}
+                    render={({ field }) => (
+                      <EmployeeSelect 
+                        value={field.value} 
+                        onChange={id => field.onChange(id)} 
+                        placeholder="Select employee"
+                        className={cn("h-9 text-xs", formErrors.employeeId && "border-red-500")}
+                        preloaded={employeesPreloadedAll}
+                      />
+                    )}
                   />
-                  {errors.employeeId && <p className="text-[10px] text-red-500 mt-0.5">{errors.employeeId}</p>}
+                  {formErrors.employeeId && <p className="text-[10px] text-red-500 mt-0.5">{formErrors.employeeId.message}</p>}
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-semibold text-gray-600">Invoice No</Label>
-                  <Input value={invoiceNo} readOnly className="h-9 text-xs bg-gray-100" />
+                  <Controller
+                    name="invoiceNo"
+                    control={control}
+                    render={({ field }) => (
+                      <Input {...field} readOnly className="h-9 text-xs bg-gray-100" />
+                    )}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-semibold text-gray-600">Sales Date <span className="text-red-500">*</span></Label>
-                  <DateInput 
-                    value={salesDate} 
-                    onChange={d => {
-                      setSalesDate(d)
-                      if (d) setErrors(prev => ({ ...prev, salesDate: "" }))
-                    }} 
-                    className={cn("h-9 text-xs", errors.salesDate && "border-red-500")} 
+                  <Controller
+                    name="salesDate"
+                    control={control}
+                    render={({ field }) => (
+                      <DateInput 
+                        value={field.value} 
+                        onChange={d => field.onChange(d)} 
+                        className={cn("h-9 text-xs", formErrors.salesDate && "border-red-500")} 
+                      />
+                    )}
                   />
-                  {errors.salesDate && <p className="text-[10px] text-red-500 mt-0.5">{errors.salesDate}</p>}
+                  {formErrors.salesDate && <p className="text-[10px] text-red-500 mt-0.5">{formErrors.salesDate.message}</p>}
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-semibold text-gray-600">Due Date</Label>
-                  <DateInput value={dueDate} onChange={setDueDate} className="h-9 text-xs" />
+                  <Controller
+                    name="dueDate"
+                    control={control}
+                    render={({ field }) => (
+                      <DateInput value={field.value} onChange={field.onChange} className="h-9 text-xs" />
+                    )}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-semibold text-gray-600">Select Agent</Label>
-                  <AgentSelect 
-                    value={agentId} 
-                    onChange={setAgentId} 
-                    placeholder="Select Agent"
-                    className="h-9 text-xs"
+                  <Controller
+                    name="agentId"
+                    control={control}
+                    render={({ field }) => (
+                      <AgentSelect 
+                        value={field.value} 
+                        onChange={field.onChange} 
+                        placeholder="Select Agent"
+                        className="h-9 text-xs"
+                        preloaded={agentsPreloadedAll}
+                      />
+                    )}
                   />
                 </div>
               </div>
@@ -467,6 +591,7 @@ export function AddNonCommissionModal({
                 key={`pax-${resetKey}`}
                 initialEntries={paxEntries}
                 onChange={onPaxChange}
+                passportsPreloaded={passportsPreloaded}
                 errors={errors}
               />
 
@@ -481,12 +606,45 @@ export function AddNonCommissionModal({
               />
 
               {/* Add New Button at bottom of forms */}
-              <div className="flex justify-end pt-4 pb-8">
+              <div className="flex justify-end gap-3 pt-4 pb-8">
+                {editingItemId && (
+                  <Button 
+                    variant="outline"
+                    onClick={() => {
+                      setEditingItemId(null)
+                      setResetKey(prev => prev + 1)
+                      setTicketDetails({
+                        ticketNo: "",
+                        clientPrice: 0,
+                        purchasePrice: 0,
+                        extraFee: 0,
+                        vendor: "",
+                        airline: "",
+                        ticketType: "",
+                        route: "",
+                        pnr: "",
+                        gdsPnr: "",
+                        paxName: "",
+                        issueDate: new Date(),
+                        airbusClass: ""
+                      })
+                      setPaxEntries([])
+                      setFlightEntries([])
+                      setErrors({})
+                    }}
+                    className="rounded-md px-6 text-xs h-9 font-bold border-amber-200 text-amber-600 hover:bg-amber-50"
+                  >
+                    Cancel Edit
+                  </Button>
+                )}
                 <Button 
                   onClick={handleAddNew}
-                  className="bg-sky-400 hover:bg-sky-500 text-white rounded-md px-8 text-xs h-9 font-bold"
+                  className={cn(
+                    "rounded-md px-8 text-xs h-9 font-bold",
+                    editingItemId ? "bg-amber-500 hover:bg-amber-600 text-white" : "bg-sky-400 hover:bg-sky-500 text-white"
+                  )}
                 >
-                  Add New
+                  {editingItemId ? "Update Item" : "Add New"}
                 </Button>
               </div>
             </div>
@@ -562,92 +720,138 @@ export function AddNonCommissionModal({
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-x-4 gap-y-3">
                     <div className="space-y-1">
-                      <Label className="text-[11px] font-bold text-gray-500">Discount</Label>
-                      <Input 
-                        type="number" 
-                        className="h-8 text-xs" 
-                        value={billing.discount}
-                        onChange={(e) => setBilling(prev => ({ ...prev, discount: Number(e.target.value) }))}
+                      <Label className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Subtotal</Label>
+                      <Input value={totalClientPrice.toFixed(2)} readOnly className="h-8 text-xs bg-gray-50 font-semibold" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Discount</Label>
+                      <Controller
+                        name="billing.discount"
+                        control={control}
+                        render={({ field }) => (
+                          <Input 
+                            type="number" 
+                            value={field.value} 
+                            onChange={e => field.onChange(Number(e.target.value))} 
+                            className="h-8 text-xs" 
+                          />
+                        )}
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[11px] font-bold text-gray-500">Service Charge</Label>
-                      <Input 
-                        type="number" 
-                        className="h-8 text-xs" 
-                        value={billing.serviceCharge}
-                        onChange={(e) => setBilling(prev => ({ ...prev, serviceCharge: Number(e.target.value) }))}
+                      <Label className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Service Charge</Label>
+                      <Controller
+                        name="billing.serviceCharge"
+                        control={control}
+                        render={({ field }) => (
+                          <Input 
+                            type="number" 
+                            value={field.value} 
+                            onChange={e => field.onChange(Number(e.target.value))} 
+                            className="h-8 text-xs" 
+                          />
+                        )}
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[11px] font-bold text-gray-500">Vat / Tax</Label>
-                      <Input 
-                        type="number" 
-                        className="h-8 text-xs" 
-                        value={billing.vatTax}
-                        onChange={(e) => setBilling(prev => ({ ...prev, vatTax: Number(e.target.value) }))}
+                      <Label className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">VAT/Tax</Label>
+                      <Controller
+                        name="billing.vatTax"
+                        control={control}
+                        render={({ field }) => (
+                          <Input 
+                            type="number" 
+                            value={field.value} 
+                            onChange={e => field.onChange(Number(e.target.value))} 
+                            className="h-8 text-xs" 
+                          />
+                        )}
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[11px] font-bold text-gray-500">Net Total</Label>
-                      <Input readOnly className="h-8 text-xs bg-gray-50 font-bold text-sky-600" value={billing.netTotal.toLocaleString()} />
+                      <Label className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Net Total</Label>
+                      <Input value={calculatedNetTotal.toFixed(2)} readOnly className="h-8 text-xs bg-sky-50 text-sky-700 font-bold border-sky-200" />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[11px] font-bold text-gray-500">Commission</Label>
-                      <Input 
-                        type="number" 
-                        className="h-8 text-xs" 
-                        value={billing.agentCommission}
-                        onChange={(e) => setBilling(prev => ({ ...prev, agentCommission: Number(e.target.value) }))}
+                      <Label className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Agent Commission</Label>
+                      <Controller
+                        name="billing.agentCommission"
+                        control={control}
+                        render={({ field }) => (
+                          <Input 
+                            type="number" 
+                            value={field.value} 
+                            onChange={e => field.onChange(Number(e.target.value))} 
+                            className="h-8 text-xs" 
+                          />
+                        )}
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[11px] font-bold text-gray-500">Reference</Label>
-                      <Input 
-                        placeholder="Ref..."
-                        className="h-8 text-xs" 
-                        value={billing.reference} 
-                        onChange={(e) => setBilling(prev => ({ ...prev, reference: e.target.value }))} 
+                      <Label className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Reference</Label>
+                      <Controller
+                        name="billing.reference"
+                        control={control}
+                        render={({ field }) => (
+                          <Input {...field} placeholder="Enter reference" className="h-8 text-xs" />
+                        )}
                       />
                     </div>
                   </div>
 
                   <div className="space-y-1">
-                    <Label className="text-[11px] font-bold text-gray-500">Note</Label>
-                    <textarea 
-                      className="w-full min-h-[60px] p-2 text-xs border rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400 bg-gray-50/30" 
-                      placeholder="Internal notes..."
-                      value={billing.note}
-                      onChange={(e) => setBilling(prev => ({ ...prev, note: e.target.value }))}
+                    <Label className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Note</Label>
+                    <Controller
+                      name="billing.note"
+                      control={control}
+                      render={({ field }) => (
+                        <textarea 
+                          {...field}
+                          className="w-full min-h-[60px] p-2 text-xs border rounded-md focus:outline-none focus:ring-1 focus:ring-sky-400 bg-gray-50/30" 
+                          placeholder="Add notes here..."
+                        />
+                      )}
                     />
                   </div>
 
                   <div className="space-y-3 pt-1">
                     <div className="flex flex-col gap-2">
-                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Show Prev Due?</span>
-                      <RadioGroup value={billing.showPrevDue} onValueChange={v => setBilling(prev => ({...prev, showPrevDue: v}))} className="flex gap-4">
-                        <div className="flex items-center space-x-1.5">
-                          <RadioGroupItem value="Yes" id="prev-yes" className="h-3 w-3" />
-                          <Label htmlFor="prev-yes" className="text-[10px] font-medium">Yes</Label>
-                        </div>
-                        <div className="flex items-center space-x-1.5">
-                          <RadioGroupItem value="No" id="prev-no" className="h-3 w-3" />
-                          <Label htmlFor="prev-no" className="text-[10px] font-medium">No</Label>
-                        </div>
-                      </RadioGroup>
+                      <Label className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Show Prev Due</Label>
+                      <Controller
+                        name="billing.showPrevDue"
+                        control={control}
+                        render={({ field }) => (
+                          <RadioGroup value={field.value} onValueChange={field.onChange} className="flex gap-4">
+                            <div className="flex items-center space-x-1.5">
+                              <RadioGroupItem value="Yes" id="prev-yes" className="h-3 w-3" />
+                              <Label htmlFor="prev-yes" className="text-[10px] font-medium">Yes</Label>
+                            </div>
+                            <div className="flex items-center space-x-1.5">
+                              <RadioGroupItem value="No" id="prev-no" className="h-3 w-3" />
+                              <Label htmlFor="prev-no" className="text-[10px] font-medium">No</Label>
+                            </div>
+                          </RadioGroup>
+                        )}
+                      />
                     </div>
                     <div className="flex flex-col gap-2">
-                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Show Discount?</span>
-                      <RadioGroup value={billing.showDiscount} onValueChange={v => setBilling(prev => ({...prev, showDiscount: v}))} className="flex gap-4">
-                        <div className="flex items-center space-x-1.5">
-                          <RadioGroupItem value="Yes" id="disc-yes" className="h-3 w-3" />
-                          <Label htmlFor="disc-yes" className="text-[10px] font-medium">Yes</Label>
-                        </div>
-                        <div className="flex items-center space-x-1.5">
-                          <RadioGroupItem value="No" id="disc-no" className="h-3 w-3" />
-                          <Label htmlFor="disc-no" className="text-[10px] font-medium">No</Label>
-                        </div>
-                      </RadioGroup>
+                      <Label className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">Show Discount</Label>
+                      <Controller
+                        name="billing.showDiscount"
+                        control={control}
+                        render={({ field }) => (
+                          <RadioGroup value={field.value} onValueChange={field.onChange} className="flex gap-4">
+                            <div className="flex items-center space-x-1.5">
+                              <RadioGroupItem value="Yes" id="disc-yes" className="h-3 w-3" />
+                              <Label htmlFor="disc-yes" className="text-[10px] font-medium">Yes</Label>
+                            </div>
+                            <div className="flex items-center space-x-1.5">
+                              <RadioGroupItem value="No" id="disc-no" className="h-3 w-3" />
+                              <Label htmlFor="disc-no" className="text-[10px] font-medium">No</Label>
+                            </div>
+                          </RadioGroup>
+                        )}
+                      />
                     </div>
                   </div>
                 </div>
@@ -665,14 +869,16 @@ export function AddNonCommissionModal({
                   className="h-9 text-[11px] font-bold bg-white text-gray-400 border border-gray-200 hover:bg-gray-50 uppercase tracking-wider"
                   onClick={handleCreate}
                 >
-                  CREATE
+                  {initialInvoiceId ? "UPDATE" : "CREATE"}
                 </Button>
-                <Button 
-                  className="h-9 text-[11px] font-bold bg-white text-gray-400 border border-gray-200 hover:bg-gray-50 uppercase tracking-wider"
-                  onClick={handleCreatePreview}
-                >
-                  CREATE & PREVIEW
-                </Button>
+                {!initialInvoiceId && (
+                  <Button 
+                    className="h-9 text-[11px] font-bold bg-white text-gray-400 border border-gray-200 hover:bg-gray-50 uppercase tracking-wider"
+                    onClick={handleCreatePreview}
+                  >
+                    CREATE & PREVIEW
+                  </Button>
+                )}
               </div>
             </div>
           </div>

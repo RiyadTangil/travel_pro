@@ -92,10 +92,14 @@ export function PassportInformation({ initialEntries, onChange, passportsPreload
   }, [])
   useEffect(() => {
     if (initialEntries && initialEntries.length) {
-      const normalized = initialEntries.map((e, idx) => ({ id: e.id || String(Date.now() + idx), ...e }))
+      const normalized = initialEntries.map((e, idx) => {
+        const fallback = passportsPreloaded?.find((p) => p.passportNo === e.passportNo)
+        const passportId = e.passportId || fallback?.id || ""
+        return { id: e.id || String(Date.now() + idx), ...e, passportId }
+      })
       setPassportEntries(normalized)
     }
-  }, [initialEntries])
+  }, [initialEntries, passportsPreloaded])
 
   // Debounce parent updates to avoid heavy synchronous re-rendering
   useEffect(() => {

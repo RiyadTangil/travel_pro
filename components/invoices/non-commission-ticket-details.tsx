@@ -71,8 +71,7 @@ export const NonCommissionTicketDetails = memo(function NonCommissionTicketDetai
   }, [])
 
   useEffect(() => {
-    const handle = setTimeout(() => { onChange(data) }, 100)
-    return () => clearTimeout(handle)
+    onChange(data)
   }, [data, onChange])
 
   return (

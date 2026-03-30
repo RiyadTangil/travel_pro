@@ -10,6 +10,10 @@ const InvoiceTicketSchema = new Schema({
   journeyDate: { type: String },
   returnDate: { type: String },
   airline: { type: String },
+  gdsPnr: { type: String },
+  ticketType: { type: String },
+  airbusClass: { type: String },
+  issueDate: { type: String },
   // Backward-compat fields (older data)
   airlineId: { type: String },
   passengerName: { type: String },

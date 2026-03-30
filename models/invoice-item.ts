@@ -12,6 +12,7 @@ const InvoiceItemSchema = new Schema({
   totalCost: { type: Number, default: 0 },
   profit: { type: Number, default: 0 },
   vendorId: { type: Schema.Types.ObjectId, ref: "Vendor", index: true },
+  ticketId: { type: String, index: true }, // Linked to InvoiceTicket _id
   paidAmount: { type: Number, default: 0 },
   dueAmount: { type: Number, default: 0 },
   companyId: { type: String },

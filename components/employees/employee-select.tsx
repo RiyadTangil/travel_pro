@@ -23,6 +23,7 @@ interface EmployeeSelectProps {
   className?: string
   autoFocus?: boolean
   preloaded?: EmployeeItem[]
+  disabled?: boolean
 }
 
 function formatLabel(e: EmployeeItem) {
@@ -30,7 +31,7 @@ function formatLabel(e: EmployeeItem) {
   return `${e.name}${dept}`
 }
 
-export default function EmployeeSelect({ value, onChange, onRequestAdd, placeholder = "Select Employee", className, autoFocus, preloaded }: EmployeeSelectProps) {
+export default function EmployeeSelect({ value, onChange, onRequestAdd, placeholder = "Select Employee", className, autoFocus, preloaded, disabled }: EmployeeSelectProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [items, setItems] = useState<EmployeeItem[]>([])
@@ -102,7 +103,14 @@ export default function EmployeeSelect({ value, onChange, onRequestAdd, placehol
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" role="combobox" aria-expanded={open} className={`justify-between w-full ${className || ""}`} autoFocus={autoFocus}>
+        <Button 
+          variant="outline" 
+          role="combobox" 
+          aria-expanded={open} 
+          className={`justify-between w-full ${className || ""}`} 
+          autoFocus={autoFocus}
+          disabled={disabled}
+        >
           <span className="truncate text-left">
             {selected ? formatLabel(selected) : (placeholder || "Select Employee")}
           </span>

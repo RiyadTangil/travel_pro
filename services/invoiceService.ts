@@ -75,10 +75,34 @@ export async function getInvoiceById(id: string, companyId?: string) {
   }))
 
   const billingWithItems = { ...(inv.billing || {}), items }
+  
+  // Fetch client details for prefill
+  let clients: any[] = []
+  if (inv.clientId && Types.ObjectId.isValid(String(inv.clientId))) {
+    const c = await Client.findById(inv.clientId).lean()
+    if (c) {
+      clients = [{ id: String(c._id), name: c.name || "", phone: c.phone || "", email: c.email || "" }]
+    }
+  }
+
+  // Fetch agent details for prefill
+  let agents: any[] = []
+  if (inv.agentId && Types.ObjectId.isValid(String(inv.agentId))) {
+    const db = mongoose.connection?.db
+    if (db) {
+      const a = await db.collection("agents").findOne({ _id: new Types.ObjectId(String(inv.agentId)) })
+      if (a) {
+        agents = [{ id: String(a._id), name: a.name || "", email: a.email || "", mobile: a.mobile || a.phone || "" }]
+      }
+    }
+  }
+
   return {
     invoice: { ...inv, id: invIdStr, billing: billingWithItems, tickets: mapTickets, hotels: mapHotels, transports: mapTransports, passports },
     vendors,
     employees,
+    clients,
+    agents
   }
 }
 
@@ -105,6 +129,7 @@ export async function updateInvoiceById(id: string, body: any, companyId?: strin
         salesByName: typeof general.salesByName !== 'undefined' ? general.salesByName : inv.salesByName,
         salesDate: typeof general.salesDate !== 'undefined' ? general.salesDate : inv.salesDate,
         dueDate: typeof general.dueDate !== 'undefined' ? general.dueDate : inv.dueDate,
+        invoiceType: "standard",
         billing: {
           subtotal: typeof billing.subtotal !== 'undefined' ? billing.subtotal : (inv.billing?.subtotal ?? 0),
           totalCost: typeof billing.totalCost !== 'undefined' ? billing.totalCost : (inv.billing?.totalCost ?? 0),
@@ -609,9 +634,29 @@ export async function createNonCommissionInvoice(body: any, companyId?: string) 
       for (const item of invoiceItems) {
         const { ticketDetails, paxEntries, flightEntries } = item
         
-        // a. Create InvoiceItem (Financial Row)
+        // a. Create InvoiceTicket (Main Reference)
+        const ticketResult = await InvoiceTicket.create([{
+          invoiceId,
+          ticketNo: ticketDetails.ticketNo,
+          pnr: ticketDetails.pnr,
+          gdsPnr: ticketDetails.gdsPnr,
+          route: ticketDetails.route,
+          journeyDate: ticketDetails.journeyDate,
+          returnDate: ticketDetails.returnDate,
+          airline: ticketDetails.airline,
+          ticketType: ticketDetails.ticketType,
+          airbusClass: ticketDetails.airbusClass,
+          issueDate: ticketDetails.issueDate,
+          companyId: companyIdStr,
+          createdAt: now,
+          updatedAt: now
+        }], { session })
+        const ticketId = String(ticketResult[0]._id)
+
+        // b. Create InvoiceItem (Financial Row) - Linked to Ticket
         await InvoiceItem.create([{
           invoiceId,
+          ticketId,
           product: "Non-Commission Ticket",
           paxName: ticketDetails.paxName || "",
           description: `Ticket: ${ticketDetails.ticketNo} | Route: ${ticketDetails.route}`,
@@ -627,25 +672,12 @@ export async function createNonCommissionInvoice(body: any, companyId?: string) 
           updatedAt: now
         }], { session })
 
-        // b. Create InvoiceTicket
-        await InvoiceTicket.create([{
-          invoiceId,
-          ticketNo: ticketDetails.ticketNo,
-          pnr: ticketDetails.pnr,
-          route: ticketDetails.route,
-          journeyDate: ticketDetails.journeyDate,
-          returnDate: ticketDetails.returnDate,
-          airline: ticketDetails.airline,
-          companyId: companyIdStr,
-          createdAt: now,
-          updatedAt: now
-        }], { session })
-
-        // c. Create InvoicePassports
+        // c. Create InvoicePassports - Linked to Ticket
         if (paxEntries.length > 0) {
           await InvoicePassport.insertMany(paxEntries.map((p: any) => ({
             invoiceId,
-            passportNo: p.passportId || "", // This is usually the passport number string from frontend if not resolved
+            ticketId,
+            passportNo: p.passportId || "",
             name: p.name,
             paxType: p.paxType,
             contactNo: p.contactNo,
@@ -659,14 +691,11 @@ export async function createNonCommissionInvoice(body: any, companyId?: string) 
           })), { session })
         }
 
-        // d. Create InvoiceTransports (Using as Flight storage for Non-Commission)
-        // Note: We don't have a specific Flight model in the selected list, 
-        // standard invoices use InvoiceTicket for flight segments too, but here we have a dedicated flightEntries array.
-        // Let's use InvoiceTransport or just InvoiceTicket segments if we want to follow existing patterns.
-        // Given the prompt mentioned InvoiceTransport model, let's use it for extra flight segments.
+        // d. Create InvoiceTransports - Linked to Ticket
         if (flightEntries.length > 0) {
           await InvoiceTransport.insertMany(flightEntries.map((f: any) => ({
             invoiceId,
+            ticketId,
             transportType: `Flight: ${f.flightNo}`,
             referenceNo: f.airline,
             pickupPlace: f.from,
@@ -730,34 +759,22 @@ export async function getNonCommissionInvoiceById(id: string, companyId?: string
   // and each InvoiceItem record represents one ticket in the UI list.
   
   const reconstructedItems = items.map((ii: any) => {
-    // Find matching ticket for this item
-    const ticket = tickets.find((t: any) => t.ticketNo === ii.paxName || t.route === ii.description.split('|')[1]?.split(':')[1]?.trim()) || tickets[0]
-    // Note: In createNonCommissionInvoice we store description as `Ticket: ${ticketNo} | Route: ${route}`
-    // and paxName as ticketDetails.paxName.
+    // 1. Find matching ticket for this item using ticketId (preferred) or paxName/description (fallback)
+    // IMPORTANT: MongoDB .lean() returns _id as an ObjectId, so we use .toString() to compare.
+    const ticket = tickets.find((t: any) => 
+      (ii.ticketId && String(t._id) === String(ii.ticketId)) || 
+      (!ii.ticketId && (t.ticketNo === ii.paxName || t.route === ii.description.split('|')[1]?.split(':')[1]?.trim()))
+    ) || tickets[0]
     
-    // For simplicity, if multiple items exist, we might need a better matching logic or store an itemId in child records.
-    // Given the current implementation, we'll assume a 1:1 match for demo purposes or fetch all and distribute.
-    
-    return {
-      id: ii.id || String(ii._id),
-      ticketDetails: {
-        ticketNo: ticket?.ticketNo || "",
-        clientPrice: ii.totalSales || 0,
-        purchasePrice: ii.totalCost || 0,
-        extraFee: 0, // we didn't store extraFee separately in InvoiceItem, but it's part of totalSales calculation
-        vendor: String(ii.vendorId || ""),
-        airline: ticket?.airline || "",
-        ticketType: "",
-        route: ticket?.route || "",
-        pnr: ticket?.pnr || "",
-        gdsPnr: "",
-        paxName: ii.paxName || "",
-        issueDate: ticket?.createdAt ? new Date(ticket.createdAt) : new Date(),
-        journeyDate: ticket?.journeyDate ? new Date(ticket.journeyDate) : undefined,
-        returnDate: ticket?.returnDate ? new Date(ticket.returnDate) : undefined,
-        airbusClass: ""
-      },
-      paxEntries: passports.filter((p: any) => p.invoiceId === invIdStr).map((p: any) => ({
+    const ticketIdStr = ticket ? String(ticket._id) : null
+
+    // 2. Filter paxEntries and flightEntries that belong ONLY to this ticket using ticketId
+    const itemPaxEntries = passports
+      .filter((p: any) => 
+        (ticketIdStr && String(p.ticketId) === ticketIdStr) || 
+        (!p.ticketId && String(p.invoiceId) === invIdStr)
+      )
+      .map((p: any) => ({
         id: p.id || String(p._id),
         passportId: p.passportNo,
         name: p.name,
@@ -767,8 +784,14 @@ export async function getNonCommissionInvoiceById(id: string, companyId?: string
         dob: p.dateOfBirth ? new Date(p.dateOfBirth) : undefined,
         dateOfIssue: p.dateOfIssue ? new Date(p.dateOfIssue) : undefined,
         dateOfExpire: p.dateOfExpire ? new Date(p.dateOfExpire) : undefined
-      })),
-      flightEntries: transports.filter((tr: any) => tr.invoiceId === invIdStr).map((tr: any) => ({
+      }))
+
+    const itemFlightEntries = transports
+      .filter((tr: any) => 
+        (ticketIdStr && String(tr.ticketId) === ticketIdStr) || 
+        (!tr.ticketId && String(tr.invoiceId) === invIdStr)
+      )
+      .map((tr: any) => ({
         id: tr.id || String(tr._id),
         from: tr.pickupPlace,
         to: tr.dropOffPlace,
@@ -777,7 +800,29 @@ export async function getNonCommissionInvoiceById(id: string, companyId?: string
         flyDate: tr.pickupDate ? new Date(tr.pickupDate) : undefined,
         departureTime: tr.pickupTime,
         arrivalTime: tr.dropoffTime
-      })),
+      }))
+
+    return {
+      id: ii.ticketId || ii.id || String(ii._id),
+      ticketDetails: {
+        ticketNo: ticket?.ticketNo || "",
+        clientPrice: ii.totalSales || 0,
+        purchasePrice: ii.totalCost || 0,
+        extraFee: 0,
+        vendor: String(ii.vendorId || ""),
+        airline: ticket?.airline || "",
+        ticketType: ticket?.ticketType || "",
+        route: ticket?.route || "",
+        pnr: ticket?.pnr || "",
+        gdsPnr: ticket?.gdsPnr || "",
+        paxName: ii.paxName || "",
+        issueDate: ticket?.issueDate ? new Date(ticket.issueDate) : (ticket?.createdAt ? new Date(ticket.createdAt) : new Date()),
+        journeyDate: ticket?.journeyDate ? new Date(ticket.journeyDate) : undefined,
+        returnDate: ticket?.returnDate ? new Date(ticket.returnDate) : undefined,
+        airbusClass: ticket?.airbusClass || ""
+      },
+      paxEntries: itemPaxEntries,
+      flightEntries: itemFlightEntries,
       profit: ii.profit || 0
     }
   })
@@ -834,6 +879,7 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
         clientId: new Types.ObjectId(clientDoc._id),
         employeeId,
         agentId: general.agentId ? new Types.ObjectId(general.agentId) : undefined,
+        invoiceType: "non_commission",
         ...names,
         billing: {
           subtotal: invoiceItems.reduce((s: number, i: any) => s + parseNumber(i.ticketDetails.clientPrice), 0),
@@ -857,8 +903,30 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
       // 3. Create Child Records (Same as create logic)
       for (const item of invoiceItems) {
         const { ticketDetails, paxEntries, flightEntries } = item
+
+        // a. Create InvoiceTicket (Main Reference)
+        const ticketResult = await InvoiceTicket.create([{
+          invoiceId: invIdStr,
+          ticketNo: ticketDetails.ticketNo,
+          pnr: ticketDetails.pnr,
+          gdsPnr: ticketDetails.gdsPnr,
+          route: ticketDetails.route,
+          journeyDate: ticketDetails.journeyDate,
+          returnDate: ticketDetails.returnDate,
+          airline: ticketDetails.airline,
+          ticketType: ticketDetails.ticketType,
+          airbusClass: ticketDetails.airbusClass,
+          issueDate: ticketDetails.issueDate,
+          companyId: companyIdStr,
+          createdAt: now,
+          updatedAt: now
+        }], { session })
+        const ticketId = String(ticketResult[0]._id)
+
+        // b. Create InvoiceItem (Financial Row) - Linked to Ticket
         await InvoiceItem.create([{
           invoiceId: invIdStr,
+          ticketId,
           product: "Non-Commission Ticket",
           paxName: ticketDetails.paxName || "",
           description: `Ticket: ${ticketDetails.ticketNo} | Route: ${ticketDetails.route}`,
@@ -874,22 +942,11 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
           updatedAt: now
         }], { session })
 
-        await InvoiceTicket.create([{
-          invoiceId: invIdStr,
-          ticketNo: ticketDetails.ticketNo,
-          pnr: ticketDetails.pnr,
-          route: ticketDetails.route,
-          journeyDate: ticketDetails.journeyDate,
-          returnDate: ticketDetails.returnDate,
-          airline: ticketDetails.airline,
-          companyId: companyIdStr,
-          createdAt: now,
-          updatedAt: now
-        }], { session })
-
+        // c. Create InvoicePassports - Linked to Ticket
         if (paxEntries.length > 0) {
           await InvoicePassport.insertMany(paxEntries.map((p: any) => ({
             invoiceId: invIdStr,
+            ticketId,
             passportNo: p.passportId || "",
             name: p.name,
             paxType: p.paxType,
@@ -904,9 +961,11 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
           })), { session })
         }
 
+        // d. Create InvoiceTransports - Linked to Ticket
         if (flightEntries.length > 0) {
           await InvoiceTransport.insertMany(flightEntries.map((f: any) => ({
             invoiceId: invIdStr,
+            ticketId,
             transportType: `Flight: ${f.flightNo}`,
             referenceNo: f.airline,
             pickupPlace: f.from,
@@ -1142,6 +1201,7 @@ export async function createInvoice(body: any, companyId?: string) {
     agentId: agentId,
     companyId: companyId ? new Types.ObjectId(companyId) : undefined,
     ...names,
+    invoiceType: "standard",
     billing: { subtotal, totalCost, discount, serviceCharge, vatTax, netTotal, note, reference },
     showPrevDue,
     showDiscount,

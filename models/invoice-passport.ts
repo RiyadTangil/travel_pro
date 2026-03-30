@@ -10,6 +10,7 @@ const InvoicePassportSchema = new Schema({
   dateOfBirth: { type: String },
   dateOfIssue: { type: String },
   dateOfExpire: { type: String },
+  ticketId: { type: String, index: true }, // Linked to InvoiceTicket _id
   companyId: { type: String },
   passportId: { type: String },
   id: { type: String },

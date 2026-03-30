@@ -21,6 +21,7 @@ interface AgentSelectProps {
   className?: string
   autoFocus?: boolean
   preloaded?: AgentItem[]
+  disabled?: boolean
 }
 
 function formatLabel(a: AgentItem) {
@@ -28,7 +29,7 @@ function formatLabel(a: AgentItem) {
   return `${a.name}${phone}`
 }
 
-export default function AgentSelect({ value, onChange, onRequestAdd, placeholder = "Select Agent", className, autoFocus, preloaded }: AgentSelectProps) {
+export default function AgentSelect({ value, onChange, onRequestAdd, placeholder = "Select Agent", className, autoFocus, preloaded, disabled }: AgentSelectProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [items, setItems] = useState<AgentItem[]>([])
@@ -97,7 +98,14 @@ export default function AgentSelect({ value, onChange, onRequestAdd, placeholder
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" role="combobox" aria-expanded={open} className={`justify-between w-full ${className || ""}`} autoFocus={autoFocus}>
+        <Button 
+          variant="outline" 
+          role="combobox" 
+          aria-expanded={open} 
+          className={`justify-between w-full ${className || ""}`} 
+          autoFocus={autoFocus}
+          disabled={disabled}
+        >
           <span className="truncate text-left">
             {selected ? formatLabel(selected) : (placeholder || "Select Agent")}
           </span>

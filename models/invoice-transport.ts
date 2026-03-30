@@ -13,6 +13,7 @@ const InvoiceTransportSchema = new Schema({
   transportTypeId: { type: String },
   pickupDate: { type: String },
   dropoffDate: { type: String },
+  ticketId: { type: String, index: true }, // Linked to InvoiceTicket _id
   companyId: { type: String },
   id: { type: String },
   isDeleted: { type: Boolean, default: false, index: true },

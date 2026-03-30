@@ -29,6 +29,7 @@ export interface PaxEntry {
 interface NonCommissionPaxInformationProps {
   initialEntries?: PaxEntry[]
   onChange: (entries: PaxEntry[]) => void
+  passportsPreloaded?: any[]
   errors: Record<string, string>
 }
 
@@ -40,6 +41,7 @@ const PaxRow = memo(function PaxRow({
   onUpdateMultiple,
   onRemove, 
   onAdd,
+  passportsPreloaded,
   errors 
 }: { 
   entry: PaxEntry
@@ -49,6 +51,7 @@ const PaxRow = memo(function PaxRow({
   onUpdateMultiple: (id: string, updates: Partial<PaxEntry>) => void
   onRemove: (id: string) => void
   onAdd: () => void
+  passportsPreloaded?: any[]
   errors: Record<string, string>
 }) {
   return (
@@ -58,6 +61,7 @@ const PaxRow = memo(function PaxRow({
           <Label className="text-[11px] font-bold text-gray-500">Passport No</Label>
           <PassportSelect 
             value={entry.passportId}
+            preloaded={passportsPreloaded}
             onChange={(id, sel) => {
               if (sel) {
                 const parseDate = (d?: string) => {
@@ -83,7 +87,7 @@ const PaxRow = memo(function PaxRow({
                   name: "",
                   contactNo: "",
                   email: "",
-                  paxType: "Adult",
+                  paxType: "",
                   dob: undefined,
                   dateOfIssue: undefined,
                   dateOfExpire: undefined
@@ -192,12 +196,13 @@ const PaxRow = memo(function PaxRow({
 export const NonCommissionPaxInformation = memo(function NonCommissionPaxInformation({ 
   initialEntries, 
   onChange,
+  passportsPreloaded,
   errors 
 }: NonCommissionPaxInformationProps) {
   const [paxEntries, setPaxEntries] = useState<PaxEntry[]>(
     initialEntries && initialEntries.length > 0 
       ? initialEntries 
-      : [{ id: "1", passportId: "", name: "", paxType: "Adult", contactNo: "", email: "" }]
+      : [{ id: "", passportId: "", name: "", paxType: "", contactNo: "", email: "" }]
   )
 
   const addPaxEntry = useCallback(() => {
@@ -220,8 +225,7 @@ export const NonCommissionPaxInformation = memo(function NonCommissionPaxInforma
   }, [])
 
   useEffect(() => {
-    const handle = setTimeout(() => { onChange(paxEntries) }, 150)
-    return () => clearTimeout(handle)
+    onChange(paxEntries)
   }, [paxEntries, onChange])
 
   return (
@@ -241,6 +245,7 @@ export const NonCommissionPaxInformation = memo(function NonCommissionPaxInforma
               onUpdateMultiple={updatePaxEntryMultiple}
               onRemove={removePaxEntry}
               onAdd={addPaxEntry}
+              passportsPreloaded={passportsPreloaded}
               errors={errors}
             />
             {idx < paxEntries.length - 1 && <Separator className="bg-gray-100" />}

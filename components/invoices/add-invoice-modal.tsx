@@ -1,6 +1,9 @@
 "use client"
 
 import { useEffect, useState, useMemo, useCallback, startTransition, memo } from "react"
+import { useForm, Controller } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import * as z from "zod"
 import {
   Dialog,
   DialogContent,
@@ -69,30 +72,51 @@ export const toYmd = (d: Date): string => {
   const da = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${da}`
 }
+
+const formSchema = z.object({
+  clientId: z.string().min(1, "Client is required"),
+  employeeId: z.string().min(1, "Sales By is required"),
+  invoiceNo: z.string().min(1, "Invoice No is required"),
+  salesDate: z.date({ required_error: "Sales Date is required" }),
+  dueDate: z.date().optional(),
+  agentId: z.string().optional(),
+})
+
+type FormData = z.infer<typeof formSchema>
+
 export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoice, lookups }: AddInvoiceModalProps) {
   // Parse 'YYYY-MM-DD' as local date to avoid -1 day shifts
   const { data: session } = useSession()
   const { toast } = useToast()
-  const [clientId, setClientId] = useState<string | undefined>()
-  const [employeeId, setEmployeeId] = useState<string | undefined>()
-  const [employeeName, setEmployeeName] = useState<string>("")
-  const [agentId, setAgentId] = useState<string | undefined>()
-  const [salesDate, setSalesDate] = useState<Date | undefined>(undefined)
-  const [dueDate, setDueDate] = useState<Date | undefined>(undefined)
-  const [openAddClient, setOpenAddClient] = useState(false)
-  const [openAddEmployee, setOpenAddEmployee] = useState(false)
-  const [openAddAgent, setOpenAddAgent] = useState(false)
-  const [openAddVendor, setOpenAddVendor] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const [formData, setFormData] = useState({
-    passport: [],
-    ticket: [],
-    hotel: [],
-    transport: [],
-    billing: [],
-    moneyReceipt: {}
+
+  const {
+    control,
+    handleSubmit,
+    reset,
+    setValue,
+    watch,
+    formState: { errors: formErrors, isSubmitting: submitting },
+  } = useForm<FormData>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      clientId: "",
+      employeeId: "",
+      invoiceNo: "",
+      salesDate: undefined,
+      dueDate: undefined,
+      agentId: "",
+    },
   })
-  const [billingData, setBillingData] = useState<{ items: any[]; totals: { subtotal: number; totalCost: number; discount: number; serviceCharge: number; vatTax: number; netTotal: number; agentCommission?: number; invoiceDue?: number; presentBalance?: number; note?: string; reference?: string } } | null>(null)
+
+  // Watch values for legacy compat or complex logic
+  const clientId = watch("clientId")
+  const employeeId = watch("employeeId")
+  const agentId = watch("agentId")
+  const salesDate = watch("salesDate")
+  const dueDate = watch("dueDate")
+  const invoiceNo = watch("invoiceNo")
+
+
   const [passportData, setPassportData] = useState<any[]>([])
   const [ticketData, setTicketData] = useState<any[]>([])
   const [hotelData, setHotelData] = useState<any[]>([])
@@ -101,57 +125,31 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
   const [loadingInitial, setLoadingInitial] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
-  const validateForm = () => {
-    const newErrors: Record<string, string> = {}
-    if (!clientId) newErrors.clientId = "Client is required"
-    if (!employeeId) newErrors.employeeId = "Sales By is required"
-    if (!invoiceNo) newErrors.invoiceNo = "Invoice No is required"
-    if (!salesDate) newErrors.salesDate = "Sales Date is required"
-
-    // Billing validation
-    const billingItems = billingData?.items || []
-    if (billingItems.length === 0) {
-      newErrors.billing = "At least one billing item is required"
-    } else {
-      billingItems.forEach((item: any, index: number) => {
-        if (!item.product) newErrors[`billing_${index}_product`] = "Product required"
-        if (Number(item.unitPrice) <= 0) newErrors[`billing_${index}_unitPrice`] = "Price required"
-        if (Number(item.costPrice) > 0 && !(item.vendor || "").trim()) newErrors[`billing_${index}_vendor`] = "Vendor required"
-      })
-    }
-
-    // Money Receipt validation (only if payment method is selected)
-    if (moneyReceiptData?.paymentMethod) {
-      if (!moneyReceiptData.accountId) newErrors.accountId = "Account required"
-      if (!moneyReceiptData.amount || moneyReceiptData.amount <= 0) newErrors.amount = "Amount required"
-      if (!moneyReceiptData.paymentDate) newErrors.paymentDate = "Date required"
-      if (moneyReceiptData.paymentMethod === "Mobile banking" && !moneyReceiptData.transNo) newErrors.transNo = "Trans No required"
-    }
-
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
   const [initialBillingItems, setInitialBillingItems] = useState<any[] | undefined>(undefined)
   const [initialBillingTotals, setInitialBillingTotals] = useState<any | undefined>(undefined)
   const [passportsInitial, setPassportsInitial] = useState<any[] | undefined>(undefined)
   const [ticketsInitial, setTicketsInitial] = useState<any[] | undefined>(undefined)
   const [hotelsInitial, setHotelsInitial] = useState<any[] | undefined>(undefined)
   const [transportsInitial, setTransportsInitial] = useState<any[] | undefined>(undefined)
-  const [invoiceNo, setInvoiceNo] = useState<string>("")
   // Immediate preloaded lists from invoice GET to avoid extra calls
   const [vendorsImmediate, setVendorsImmediate] = useState<Array<{ id: string; name: string; email?: string; mobile?: string }>>([])
   const [employeesImmediate, setEmployeesImmediate] = useState<Array<{ id: string; name: string }>>([])
+  const [clientsImmediate, setClientsImmediate] = useState<Array<{ id: string; name: string; email?: string; phone?: string }>>([])
+  const [agentsImmediate, setAgentsImmediate] = useState<Array<{ id: string; name: string; email?: string; mobile?: string }>>([])
 
   // Memoized lookup-derived props to avoid re-creating arrays every render
-  const clientsPreloaded = useMemo(() => (
-    lookups?.clients?.map(c => ({ id: c.id, name: c.name, uniqueId: c.uniqueId, email: c.email, phone: c.phone }))
-  ), [lookups?.clients])
-  const employeesPreloaded = useMemo(() => (
-    lookups?.employees?.map(e => ({ id: e.id, name: e.name }))
-  ), [lookups?.employees])
-  const agentsPreloaded = useMemo(() => (
-    lookups?.agents?.map(a => ({ id: a.id, name: a.name }))
-  ), [lookups?.agents])
+  const clientsPreloadedAll = useMemo(() => (
+    (clientsImmediate && clientsImmediate.length) ? clientsImmediate : (lookups?.clients?.map(c => ({ id: c.id, name: c.name, uniqueId: c.uniqueId, email: c.email, phone: c.phone })) || [])
+  ), [clientsImmediate, lookups?.clients])
+
+  const employeesPreloadedAll = useMemo(() => (
+    (employeesImmediate && employeesImmediate.length) ? employeesImmediate : (lookups?.employees?.map(e => ({ id: e.id, name: e.name })) || [])
+  ), [employeesImmediate, lookups?.employees])
+
+  const agentsPreloadedAll = useMemo(() => (
+    (agentsImmediate && agentsImmediate.length) ? agentsImmediate : (lookups?.agents?.map(a => ({ id: a.id, name: a.name })) || [])
+  ), [agentsImmediate, lookups?.agents])
+
   const airlineOptionsExternalMemo = useMemo(() => (
     lookups?.airlines?.map(a => a.name)
   ), [lookups?.airlines])
@@ -167,9 +165,7 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
   const vendorsMemo = useMemo(() => (
     lookups?.vendors
   ), [lookups?.vendors])
-  const employeesPreloadedAll = useMemo(() => (
-    (employeesImmediate && employeesImmediate.length) ? employeesImmediate : (employeesPreloaded || [])
-  ), [employeesImmediate, employeesPreloaded])
+
   const vendorsPreloadedAll = useMemo(() => (
     (vendorsImmediate && vendorsImmediate.length) ? vendorsImmediate : (vendorsMemo || [])
   ), [vendorsImmediate, vendorsMemo])
@@ -180,6 +176,21 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
   const passportsPreloadedMemo = useMemo(() => (
     lookups?.passports?.map(p => ({ id: p.id, passportNo: p.passportNo, name: p.name, mobile: p.mobile, email: p.email, dob: p.dob, dateOfIssue: p.dateOfIssue, dateOfExpire: p.dateOfExpire }))
   ), [lookups?.passports])
+
+  const [employeeName, setEmployeeName] = useState<string>("")
+  const [openAddClient, setOpenAddClient] = useState(false)
+  const [openAddEmployee, setOpenAddEmployee] = useState(false)
+  const [openAddAgent, setOpenAddAgent] = useState(false)
+  const [openAddVendor, setOpenAddVendor] = useState(false)
+  const [billingData, setBillingData] = useState<{ items: any[]; totals: { subtotal: number; totalCost: number; discount: number; serviceCharge: number; vatTax: number; netTotal: number; agentCommission?: number; invoiceDue?: number; presentBalance?: number; note?: string; reference?: string } } | null>(null)
+
+  // Sync employeeName when employeeId changes
+  useEffect(() => {
+    if (employeeId && employeesPreloadedAll) {
+      const emp = employeesPreloadedAll.find(e => e.id === employeeId)
+      if (emp) setEmployeeName(emp.name)
+    }
+  }, [employeeId, employeesPreloadedAll])
 
   // Stable handlers to reduce child re-renders
   const onPassportChange = useCallback((p: any[]) => { startTransition(() => setPassportData(p)) }, [])
@@ -221,12 +232,13 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
           console.log("inv.employeeId =>", inv.employeeId, inv.employeeName)
           console.log("inv =>", inv)
           if (!inv || !active) return
-          setClientId(inv.clientId)
-          setEmployeeId(inv.employeeId)
+          setValue("clientId", inv.clientId)
+          setValue("employeeId", inv.employeeId)
           setEmployeeName(inv.salesByName || "")
-          setAgentId(inv.agentId)
-          setSalesDate(inv.salesDate ? parseYmdLocal(inv.salesDate) : undefined)
-          setDueDate(inv.dueDate ? parseYmdLocal(inv.dueDate) : undefined)
+          setValue("agentId", inv.agentId || "")
+          if (inv.salesDate) setValue("salesDate", parseYmdLocal(inv.salesDate)!)
+          if (inv.dueDate) setValue("dueDate", parseYmdLocal(inv.dueDate)!)
+          
           setInitialBillingTotals(inv.billing || {})
           setInitialBillingItems((inv.billing?.items || []).map((i: any, idx: number) => ({ id: i.id || String(Date.now() + idx), ...i, vendor: i.vendor ?? i.vendorId ?? "" })))
           setPassportsInitial(inv.passports || [])
@@ -237,8 +249,12 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
           if (Array.isArray(data.vendors)) setVendorsImmediate(data.vendors)
           if (Array.isArray(data.employees)) setEmployeesImmediate(data.employees.map((e: any) => ({ id: e.id, name: e.name })))
           else if (inv.employeeId && (inv.salesByName || "").trim()) setEmployeesImmediate([{ id: inv.employeeId, name: inv.salesByName }])
+          
+          if (Array.isArray(data.clients)) setClientsImmediate(data.clients)
+          if (Array.isArray(data.agents)) setAgentsImmediate(data.agents)
+          
           // Set invoice number for edit mode
-          setInvoiceNo(inv.invoiceNo || initialInvoice?.invoiceNo || "")
+          setValue("invoiceNo", inv.invoiceNo || initialInvoice?.invoiceNo || "")
         } catch (e) {
           // ignore
         } finally {
@@ -252,7 +268,7 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
   useEffect(() => {
     if (!employeeId && employeeName && lookups?.employees && lookups.employees.length) {
       const match = lookups.employees.find(e => (e.name || '').trim().toLowerCase() === employeeName.trim().toLowerCase())
-      if (match) setEmployeeId(match.id)
+      if (match) setValue("employeeId", match.id)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employeeName, lookups?.employees])
@@ -260,15 +276,15 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
   // Auto-fetch next invoice number when opening for create
   useEffect(() => {
     if (!isOpen) return
-    if (initialInvoice?.invoiceNo) { setInvoiceNo(initialInvoice.invoiceNo); return }
+    if (initialInvoice?.invoiceNo) { setValue("invoiceNo", initialInvoice.invoiceNo); return }
     let active = true
     ;(async () => {
       try {
-        const res = await fetch('/api/invoices/next-no')
+        const res = await fetch('/api/invoices/next-no?type=standard')
         if (!res.ok) return
         const data = await res.json()
         if (!active) return
-        setInvoiceNo(data.nextInvoiceNo || '')
+        setValue("invoiceNo", data.nextInvoiceNo || '')
       } catch {}
     })()
     return () => { active = false }
@@ -278,12 +294,15 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
   useEffect(() => {
     if (!isOpen) return
     if (initialInvoice?.id) return
-    setClientId(undefined)
-    setEmployeeId(undefined)
+    reset({
+      clientId: "",
+      employeeId: "",
+      agentId: "",
+      invoiceNo: "",
+      salesDate: undefined,
+      dueDate: undefined,
+    })
     setEmployeeName("")
-    setAgentId(undefined)
-    setSalesDate(undefined)
-    setDueDate(undefined)
     setInitialBillingTotals(undefined)
     setInitialBillingItems(undefined)
     setPassportsInitial(undefined)
@@ -301,119 +320,115 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
 
  
 
-  const handleCreate = () => {
-    const invoiceNoInput = (document.getElementById("general[invoiceNo]") as HTMLInputElement | null)?.value?.trim()
-    
-    if (!validateForm()) {
-      toast({
-        title: "Validation Error",
-        description: "Please fill in all mandatory fields correctly.",
-        variant: "destructive",
-      })
+  const handleCreate = handleSubmit(async (data: FormData) => {
+    // Billing validation
+    const billingItems = billingData?.items || []
+    if (billingItems.length === 0) {
+      setErrors({ billing: "At least one billing item is required" })
+      toast({ title: "Validation Error", description: "At least one billing item is required", variant: "destructive" })
       return
     }
 
-    const billingItems = billingData?.items || []
+    // Money Receipt validation (only if payment method is selected)
+    if (moneyReceiptData?.paymentMethod) {
+      if (!moneyReceiptData.accountId || !moneyReceiptData.amount || moneyReceiptData.amount <= 0 || !moneyReceiptData.paymentDate) {
+        toast({ title: "Validation Error", description: "Please fill in all money receipt fields.", variant: "destructive" })
+        return
+      }
+    }
 
-    setSubmitting(true)
-      ; (async () => {
-        // Passport info is not mandatory according to user requirement
-        // But we still pass it if present
-        try {
-          const payload = {
-            general: {
-              invoiceNo: invoiceNoInput,
-              client: clientId,
-              salesBy: employeeId,
-              salesByName: employeeName,
-              agent: agentId,
-              salesDate: toYmd(salesDate),
-              dueDate: dueDate ? toYmd(dueDate) : "",
-            },
-            billing: {
-              items: billingItems,
-              subtotal: billingData?.totals?.subtotal || 0,
-              totalCost: billingData?.totals?.totalCost || 0,
-              discount: billingData?.totals?.discount || 0,
-              serviceCharge: billingData?.totals?.serviceCharge || 0,
-              vatTax: billingData?.totals?.vatTax || 0,
-              netTotal: billingData?.totals?.netTotal || 0,
-              note: billingData?.totals?.note || "",
-              reference: billingData?.totals?.reference || "",
-            },
-            passport: passportData,
-            ticket: ticketData,
-            hotel: hotelData,
-            transport: transportData,
-            moneyReceipt: moneyReceiptData,
-          }
-          const url = initialInvoice?.id ? `/api/invoices/${initialInvoice.id}` : `/api/invoices`
-          const method = initialInvoice?.id ? "PUT" : "POST"
-          const res = await fetch(url, {
-            method, headers: { "Content-Type": "application/json" }, body: JSON.stringify({
-              ...payload,
-              // send synonyms for compatibility across POST/PUT handlers
-              passports: passportData,
-              tickets: ticketData,
-              hotels: hotelData,
-              transports: transportData,
-            })
-          })
-          const data = await res.json()
-          if (!res.ok) {
-            if (data?.error === "credit_limit_exceeded") {
-              const desc = data?.message || (typeof data?.creditLimit !== 'undefined' ? `Limit: ${data.creditLimit}, Present: ${data.presentBalance}, Attempt: ${data.attemptAmount}` : undefined)
-              toast({
-                title: "Credit limit exceeded",
-                description: desc,
-                variant: "destructive",
-              })
-              return
-            }
-            toast({
-              title: initialInvoice?.id ? "Failed to update invoice" : "Failed to create invoice",
-              description: data?.message || data?.error || "Unknown error",
-              variant: "destructive",
-            })
-            return
-          }
-          if (method === "POST") {
-            const created = data.created
-            const recAmt = Number(created.invclientpayment_amount || 0)
-            const net = Number(created.net_total || 0)
-            const newInvoice = {
-              id: data.id,
-              invoiceNo: created.invoice_no,
-              clientName: created.client_name || "",
-              clientPhone: created.mobile || "",
-              salesDate: created.invoice_sales_date?.slice(0, 10) || new Date().toISOString().slice(0, 10),
-              dueDate: created.invoice_due_date || "",
-              salesPrice: net,
-              totalCost: Number(created.invoice_total_vendor_price || 0),
-              receivedAmount: recAmt,
-              dueAmount: Math.max(0, net - recAmt),
-              mrNo: created.money_receipt_num || "",
-              passportNo: created.passport_no || "",
-              salesBy: created.sales_by || "",
-              agent: "",
-              status: recAmt >= net ? 'paid' as const : (recAmt > 0 ? 'partial' as const : 'due' as const),
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString()
-            }
-            onInvoiceAdded?.(newInvoice)
-          }
-          onClose()
-        } catch (e: any) {
+    try {
+      const payload = {
+        general: {
+          invoiceNo: data.invoiceNo,
+          client: data.clientId,
+          salesBy: data.employeeId,
+          salesByName: employeeName,
+          agent: data.agentId,
+          salesDate: toYmd(data.salesDate),
+          dueDate: data.dueDate ? toYmd(data.dueDate) : "",
+        },
+        billing: {
+          items: billingItems,
+          subtotal: billingData?.totals?.subtotal || 0,
+          totalCost: billingData?.totals?.totalCost || 0,
+          discount: billingData?.totals?.discount || 0,
+          serviceCharge: billingData?.totals?.serviceCharge || 0,
+          vatTax: billingData?.totals?.vatTax || 0,
+          netTotal: billingData?.totals?.netTotal || 0,
+          note: billingData?.totals?.note || "",
+          reference: billingData?.totals?.reference || "",
+        },
+        passport: passportData,
+        ticket: ticketData,
+        hotel: hotelData,
+        transport: transportData,
+        moneyReceipt: moneyReceiptData,
+      }
+      const url = initialInvoice?.id ? `/api/invoices/${initialInvoice.id}` : `/api/invoices`
+      const method = initialInvoice?.id ? "PUT" : "POST"
+      const res = await fetch(url, {
+        method, headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+          ...payload,
+          // send synonyms for compatibility across POST/PUT handlers
+          passports: passportData,
+          tickets: ticketData,
+          hotels: hotelData,
+          transports: transportData,
+        })
+      })
+      const resData = await res.json()
+      if (!res.ok) {
+        if (resData?.error === "credit_limit_exceeded") {
+          const desc = resData?.message || (typeof resData?.creditLimit !== 'undefined' ? `Limit: ${resData.creditLimit}, Present: ${resData.presentBalance}, Attempt: ${resData.attemptAmount}` : undefined)
           toast({
-            title: initialInvoice?.id ? "Update failed" : "Create failed",
-            description: e?.message || "Unexpected error",
+            title: "Credit limit exceeded",
+            description: desc,
             variant: "destructive",
           })
-        } finally {
-          setSubmitting(false)
+          return
         }
-      })()
-  }
+        toast({
+          title: initialInvoice?.id ? "Failed to update invoice" : "Failed to create invoice",
+          description: resData?.message || resData?.error || "Unknown error",
+          variant: "destructive",
+        })
+        return
+      }
+      if (method === "POST") {
+        const created = resData.created
+        const recAmt = Number(created.invclientpayment_amount || 0)
+        const net = Number(created.net_total || 0)
+        const newInvoice = {
+          id: resData.id,
+          invoiceNo: created.invoice_no,
+          clientName: created.client_name || "",
+          clientPhone: created.mobile || "",
+          salesDate: created.invoice_sales_date?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+          dueDate: created.invoice_due_date || "",
+          salesPrice: net,
+          totalCost: Number(created.invoice_total_vendor_price || 0),
+          receivedAmount: recAmt,
+          dueAmount: Math.max(0, net - recAmt),
+          mrNo: created.money_receipt_num || "",
+          passportNo: created.passport_no || "",
+          salesBy: created.sales_by || "",
+          agent: "",
+          status: recAmt >= net ? 'paid' as const : (recAmt > 0 ? 'partial' as const : 'due' as const),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+        onInvoiceAdded?.(newInvoice)
+      }
+      onClose()
+    } catch (e: any) {
+      toast({
+        title: initialInvoice?.id ? "Update failed" : "Create failed",
+        description: e?.message || "Unexpected error",
+        variant: "destructive",
+      })
+    }
+  })
 
   const handleCreatePreview = () => {
     // Use the same API call as Create, but keep current invoiceNo and dates
@@ -425,7 +440,9 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
       <Dialog open={isOpen} onOpenChange={onClose}>
         <DialogContent aria-describedby="add-invoice-desc" className="max-w-[95vw] lg:max-w-[90%] h-[85vh] p-0 flex flex-col overflow-hidden">
           <DialogHeader className="px-6 py-4 border-b">
-            <DialogTitle className="text-xl font-semibold">Add Invoice</DialogTitle>
+            <DialogTitle className="text-xl font-semibold">
+              {initialInvoice?.id ? "Edit Invoice" : "Add Invoice"}
+            </DialogTitle>
             <DialogDescription id="add-invoice-desc" className="sr-only">
               Fill out invoice details including client, sales, tickets, transport, billing, and payment information.
             </DialogDescription>
@@ -442,71 +459,100 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 lg:[grid-template-columns:repeat(6,minmax(0,1fr))]">
                     <div className="space-y-2">
                       <Label htmlFor="general[client]">Select Client <span className="text-red-500">*</span></Label>
-                      <ClientSelect
-                        value={clientId}
-                        onChange={(id) => {
-                          setClientId(id)
-                          if (id) setErrors(prev => ({ ...prev, clientId: "" }))
-                        }}
-                        onRequestAdd={onRequestAddClientCb}
-                        placeholder="Select client"
-                        className={cn(errors.clientId && "border-red-500")}
+                      <Controller
+                        name="clientId"
+                        control={control}
+                        render={({ field }) => (
+                          <ClientSelect
+                            value={field.value}
+                            preloaded={clientsPreloadedAll}
+                            onChange={(id) => field.onChange(id)}
+                            onRequestAdd={onRequestAddClientCb}
+                            placeholder="Select client"
+                            className={cn(formErrors.clientId && "border-red-500")}
+                          />
+                        )}
                       />
-                      {errors.clientId && <p className="text-xs text-red-500 font-medium">{errors.clientId}</p>}
+                      {formErrors.clientId && <p className="text-xs text-red-500 font-medium">{formErrors.clientId.message}</p>}
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="general[salesBy]">Sales By <span className="text-red-500">*</span></Label>
-                      <EmployeeSelect
-                        value={employeeId}
-                        onChange={(id) => {
-                          setEmployeeId(id)
-                          if (id) setErrors(prev => ({ ...prev, employeeId: "" }))
-                        }}
-                        onRequestAdd={onRequestAddEmployeeCb}
-                        placeholder="Select staff"
-                        className={cn(errors.employeeId && "border-red-500")}
+                      <Controller
+                        name="employeeId"
+                        control={control}
+                        render={({ field }) => (
+                          <EmployeeSelect
+                            value={field.value}
+                            preloaded={employeesPreloadedAll}
+                            onChange={(id) => field.onChange(id)}
+                            onRequestAdd={onRequestAddEmployeeCb}
+                            placeholder="Select staff"
+                            className={cn(formErrors.employeeId && "border-red-500")}
+                          />
+                        )}
                       />
-                      {errors.employeeId && <p className="text-xs text-red-500 font-medium">{errors.employeeId}</p>}
+                      {formErrors.employeeId && <p className="text-xs text-red-500 font-medium">{formErrors.employeeId.message}</p>}
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="general[invoiceNo]">Invoice No<span className="text-red-500"> *</span></Label>
-                      <Input 
-                        id="general[invoiceNo]" 
-                        value={invoiceNo} 
-                        readOnly 
-                        placeholder="Auto-generated" 
-                        className={cn(errors.invoiceNo && "border-red-500 bg-red-50")}
+                      <Controller
+                        name="invoiceNo"
+                        control={control}
+                        render={({ field }) => (
+                          <Input 
+                            {...field}
+                            readOnly 
+                            placeholder="Auto-generated" 
+                            className={cn(formErrors.invoiceNo && "border-red-500 bg-red-50")}
+                          />
+                        )}
                       />
-                      {errors.invoiceNo && <p className="text-xs text-red-500 font-medium">{errors.invoiceNo}</p>}
+                      {formErrors.invoiceNo && <p className="text-xs text-red-500 font-medium">{formErrors.invoiceNo.message}</p>}
                     </div>
 
                     <div className="space-y-2">
                       <Label>Sales Date <span className="text-red-500">*</span></Label>
-                      <DateInput 
-                        value={salesDate} 
-                        onChange={(d) => {
-                          setSalesDate(d)
-                          if (d) setErrors(prev => ({ ...prev, salesDate: "" }))
-                        }} 
-                        className={cn(errors.salesDate && "border-red-500")}
+                      <Controller
+                        name="salesDate"
+                        control={control}
+                        render={({ field }) => (
+                          <DateInput 
+                            value={field.value} 
+                            onChange={field.onChange} 
+                            className={cn(formErrors.salesDate && "border-red-500")}
+                          />
+                        )}
                       />
-                      {errors.salesDate && <p className="text-xs text-red-500 font-medium">{errors.salesDate}</p>}
+                      {formErrors.salesDate && <p className="text-xs text-red-500 font-medium">{formErrors.salesDate.message}</p>}
                     </div>
 
                     <div className="space-y-2">
                       <Label>Due Date</Label>
-                      <DateInput value={dueDate} onChange={setDueDate} />
+                      <Controller
+                        name="dueDate"
+                        control={control}
+                        render={({ field }) => (
+                          <DateInput value={field.value} onChange={field.onChange} />
+                        )}
+                      />
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="general[agent]">Select Agent</Label>
-                      <AgentSelect
-                        value={agentId}
-                        onChange={(id) => setAgentId(id)}
-                        onRequestAdd={onRequestAddAgentCb}
-                        placeholder="Select agent"
+                      <Controller
+                        name="agentId"
+                        control={control}
+                        render={({ field }) => (
+                          <AgentSelect
+                            value={field.value}
+                            preloaded={agentsPreloadedAll}
+                            onChange={(id) => field.onChange(id)}
+                            onRequestAdd={onRequestAddAgentCb}
+                            placeholder="Select agent"
+                          />
+                        )}
                       />
                     </div>
                   </div>
@@ -514,7 +560,12 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
               </Card>
 
               {/* Passport Information */}
-              <MemoPassportInformation initialEntries={passportsInitial} onChange={onPassportChange} errors={errors} />
+              <MemoPassportInformation 
+                initialEntries={passportsInitial} 
+                onChange={onPassportChange} 
+                passportsPreloaded={passportsPreloadedMemo}
+                errors={errors} 
+              />
 
               <Separator />
 
@@ -560,11 +611,13 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
               Cancel
             </Button>
             <Button onClick={handleCreate} disabled={submitting} className="bg-blue-600 hover:bg-blue-700">
-              {submitting ? "Creating…" : "Create"}
+              {submitting ? (initialInvoice?.id ? "Updating…" : "Creating…") : (initialInvoice?.id ? "Update" : "Create")}
             </Button>
-            <Button onClick={handleCreatePreview} disabled={submitting} variant="secondary" className="bg-blue-500 hover:bg-blue-600">
-              {submitting ? "Creating…" : "Create & Preview"}
-            </Button>
+            {!initialInvoice?.id && (
+              <Button onClick={handleCreatePreview} disabled={submitting} variant="secondary" className="bg-blue-500 hover:bg-blue-600">
+                {submitting ? "Creating…" : "Create & Preview"}
+              </Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -575,23 +628,23 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
         onOpenChange={(v) => setOpenAddClient(v)} 
         onSubmit={async (payload) => { 
           try {
+            const companyId = (session?.user as any)?.companyId
             const res = await fetch('/api/clients-manager', {
               method: 'POST',
               headers: { 
                 'Content-Type': 'application/json',
-                ...(session?.user?.companyId ? { 'x-company-id': String(session.user.companyId) } : {})
+                ...(companyId ? { 'x-company-id': String(companyId) } : {})
               },
               body: JSON.stringify({
                 ...payload,
-                ...(session?.user?.companyId ? { companyId: String(session.user.companyId) } : {})
+                ...(companyId ? { companyId: String(companyId) } : {})
               })
             })
             const data = await res.json()
             if (!res.ok) throw new Error(data.message || 'Failed to create client')
             
             if (data.client?.id) {
-              setClientId(data.client.id)
-              setErrors(prev => ({ ...prev, clientId: "" }))
+              setValue("clientId", data.client.id)
               toast({ title: "Success", description: "Client created successfully" })
             }
             setOpenAddClient(false)
@@ -614,9 +667,8 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
             if (!res.ok) throw new Error(data.message || 'Failed to create employee')
             
             if (data.id) {
-              setEmployeeId(data.id)
+              setValue("employeeId", data.id)
               setEmployeeName(payload.name)
-              setErrors(prev => ({ ...prev, employeeId: "" }))
               toast({ title: "Success", description: "Employee created successfully" })
             }
             setOpenAddEmployee(false)
@@ -639,7 +691,7 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
             if (!res.ok) throw new Error(data.message || 'Failed to create agent')
             
             if (data.id) {
-              setAgentId(data.id)
+              setValue("agentId", data.id)
               toast({ title: "Success", description: "Agent created successfully" })
             }
             setOpenAddAgent(false)
@@ -652,10 +704,11 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
         open={openAddVendor}
         onOpenChange={(v) => setOpenAddVendor(v)}
         onSubmit={async (v) => {
+          const companyId = (session?.user as any)?.companyId ?? null
           await fetch(`/api/vendors`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...v, companyId: session?.user?.companyId ?? null })
+            body: JSON.stringify({ ...v, companyId })
           })
           setOpenAddVendor(false)
         }}

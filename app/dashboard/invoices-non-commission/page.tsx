@@ -77,10 +77,12 @@ export default function NonCommissionInvoicesPage() {
     setPagination(prev => ({ ...prev, page: newPage }))
   }
 
-  const handleEdit = (invoice: any) => {
-    setEditInvoiceId(invoice.id)
+  const handleEdit = useCallback((invoice: any) => {
+    const id = String(invoice?.id || invoice?._id || "").trim()
+    if (!id) return
+    setEditInvoiceId(id)
     setIsModalOpen(true)
-  }
+  }, [])
 
   const handleCreateNew = () => {
     setEditInvoiceId(null)
@@ -175,7 +177,7 @@ export default function NonCommissionInvoicesPage() {
 
         <AddNonCommissionModal 
           isOpen={isModalOpen} 
-          onClose={() => setIsModalOpen(false)} 
+          onClose={() => { setIsModalOpen(false); setEditInvoiceId(null) }} 
           onInvoiceAdded={() => fetchInvoices()}
           initialInvoiceId={editInvoiceId}
         />

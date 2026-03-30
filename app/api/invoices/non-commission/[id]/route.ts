@@ -13,7 +13,8 @@ export async function GET(
     const companyId = session?.user?.companyId
     if (!companyId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const result = await getNonCommissionInvoiceById(params.id, String(companyId))
+    const { id } = await (params as any)
+    const result = await getNonCommissionInvoiceById(String(id || "").trim(), String(companyId))
     return NextResponse.json(result)
   } catch (error: any) {
     const status = error instanceof AppError ? error.status : 500
@@ -30,8 +31,9 @@ export async function PUT(
     const companyId = session?.user?.companyId
     if (!companyId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+    const { id } = await (params as any)
     const body = await request.json()
-    const result = await updateNonCommissionInvoice(params.id, body, String(companyId))
+    const result = await updateNonCommissionInvoice(String(id || "").trim(), body, String(companyId))
     return NextResponse.json(result)
   } catch (error: any) {
     const status = error instanceof AppError ? error.status : 500

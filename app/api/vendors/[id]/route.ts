@@ -4,7 +4,8 @@ import { ObjectId } from "mongodb"
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
-    const { id } = params
+    
+    const { id } =  await (params as any)
     if (!ObjectId.isValid(id)) return NextResponse.json({ error: "Invalid vendor ID" }, { status: 400 })
 
     const client = await clientPromise

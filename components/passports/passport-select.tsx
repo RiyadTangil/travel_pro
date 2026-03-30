@@ -40,7 +40,7 @@ export default function PassportSelect({ value, onChange, onRequestAdd, placehol
   const [items, setItems] = useState<PassportItem[]>(preloaded || [])
   const [search, setSearch] = useState("")
 
-  const selected = useMemo(() => items.find(i => i.id === value), [items, value])
+  const selected = useMemo(() => items.find(i => i.id === value || i.passportNo === value), [items, value])
 
   useEffect(() => {
     if (!open) return
@@ -95,7 +95,7 @@ export default function PassportSelect({ value, onChange, onRequestAdd, placehol
       ; (async () => {
         try {
           // If preloaded contains this value, add it locally and skip network
-          const preload = preloaded?.find(p => p.id === value)
+          const preload = preloaded?.find(p => p.id === value || p.passportNo === value)
           if (preload) {
             if (isMounted) setItems(prev => {
               if (prev.some(pp => pp.id === preload.id)) return prev

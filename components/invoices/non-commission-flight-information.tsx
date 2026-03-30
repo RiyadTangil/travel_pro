@@ -193,8 +193,7 @@ export const NonCommissionFlightInformation = memo(function NonCommissionFlightI
   }, [])
 
   useEffect(() => {
-    const handle = setTimeout(() => { onChange(flightEntries) }, 150)
-    return () => clearTimeout(handle)
+    onChange(flightEntries)
   }, [flightEntries, onChange])
 
   return (
