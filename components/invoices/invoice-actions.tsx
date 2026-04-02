@@ -12,29 +12,26 @@ interface InvoiceActionsProps {
   onMoneyReceipt?: (invoice: Invoice) => void
 }
 
-export function InvoiceActions({ status, invoice, onView, onEdit, onDelete, onMoneyReceipt }: InvoiceActionsProps) {
+export function InvoiceActions({ status, invoice, onView, onEdit, onDelete, onMoneyReceipt }: InvoiceActionsProps & { status: string }) {
   return (
-    <div className="flex items-center gap-2">
-      <Button variant="secondary" size="sm" onClick={() => onView?.(invoice)} className="h-8">
-        <Eye className="h-4 w-4 mr-2" />
+    <div className="flex items-center gap-1.5 flex-nowrap">
+      <Button variant="secondary" size="xs" onClick={() => onView?.(invoice)} className="h-7 px-2 text-[10px] bg-sky-500 hover:bg-sky-600 text-white">
         View
       </Button>
-      <Button variant="outline" size="sm" onClick={() => onEdit?.(invoice)} className="h-8">
-        <FileEdit className="h-4 w-4 mr-2" />
+      <Button variant="outline" size="xs" onClick={() => onEdit?.(invoice)} className="h-7 px-2 text-[10px] bg-blue-500 hover:bg-blue-600 text-white border-none">
         Edit
       </Button>
-      {status === 'due' && (
-        <Button variant="destructive" size="sm" onClick={() => onDelete?.(invoice)} className="h-8">
-          <Trash2 className="h-4 w-4 mr-2" />
-          Delete
-        </Button>
-      )}
+      <Button variant="destructive" size="xs" onClick={() => onDelete?.(invoice)} className="h-7 px-2 text-[10px]">
+        Delete
+      </Button>
       {status !== 'paid' && (
-        <Button variant="outline" size="sm" onClick={() => onMoneyReceipt?.(invoice)} className="h-8">
-          <Receipt className="h-4 w-4 mr-2" />
+        <Button variant="outline" size="xs" onClick={() => onMoneyReceipt?.(invoice)} className="h-7 px-2 text-[10px] bg-cyan-500 hover:bg-cyan-600 text-white border-none">
           Money Receipt
         </Button>
       )}
+      <Button variant="outline" size="xs" className="h-7 px-2 text-[10px] bg-sky-400 hover:bg-sky-500 text-white border-none">
+        Partial Cost
+      </Button>
     </div>
   )
 }

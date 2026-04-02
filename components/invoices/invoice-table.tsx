@@ -49,6 +49,7 @@ export function InvoiceTable({
                 <TableHead className="text-center font-semibold">SL.</TableHead>
                 <TableHead className="font-semibold">Invoice</TableHead>
                 <TableHead className="font-semibold">Sales Date</TableHead>
+                <TableHead className="font-semibold">Issue Date</TableHead>
                 <TableHead className="font-semibold">Client Name</TableHead>
                 <TableHead className="text-right font-semibold">Sales Price</TableHead>
                 <TableHead className="text-right font-semibold">Rec Amount</TableHead>

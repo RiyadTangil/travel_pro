@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Plus, Trash2 } from "lucide-react"
 import { CustomDropdown } from "./custom-dropdown"
 import VendorSelect from "@/components/vendors/vendor-select"
+import { DateInput } from "../ui/date-input"
+import { cn } from "@/lib/utils"
 
 interface BillingItem {
   id: string
@@ -21,6 +23,15 @@ interface BillingItem {
   totalCost: number
   profit: number
   vendor: string
+  // Visa specific fields
+  country?: string
+  visaType?: string
+  visaDuration?: string
+  token?: string
+  delivery?: Date
+  visaNo?: string
+  mofaNo?: string
+  okalaNo?: string
 }
 
 // Product options are loaded from Products API to keep it in sync with /dashboard/products
@@ -69,6 +80,7 @@ const initialItem: Omit<BillingItem, 'id'> = {
 }
 
 interface BillingInformationProps {
+  invoiceType?: "standard" | "visa" | "non_commission"
   onRequestAddVendor?: () => void
   onChange?: (payload: {
     items: BillingItem[]
@@ -81,8 +93,12 @@ interface BillingInformationProps {
   errors?: Record<string, string>
 }
 
-export function BillingInformation({ onRequestAddVendor, onChange, initialItems, initialTotals, vendorPreloaded, productOptionsExternal, errors = {} }: BillingInformationProps) {
-  const [items, setItems] = useState<BillingItem[]>([{ id: "1", ...initialItem }])
+export function BillingInformation({ invoiceType = "standard", onRequestAddVendor, onChange, initialItems, initialTotals, vendorPreloaded, productOptionsExternal, errors = {} }: BillingInformationProps) {
+  const [items, setItems] = useState<BillingItem[]>([{ 
+    id: "1", 
+    ...initialItem,
+    product: invoiceType === "visa" ? "Invoice(Visa)" : ""
+  }])
   // Always call hooks in a consistent order; avoid conditional hook calls.
   const productOptionsInternal = useProductOptions()
   const productOptions = (productOptionsExternal && productOptionsExternal.length)
@@ -93,21 +109,26 @@ export function BillingInformation({ onRequestAddVendor, onChange, initialItems,
   ), [vendorPreloaded])
 
   const addItem = useCallback(() => {
-    const newItem: BillingItem = { id: Date.now().toString(), ...initialItem }
+    const newItem: BillingItem = { 
+      id: Date.now().toString(), 
+      ...initialItem,
+      product: invoiceType === "visa" ? "Invoice(Visa)" : ""
+    }
     setItems(prev => [...prev, newItem])
-  }, [])
+  }, [invoiceType])
 
   const removeItem = useCallback((id: string) => {
     setItems(prev => prev.length > 1 ? prev.filter(i => i.id !== id) : prev)
   }, [])
 
-  const updateItem = useCallback((id: string, field: keyof Omit<BillingItem, 'id'>, rawValue: string) => {
+  const updateItem = useCallback((id: string, field: keyof Omit<BillingItem, 'id'>, rawValue: any) => {
     setItems(prev => {
       const idx = prev.findIndex(i => i.id === id)
       if (idx === -1) return prev
       const next = [...prev]
       const item = next[idx]
-      const value = ['product', 'paxName', 'description', 'vendor'].includes(field as string) ? rawValue : Number(rawValue)
+      const stringFields: Array<keyof BillingItem> = ['product', 'paxName', 'description', 'vendor', 'country', 'visaType', 'visaDuration', 'token', 'visaNo', 'mofaNo', 'okalaNo']
+      const value = stringFields.includes(field) ? rawValue : (field === 'delivery' ? rawValue : Number(rawValue))
       const updated = { ...item, [field]: value } as BillingItem
       updated.totalSales = updated.quantity * updated.unitPrice
       updated.totalCost = updated.quantity * updated.costPrice
@@ -176,6 +197,7 @@ export function BillingInformation({ onRequestAddVendor, onChange, initialItems,
           item={item}
           index={index}
           canRemove={items.length > 1}
+          invoiceType={invoiceType}
           productOptions={productOptions}
           vendorPreloaded={vendorPreloadedMemo}
           onUpdate={updateItem}
@@ -241,20 +263,23 @@ type BillingItemRowProps = {
   item: BillingItem
   index: number
   canRemove: boolean
+  invoiceType?: "standard" | "visa" | "non_commission"
   productOptions: string[]
   vendorPreloaded?: Array<{ id: string; name: string; email?: string; mobile?: string }>
-  onUpdate: (id: string, field: keyof Omit<BillingItem, 'id'>, rawValue: string) => void
+  onUpdate: (id: string, field: keyof Omit<BillingItem, 'id'>, rawValue: any) => void
   onRemove: (id: string) => void
   onRequestAddVendor?: () => void
   errors?: Record<string, string>
 }
 
-const BillingItemRow = memo(function BillingItemRow({ item, index, canRemove, productOptions, vendorPreloaded, onUpdate, onRemove, onRequestAddVendor, errors = {} }: BillingItemRowProps) {
+const BillingItemRow = memo(function BillingItemRow({ item, index, canRemove, invoiceType, productOptions, vendorPreloaded, onUpdate, onRemove, onRequestAddVendor, errors = {} }: BillingItemRowProps) {
   return (
     <Card className="relative">
-      <CardHeader className="pb-4">
+      <CardHeader className="pb-4 bg-gray-50/50">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base">Item {index + 1}</CardTitle>
+          <CardTitle className="text-sm font-bold uppercase tracking-tight text-gray-700">
+            {invoiceType === "visa" ? "Billing & Visa Information" : `Item ${index + 1}`}
+          </CardTitle>
           {canRemove && (
             <Button
               type="button"
@@ -268,100 +293,193 @@ const BillingItemRow = memo(function BillingItemRow({ item, index, canRemove, pr
           )}
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-10 gap-4">
-          <div className="space-y-2">
-            <Label>Product <span className="text-red-500">*</span></Label>
-            <CustomDropdown
-              placeholder="Select Product"
-              options={productOptions}
-              value={item.product}
-              onValueChange={(value) => onUpdate(item.id, 'product', value)}
-              className={errors[`billing_${index}_product`] ? "border-red-500" : ""}
-            />
-            {errors[`billing_${index}_product`] && <p className="text-[10px] text-red-500 font-medium">{errors[`billing_${index}_product`]}</p>}
+      <CardContent className="space-y-4 pt-4">
+        {/* Visa Specific Row */}
+        {invoiceType === "visa" && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-8 gap-4 mb-4 pb-4 border-b border-dashed">
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold">Product <span className="text-red-500">*</span></Label>
+              <Input value={item.product} readOnly className="h-8 bg-gray-100 text-xs" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold">Country <span className="text-red-500">*</span></Label>
+              <Input 
+                value={item.country || ""} 
+                onChange={(e) => onUpdate(item.id, 'country', e.target.value)} 
+                placeholder="Select Country"
+                className="h-8 text-xs"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold">Visa Type <span className="text-red-500">*</span></Label>
+              <CustomDropdown
+                placeholder="Select Visa Type"
+                options={["Tourist", "Business", "Student", "Work", "Family", "Other"]}
+                value={item.visaType}
+                onValueChange={(value) => onUpdate(item.id, 'visaType', value)}
+                className="h-8 text-xs"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold">Visa Duration</Label>
+              <Input 
+                value={item.visaDuration || ""} 
+                onChange={(e) => onUpdate(item.id, 'visaDuration', e.target.value)} 
+                placeholder="Visa Duration"
+                className="h-8 text-xs"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold">Token</Label>
+              <Input 
+                value={item.token || ""} 
+                onChange={(e) => onUpdate(item.id, 'token', e.target.value)} 
+                placeholder="Token"
+                className="h-8 text-xs"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold">Delivery</Label>
+              <DateInput 
+                value={item.delivery} 
+                onChange={(date) => onUpdate(item.id, 'delivery', date)} 
+                className="h-8 text-xs"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold">Visa No</Label>
+              <Input 
+                value={item.visaNo || ""} 
+                onChange={(e) => onUpdate(item.id, 'visaNo', e.target.value)} 
+                placeholder="Visa No"
+                className="h-8 text-xs"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold">Mofa No</Label>
+              <Input 
+                value={item.mofaNo || ""} 
+                onChange={(e) => onUpdate(item.id, 'mofaNo', e.target.value)} 
+                placeholder="Mofa No"
+                className="h-8 text-xs"
+              />
+            </div>
           </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-10 gap-4">
+          {invoiceType !== "visa" && (
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold">Product <span className="text-red-500">*</span></Label>
+              <CustomDropdown
+                placeholder="Select Product"
+                options={productOptions}
+                value={item.product}
+                onValueChange={(value) => onUpdate(item.id, 'product', value)}
+                className={cn("h-8 text-xs", errors[`billing_${index}_product`] && "border-red-500")}
+              />
+              {errors[`billing_${index}_product`] && <p className="text-[10px] text-red-500 font-medium">{errors[`billing_${index}_product`]}</p>}
+            </div>
+          )}
+
+          {invoiceType === "visa" && (
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold">Okala No</Label>
+              <Input
+                value={item.okalaNo || ""}
+                onChange={(e) => onUpdate(item.id, 'okalaNo', e.target.value)}
+                placeholder="Okala No"
+                className="h-8 text-xs"
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
-            <Label>Pax Name</Label>
+            <Label className="text-xs font-semibold">Pax Name</Label>
             <Input
               type="text"
               value={item.paxName}
               onChange={(e) => onUpdate(item.id, 'paxName', e.target.value)}
+              className="h-8 text-xs"
             />
           </div>
 
           <div className="space-y-2">
-            <Label>Description</Label>
+            <Label className="text-xs font-semibold">Description</Label>
             <Input
               type="text"
               value={item.description}
               onChange={(e) => onUpdate(item.id, 'description', e.target.value)}
+              className="h-8 text-xs"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor={`quantity-${item.id}`}>Quantity <span className="text-red-500">*</span></Label>
+            <Label className="text-xs font-semibold">Quantity <span className="text-red-500">*</span></Label>
             <Input
-              id={`quantity-${item.id}`}
               type="number"
               min="1"
               value={item.quantity}
               onChange={(e) => onUpdate(item.id, 'quantity', e.target.value)}
+              className="h-8 text-xs"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor={`unitPrice-${item.id}`}>Unit Price <span className="text-red-500">*</span></Label>
+            <Label className="text-xs font-semibold">Unit Price <span className="text-red-500">*</span></Label>
             <Input
-              id={`unitPrice-${item.id}`}
               type="number"
               min="0"
               step="0.01"
               value={item.unitPrice}
               onChange={(e) => onUpdate(item.id, 'unitPrice', e.target.value)}
-              className={errors[`billing_${index}_unitPrice`] ? "border-red-500" : ""}
+              className={cn("h-8 text-xs", errors[`billing_${index}_unitPrice`] && "border-red-500")}
             />
             {errors[`billing_${index}_unitPrice`] && <p className="text-[10px] text-red-500 font-medium">{errors[`billing_${index}_unitPrice`]}</p>}
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor={`costPrice-${item.id}`}>Cost Price</Label>
+            <Label className="text-xs font-semibold">Cost Price</Label>
             <Input
-              id={`costPrice-${item.id}`}
               type="number"
               min="0"
               step="0.01"
               value={item.costPrice}
               onChange={(e) => onUpdate(item.id, 'costPrice', e.target.value)}
+              className="h-8 text-xs"
             />
           </div>
 
           <div className="space-y-2">
-            <Label>Total Sales</Label>
-            <Input value={item.totalSales.toFixed(2)} readOnly />
+            <Label className="text-xs font-semibold">Total Sales</Label>
+            <Input value={item.totalSales.toFixed(2)} readOnly className="h-8 bg-gray-50 text-xs font-bold" />
           </div>
 
           <div className="space-y-2">
-            <Label>Total Cost</Label>
-            <Input value={item.totalCost.toFixed(2)} readOnly />
+            <Label className="text-xs font-semibold">Total Cost</Label>
+            <Input value={item.totalCost.toFixed(2)} readOnly className="h-8 bg-gray-50 text-xs font-bold" />
           </div>
 
           <div className="space-y-2">
-            <Label>Profit</Label>Payment To:
-            <Input value={item.profit.toFixed(2)} readOnly />
+            <Label className="text-xs font-semibold">Profit</Label>
+            <Input value={item.profit.toFixed(2)} readOnly className={cn("h-8 bg-gray-50 text-xs font-bold", item.profit >= 0 ? "text-green-600" : "text-red-600")} />
           </div>
 
           <div className="space-y-2">
-            <Label>Vendor {item.costPrice > 0 ? <span className="text-red-500">*</span> : null}</Label>
-            <VendorSelect
-              value={item.vendor || undefined}
-              onChange={(id) => onUpdate(item.id, 'vendor', id || "")}
-              preloaded={vendorPreloaded}
-              onRequestAdd={onRequestAddVendor}
-              placeholder="Select Vendor"
-              className={errors[`billing_${index}_vendor`] ? "border-red-500" : ""}
-            />
+            <Label className="text-xs font-semibold">Vendor {item.costPrice > 0 ? <span className="text-red-500">*</span> : null}</Label>
+            <div className="flex gap-1">
+              <VendorSelect
+                value={item.vendor || undefined}
+                onChange={(id) => onUpdate(item.id, 'vendor', id || "")}
+                preloaded={vendorPreloaded}
+                onRequestAdd={onRequestAddVendor}
+                placeholder="Select Vendor"
+                className={cn("h-8 text-xs flex-1", errors[`billing_${index}_vendor`] && "border-red-500")}
+              />
+              <Button type="button" size="xs" variant="outline" onClick={onRequestAddVendor} className="h-8 px-2 bg-sky-500 text-white hover:bg-sky-600">
+                <Plus className="h-3 w-3" />
+              </Button>
+            </div>
             {errors[`billing_${index}_vendor`] && <p className="text-[10px] text-red-500 font-medium">{errors[`billing_${index}_vendor`]}</p>}
           </div>
         </div>

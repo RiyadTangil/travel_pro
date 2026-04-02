@@ -53,6 +53,20 @@ export function InvoiceRow({
       <TableCell>
         {formatDate(invoice.salesDate)}
       </TableCell>
+
+      <TableCell>
+        <div className="flex flex-col gap-0.5">
+          {Array.isArray(invoice.issueDates) && invoice.issueDates.length > 0 ? (
+            invoice.issueDates.map((date, i) => (
+              <span key={i} className={i > 0 ? "pt-0.5 border-t border-gray-100" : ""}>
+                {formatDate(date)}
+              </span>
+            ))
+          ) : (
+            <span>{formatDate(invoice.issueDate)}</span>
+          )}
+        </div>
+      </TableCell>
       
       <TableCell>
         <div className="space-y-1">
@@ -73,11 +87,11 @@ export function InvoiceRow({
         {formatCurrency(invoice.receivedAmount)}
       </TableCell>
       
-      <TableCell className="text-right">
-        <div className={`font-medium ${
-          invoice.dueAmount > 0 ? 'text-red-600' : 'text-green-600'
+      <TableCell>
+        <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold text-center inline-block ${
+          invoice.dueAmount > 0 ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-green-50 text-green-600 border border-green-100'
         }`}>
-          {formatCurrency(invoice.dueAmount)}
+          {invoice.dueAmount > 0 ? formatCurrency(invoice.dueAmount) : 'PAID'}
         </div>
       </TableCell>
       
@@ -86,7 +100,11 @@ export function InvoiceRow({
       </TableCell>
       
       <TableCell className="font-medium">
-        {invoice.mrNo}
+        <div className="flex flex-col gap-0.5">
+          {invoice.mrNo ? invoice.mrNo.split(',').map((mr, i) => (
+            <span key={i} className={i > 0 ? "pt-0.5 border-t border-gray-100" : ""}>{mr.trim()}</span>
+          )) : "-"}
+        </div>
       </TableCell>
       
       <TableCell>

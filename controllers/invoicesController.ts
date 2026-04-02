@@ -102,7 +102,7 @@ const createSchema = z.object({
   transport: z.array(transportSchema).optional().default([]),
 })
 
-export async function list(params: { page?: number; pageSize?: number; search?: string; status?: string; dateFrom?: string; dateTo?: string; clientId?: string }) {
+export async function list(params: { page?: number; pageSize?: number; search?: string; status?: string; invoiceType?: string; dateFrom?: string; dateTo?: string; clientId?: string }) {
   try {
     const data = await listInvoices(params)
     return ok(data)

@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession, Session } from "next-auth"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
-import connectMongoose from "@/lib/mongoose"
-import { list, create } from "@/controllers/invoicesController"
-import { createInvoice, listInvoices } from "@/services/invoiceService"
-import { AppError } from "@/errors/AppError"
+import { listInvoices, createInvoice } from "@/services/invoiceService"
 
 export async function GET(request: Request) {
   try {
@@ -18,17 +15,17 @@ export async function GET(request: Request) {
       pageSize: Number(searchParams.get("pageSize") || 20),
       search: searchParams.get("search") || undefined,
       status: searchParams.get("status") || undefined,
-      invoiceType: searchParams.get("invoiceType") || undefined,
       dateFrom: searchParams.get("dateFrom") || undefined,
       dateTo: searchParams.get("dateTo") || undefined,
       clientId: searchParams.get("clientId") || undefined,
-      companyId: String(companyId)
+      companyId: String(companyId),
+      invoiceType: "visa"
     }
 
-    const result = await listInvoices(params)
+    const result = await listInvoices(params as any)
     return NextResponse.json(result)
   } catch (error: any) {
-    console.error("GET Invoices Error:", error)
+    console.error("GET Visa Invoices Error:", error)
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }
@@ -40,13 +37,11 @@ export async function POST(request: Request) {
     if (!companyId) return NextResponse.json({ error: "Unauthorized: Company ID required" }, { status: 401 })
 
     const body = await request.json()
-    const result = await createInvoice(body, String(companyId))
+    // createInvoice handles both standard and visa via body.invoiceType
+    const result = await createInvoice({ ...body, invoiceType: "visa" }, String(companyId))
     return NextResponse.json(result)
   } catch (error: any) {
-    console.error("POST Invoice Error:", error)
-    const status = error instanceof AppError ? error.status : 500
-    const message = error instanceof AppError ? error.message : "Internal Server Error"
-    return NextResponse.json({ error: message }, { status })
+    console.error("POST Visa Invoice Error:", error)
+    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: error.status || 500 })
   }
 }
-

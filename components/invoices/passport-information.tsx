@@ -90,6 +90,11 @@ export function PassportInformation({ initialEntries, onChange, passportsPreload
   const updatePassportEntry = useCallback((id: string, field: keyof Omit<PassportEntry, 'id'>, value: string) => {
     setPassportEntries(prev => prev.map(entry => entry.id === id ? { ...entry, [field]: value } : entry))
   }, [])
+
+  const updatePassportMultiple = useCallback((id: string, updates: Partial<PassportEntry>) => {
+    setPassportEntries(prev => prev.map(entry => entry.id === id ? { ...entry, ...updates } : entry))
+  }, [])
+
   useEffect(() => {
     if (initialEntries && initialEntries.length) {
       const normalized = initialEntries.map((e, idx) => {
@@ -137,30 +142,35 @@ export function PassportInformation({ initialEntries, onChange, passportsPreload
                 preloaded={passportsPreloadedMemo}
                 onChange={async (id, selected) => {
                   if (!id) {
-                    updatePassportEntry(entry.id, 'passportId' as any, undefined as any)
-                    updatePassportEntry(entry.id, 'passportNo', '')
-                    updatePassportEntry(entry.id, 'name', '')
-                    updatePassportEntry(entry.id, 'paxType', '')
-                    updatePassportEntry(entry.id, 'contactNo', '')
-                    updatePassportEntry(entry.id, 'email', '')
-                    updatePassportEntry(entry.id, 'dateOfBirth', '')
-                    updatePassportEntry(entry.id, 'dateOfIssue', '')
-                    updatePassportEntry(entry.id, 'dateOfExpire', '')
+                    updatePassportMultiple(entry.id, {
+                      passportId: undefined,
+                      passportNo: '',
+                      name: '',
+                      paxType: '',
+                      contactNo: '',
+                      email: '',
+                      dateOfBirth: '',
+                      dateOfIssue: '',
+                      dateOfExpire: ''
+                    })
                     return
                   }
-                  // Set from selected if available to avoid network
-                  updatePassportEntry(entry.id, 'passportId' as any, id)
+                  
                   if (selected) {
-                    updatePassportEntry(entry.id, 'passportNo', selected.passportNo || '')
-                    if (selected.name) updatePassportEntry(entry.id, 'name', selected.name)
-                    if (selected.paxType) updatePassportEntry(entry.id, 'paxType', selected.paxType)
-                    if (selected.mobile) updatePassportEntry(entry.id, 'contactNo', selected.mobile)
-                    if (selected.email) updatePassportEntry(entry.id, 'email', selected.email)
-                    if (selected.dob) updatePassportEntry(entry.id, 'dateOfBirth', selected.dob)
-                    if (selected.dateOfIssue) updatePassportEntry(entry.id, 'dateOfIssue', selected.dateOfIssue)
-                    if (selected.dateOfExpire) updatePassportEntry(entry.id, 'dateOfExpire', selected.dateOfExpire)
+                    updatePassportMultiple(entry.id, {
+                      passportId: id,
+                      passportNo: selected.passportNo || '',
+                      name: selected.name || entry.name,
+                      paxType: selected.paxType || entry.paxType,
+                      contactNo: selected.mobile || entry.contactNo,
+                      email: selected.email || entry.email,
+                      dateOfBirth: selected.dob || entry.dateOfBirth,
+                      dateOfIssue: selected.dateOfIssue || entry.dateOfIssue,
+                      dateOfExpire: selected.dateOfExpire || entry.dateOfExpire
+                    })
                     return
                   }
+
                   // Fallback: fetch full details
                   try {
                     const res = await fetch(`/api/passports/${id}`)
@@ -168,13 +178,17 @@ export function PassportInformation({ initialEntries, onChange, passportsPreload
                       const data = await res.json()
                       const pass = data.passport
                       if (pass) {
-                        updatePassportEntry(entry.id, 'name', pass.name || entry.name)
-                        updatePassportEntry(entry.id, 'paxType', pass.paxType || entry.paxType)
-                        updatePassportEntry(entry.id, 'contactNo', pass.mobile || entry.contactNo)
-                        updatePassportEntry(entry.id, 'email', pass.email || entry.email)
-                        updatePassportEntry(entry.id, 'dateOfBirth', pass.dob || entry.dateOfBirth)
-                        updatePassportEntry(entry.id, 'dateOfIssue', pass.dateOfIssue || entry.dateOfIssue)
-                        updatePassportEntry(entry.id, 'dateOfExpire', pass.dateOfExpire || entry.dateOfExpire)
+                        updatePassportMultiple(entry.id, {
+                          passportId: id,
+                          passportNo: pass.passportNo || '',
+                          name: pass.name || entry.name,
+                          paxType: pass.paxType || entry.paxType,
+                          contactNo: pass.mobile || entry.contactNo,
+                          email: pass.email || entry.email,
+                          dateOfBirth: pass.dob || entry.dateOfBirth,
+                          dateOfIssue: pass.dateOfIssue || entry.dateOfIssue,
+                          dateOfExpire: pass.dateOfExpire || entry.dateOfExpire
+                        })
                       }
                     }
                   } catch (e) { /* ignore */ }
@@ -230,7 +244,6 @@ export function PassportInformation({ initialEntries, onChange, passportsPreload
               <DateInput
                 value={entry.dateOfBirth ? parseYmdLocal(entry.dateOfBirth) : undefined}
                 onChange={(d) => updatePassportEntry(entry.id, 'dateOfBirth', d ? toYmd(d) : "")}
-                disabled={true}
               />
             </div>
 
@@ -239,7 +252,6 @@ export function PassportInformation({ initialEntries, onChange, passportsPreload
               <DateInput
                 value={entry.dateOfIssue ? parseYmdLocal(entry.dateOfIssue) : undefined}
                 onChange={(d) => updatePassportEntry(entry.id, 'dateOfIssue', d ? toYmd(d) : "")}
-                disabled={true}
               />
             </div>
 
@@ -248,7 +260,6 @@ export function PassportInformation({ initialEntries, onChange, passportsPreload
               <DateInput
                 value={entry.dateOfExpire ? parseYmdLocal(entry.dateOfExpire) : undefined}
                 onChange={(d) => updatePassportEntry(entry.id, 'dateOfExpire', d ? toYmd(d) : "")}
-                disabled={true}
               />
             </div>
           </div>

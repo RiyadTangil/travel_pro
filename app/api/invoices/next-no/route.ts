@@ -5,7 +5,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import { ObjectId } from "mongodb"
 
 function computeNextInvoiceNo(prev?: string | null, type: string = "standard"): string {
-  const DEFAULT = type === "non_commission" ? "ANC-0001" : "INV-0001"
+  const DEFAULT = type === "non_commission" ? "ANC-0001" : (type === "visa" ? "IV-0001" : "INV-0001")
   if (!prev || !prev.trim()) return DEFAULT
   const s = prev.trim()
   // Capture prefix and numeric tail, allow optional hyphen/space

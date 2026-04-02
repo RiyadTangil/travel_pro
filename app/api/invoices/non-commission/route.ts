@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession, Session } from "next-auth"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
-import { listInvoices, createNonCommissionInvoice } from "@/services/invoiceService"
+import { listNonCommissionInvoices, createNonCommissionInvoice } from "@/services/invoiceService"
 import { AppError } from "@/errors/AppError"
 
 export async function GET(request: Request) {
@@ -23,7 +23,7 @@ export async function GET(request: Request) {
       invoiceType: "non_commission"
     }
 
-    const result = await listInvoices(params as any)
+    const result = await listNonCommissionInvoices(params as any)
     return NextResponse.json(result)
   } catch (error: any) {
     console.error("GET Non-Commission Invoices Error:", error)

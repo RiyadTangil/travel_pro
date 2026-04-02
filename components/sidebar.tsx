@@ -83,12 +83,16 @@ export function Sidebar() {
       icon: <FileText className="h-5 w-5" />,
       children: [
         {
-          title: "Invoice List",
+          title: "Invoice (Others)",
           href: "/dashboard/invoices",
         },
         {
-          title: "Non Commission",
+          title: "Invoice (Non Commission)",
           href: "/dashboard/invoices-non-commission",
+        },
+        {
+          title: "Invoice (Visa)",
+          href: "/dashboard/invoices-visa",
         },
       ],
     },

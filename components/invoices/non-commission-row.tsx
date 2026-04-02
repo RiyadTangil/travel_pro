@@ -41,6 +41,10 @@ export function NonCommissionRow({
     }
   }
 
+  // Handle multiple issue dates
+  const issueDates = Array.isArray(invoice.issueDates) ? invoice.issueDates : [invoice.issueDate]
+  const uniqueDates = Array.from(new Set(issueDates.filter(Boolean))).map(d => formatDate(String(d)))
+
   return (
     <TableRow className="hover:bg-gray-50 text-sm">
       <TableCell className="text-center">
@@ -56,7 +60,17 @@ export function NonCommissionRow({
       </TableCell>
 
       <TableCell>
-        {formatDate(invoice.issueDate)}
+        <div className="flex flex-col gap-0.5">
+          {uniqueDates.length > 0 ? (
+            uniqueDates.map((date, i) => (
+              <span key={i} className={i > 0 ? "pt-0.5 border-t border-gray-100" : ""}>
+                {date}
+              </span>
+            ))
+          ) : (
+            <span className="text-gray-400">-</span>
+          )}
+        </div>
       </TableCell>
       
       <TableCell>

@@ -341,10 +341,10 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
       const payload = {
         general: {
           invoiceNo: data.invoiceNo,
-          client: data.clientId,
-          salesBy: data.employeeId,
+          clientId: data.clientId,
+          employeeId: data.employeeId,
           salesByName: employeeName,
-          agent: data.agentId,
+          agentId: data.agentId,
           salesDate: toYmd(data.salesDate),
           dueDate: data.dueDate ? toYmd(data.dueDate) : "",
         },
@@ -364,18 +364,12 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
         hotel: hotelData,
         transport: transportData,
         moneyReceipt: moneyReceiptData,
+        invoiceType: "standard"
       }
       const url = initialInvoice?.id ? `/api/invoices/${initialInvoice.id}` : `/api/invoices`
       const method = initialInvoice?.id ? "PUT" : "POST"
       const res = await fetch(url, {
-        method, headers: { "Content-Type": "application/json" }, body: JSON.stringify({
-          ...payload,
-          // send synonyms for compatibility across POST/PUT handlers
-          passports: passportData,
-          tickets: ticketData,
-          hotels: hotelData,
-          transports: transportData,
-        })
+        method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
       })
       const resData = await res.json()
       if (!res.ok) {

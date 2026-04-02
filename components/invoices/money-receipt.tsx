@@ -33,7 +33,7 @@ function useAccountOptions(preloaded?: AccountOptionItem[]) {
   return options
 }
 
-export function MoneyReceipt({ accountsPreloaded, onChange, errors = {} }: { accountsPreloaded?: AccountOptionItem[]; onChange?: (data: any) => void; errors?: Record<string, string> }) {
+export function MoneyReceipt({ accountsPreloaded, onChange, initialData, errors = {} }: { accountsPreloaded?: AccountOptionItem[]; onChange?: (data: any) => void; initialData?: any; errors?: Record<string, string> }) {
   const accounts = useAccountOptions(accountsPreloaded)
   const [paymentMethod, setPaymentMethod] = useState<AccountType | "">("")
   const [paymentMethodOptions, setPaymentMethodOptions] = useState<AccountType[]>([])
@@ -46,6 +46,22 @@ export function MoneyReceipt({ accountsPreloaded, onChange, errors = {} }: { acc
   const [note, setNote] = useState<string>("")
   const [showPrevDue, setShowPrevDue] = useState<string>("no")
   const [showDiscount, setShowDiscount] = useState<string>("yes")
+
+  // Sync initialData if provided
+  useEffect(() => {
+    if (initialData) {
+      setPaymentMethod(initialData.paymentMethod || "")
+      setAccount(initialData.accountName || "")
+      setAmount(initialData.amount?.toString() || "")
+      setDiscount(initialData.discount?.toString() || "")
+      setTransNo(initialData.transNo || "")
+      setPaymentDate(initialData.paymentDate || "")
+      setReceiptNo(initialData.receiptNo || "")
+      setNote(initialData.note || "")
+      setShowPrevDue(initialData.showPrevDue || "no")
+      setShowDiscount(initialData.showDiscount || "yes")
+    }
+  }, [initialData])
 
   const isRequired = !!paymentMethod
   const filteredAccountNames = useMemo(() => (
