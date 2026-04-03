@@ -161,13 +161,22 @@ export async function listInvoices(params: {
     .limit(pageSize)
     .lean()
 
+  // Fetch all passports for these invoices
+  const invIds = docs.map((d: any) => String(d._id))
+  const allPassports = await InvoicePassport.find({ invoiceId: { $in: invIds }, isDeleted: { $ne: true } }).lean()
+
   const invoices = docs.map((d: any) => {
     // Handle Visa fields for list display if available
     const billingItems = d.billing?.items || []
     const visaItem = d.invoiceType === "visa" ? billingItems[0] : null
 
+    // Get passports for this invoice
+    const invIdStr = String(d._id)
+    const invPassports = allPassports.filter((p: any) => String(p.invoiceId) === invIdStr)
+    const passportNos = invPassports.map((p: any) => p.passportNo).filter(Boolean).join(", ")
+
     return {
-      id: String(d._id),
+      id: invIdStr,
       clientId: String(d.clientId || ""),
       invoiceNo: d.invoiceNo,
       clientName: d.clientName || "",
@@ -179,7 +188,7 @@ export async function listInvoices(params: {
       receivedAmount: parseNumber(d.receivedAmount, 0),
       dueAmount: Math.max(0, parseNumber(d.netTotal, 0) - parseNumber(d.receivedAmount, 0)),
       mrNo: "", // We can populate this if needed
-      passportNo: "", 
+      passportNo: passportNos, 
       salesBy: d.salesByName || "",
       status: d.status || "due",
       invoiceType: d.invoiceType || "standard",

@@ -13,6 +13,7 @@ interface InvoiceRowProps {
   onEdit?: (invoice: Invoice) => void
   onDelete?: (invoice: Invoice) => void
   onMoneyReceipt?: (invoice: Invoice) => void
+  onAssignBy?: (invoice: Invoice) => void
 }
 
 export function InvoiceRow({
@@ -21,7 +22,8 @@ export function InvoiceRow({
   onView,
   onEdit,
   onDelete,
-  onMoneyReceipt
+  onMoneyReceipt,
+  onAssignBy
 }: InvoiceRowProps) {
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-BD', {
@@ -108,7 +110,11 @@ export function InvoiceRow({
       </TableCell>
       
       <TableCell>
-        {invoice.passportNo}
+        <div className="flex flex-col gap-0.5">
+          {invoice.passportNo ? invoice.passportNo.split(',').map((pp, i) => (
+            <span key={i} className={i > 0 ? "pt-0.5 border-t border-gray-100 text-[10px]" : "text-[10px]"}>{pp.trim()}</span>
+          )) : "-"}
+        </div>
       </TableCell>
       
       <TableCell>
@@ -116,7 +122,14 @@ export function InvoiceRow({
       </TableCell>
       
       <TableCell>
-        <InvoiceActions status={invoice.status} invoice={invoice} onView={onView} onEdit={onEdit} onDelete={onDelete} onMoneyReceipt={onMoneyReceipt} />
+        <InvoiceActions 
+          status={invoice.status} 
+          invoice={{...invoice, onAssignBy} as any} 
+          onView={onView} 
+          onEdit={onEdit} 
+          onDelete={onDelete} 
+          onMoneyReceipt={onMoneyReceipt} 
+        />
       </TableCell>
     </TableRow>
   )

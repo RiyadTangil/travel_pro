@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { InvoiceTable } from "@/components/invoices/invoice-table"
 import { PaginationWithLinks } from "@/components/ui/pagination-with-links"
 import { AddVisaInvoiceModal } from "@/components/invoices/add-visa-invoice-modal"
+import { AssignEmployeeModal } from "@/components/invoices/assign-employee-modal"
 import { useToast } from "@/hooks/use-toast"
 
 export default function VisaInvoicesPage() {
@@ -15,7 +16,9 @@ export default function VisaInvoicesPage() {
   const [search, setSearch] = useState("")
   const [invoices, setInvoices] = useState<any[]>([])
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
   const [editInvoiceId, setEditInvoiceId] = useState<string | null>(null)
+  const [assignData, setAssignData] = useState<{ id: string, passports: any[] } | null>(null)
   const [pagination, setPagination] = useState({
     page: 1,
     pageSize: 20,
@@ -70,6 +73,21 @@ export default function VisaInvoicesPage() {
     setIsModalOpen(true)
   }, [])
 
+  const handleAssignBy = useCallback(async (invoice: any) => {
+    try {
+      const res = await fetch(`/api/invoices/visa/${invoice.id}`)
+      const data = await res.json()
+      if (res.ok && data.invoice) {
+        setAssignData({ id: invoice.id, passports: data.invoice.passports || [] })
+        setIsAssignModalOpen(true)
+      } else {
+        toast({ title: "Error", description: "Failed to fetch invoice details", variant: "destructive" })
+      }
+    } catch (e) {
+      toast({ title: "Error", description: "Something went wrong", variant: "destructive" })
+    }
+  }, [toast])
+
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
@@ -105,6 +123,7 @@ export default function VisaInvoicesPage() {
           <InvoiceTable 
             invoices={invoices}
             onEdit={handleEdit}
+            onAssignBy={handleAssignBy}
           />
           <PaginationWithLinks
             page={pagination.page}
@@ -120,6 +139,13 @@ export default function VisaInvoicesPage() {
         onClose={() => setIsModalOpen(false)}
         initialInvoiceId={editInvoiceId}
         onInvoiceAdded={() => fetchInvoices()}
+      />
+
+      <AssignEmployeeModal
+        isOpen={isAssignModalOpen}
+        onClose={() => setIsAssignModalOpen(false)}
+        invoiceId={assignData?.id || ""}
+        passports={assignData?.passports || []}
       />
     </div>
   )

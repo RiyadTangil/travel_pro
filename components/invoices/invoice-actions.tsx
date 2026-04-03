@@ -15,6 +15,16 @@ interface InvoiceActionsProps {
 export function InvoiceActions({ status, invoice, onView, onEdit, onDelete, onMoneyReceipt }: InvoiceActionsProps & { status: string }) {
   return (
     <div className="flex items-center gap-1.5 flex-nowrap">
+      {invoice.invoiceType === 'visa' && (
+        <Button 
+          variant="outline" 
+          size="xs" 
+          onClick={() => (invoice as any).onAssignBy?.(invoice)} 
+          className="h-7 px-2 text-[10px] bg-cyan-500 hover:bg-cyan-600 text-white border-none"
+        >
+          Assign By
+        </Button>
+      )}
       <Button variant="secondary" size="xs" onClick={() => onView?.(invoice)} className="h-7 px-2 text-[10px] bg-sky-500 hover:bg-sky-600 text-white">
         View
       </Button>

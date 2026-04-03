@@ -381,10 +381,12 @@ export function AddVisaInvoiceModal({
               />
 
               {/* Money Receipt */}
-              <MoneyReceipt 
-                onChange={setMoneyReceiptData}
-                initialData={moneyReceiptData}
-              />
+              {!initialInvoiceId && (
+                <MoneyReceipt 
+                  onChange={setMoneyReceiptData}
+                  initialData={moneyReceiptData}
+                />
+              )}
             </div>
           </ScrollArea>
 

@@ -17,6 +17,7 @@ interface InvoiceTableProps {
   onEdit?: (invoice: Invoice) => void
   onDelete?: (invoice: Invoice) => void
   onMoneyReceipt?: (invoice: Invoice) => void
+  onAssignBy?: (invoice: Invoice) => void
 }
 
 export function InvoiceTable({
@@ -24,7 +25,8 @@ export function InvoiceTable({
   onView,
   onEdit,
   onDelete,
-  onMoneyReceipt
+  onMoneyReceipt,
+  onAssignBy
 }: InvoiceTableProps) {
   if (invoices.length === 0) {
     return (
@@ -56,7 +58,7 @@ export function InvoiceTable({
                 <TableHead className="text-right font-semibold">Due Amount</TableHead>
                 <TableHead className="font-semibold">Status</TableHead>
                 <TableHead className="font-semibold">MR. No.</TableHead>
-                <TableHead className="font-semibold">Passport No</TableHead>
+                <TableHead className="font-semibold">Passport</TableHead>
                 <TableHead className="font-semibold">Sales by</TableHead>
                 <TableHead className="text-center font-semibold">Action</TableHead>
               </TableRow>
@@ -71,6 +73,7 @@ export function InvoiceTable({
                 onEdit={onEdit}
                 onDelete={onDelete}
                 onMoneyReceipt={onMoneyReceipt}
+                onAssignBy={onAssignBy}
               />
               ))}
             </TableBody>
