@@ -1,7 +1,7 @@
 import { Schema, model, models } from "mongoose"
 
 const InvoicePassportSchema = new Schema({
-  invoiceId: { type: String, index: true, required: true },
+  invoiceId: { type: Schema.Types.ObjectId, ref: "Invoice", index: true, required: true },
   passportNo: { type: String },
   paxType: { type: String },
   name: { type: String },
@@ -10,10 +10,8 @@ const InvoicePassportSchema = new Schema({
   dateOfBirth: { type: String },
   dateOfIssue: { type: String },
   dateOfExpire: { type: String },
-  ticketId: { type: String, index: true }, // Linked to InvoiceTicket _id
-  companyId: { type: String },
-  passportId: { type: String },
-  id: { type: String },
+  ticketId: { type: Schema.Types.ObjectId, ref: "InvoiceTicket", index: true }, 
+  companyId: { type: Schema.Types.ObjectId, ref: "Company", index: true },
   isDeleted: { type: Boolean, default: false, index: true },
   createdAt: { type: String },
   updatedAt: { type: String },

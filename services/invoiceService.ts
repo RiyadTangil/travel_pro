@@ -16,19 +16,122 @@ import { ClientTransaction } from "@/models/client-transaction"
 import { AppError } from "@/errors/AppError"
 import { createMoneyReceipt } from "./moneyReceiptService"
 
+function parseNumber(val: any, fallback = 0) {
+  const n = parseFloat(val)
+  return isNaN(n) ? fallback : n
+}
+
+function normalizePayload(body: any) {
+  const invoiceType = body.invoiceType || "standard"
+  const general = body.general || body
+  const now = new Date().toISOString()
+
+  // 1. Normalize Summary Totals 
+  const billing = body.billing || {}
+  const itemsRaw = Array.isArray(body.items) ? body.items : (Array.isArray(billing.items) ? billing.items : (Array.isArray(body.billing_information) ? body.billing_information : []))
+
+  const subtotal = parseNumber(billing.subtotal ?? body.invoice_sub_total ?? itemsRaw.reduce((s: number, i: any) => s + parseNumber(i.billing_subtotal ?? i.totalSales ?? 0), 0))
+  const totalCost = parseNumber(billing.totalCost ?? itemsRaw.reduce((s: number, i: any) => s + parseNumber(i.totalCost ?? 0), 0))
+  const discount = parseNumber(billing.discount ?? body.billing_discount ?? body.discount ?? 0)
+  const serviceCharge = parseNumber(billing.serviceCharge ?? body.service_charge ?? 0)
+  const vatTax = parseNumber(billing.vatTax ?? body.vat_tax ?? 0)
+  const netTotal = parseNumber(body.invoice_net_total ?? billing.netTotal ?? (subtotal - discount + serviceCharge + vatTax))
+
+  // 2. Normalize Line Items 
+  let normalizedItems: any[] = []
+
+  if (invoiceType === "visa") {
+    // Visa: Billing rows + Passport list 
+    normalizedItems = itemsRaw.map((i: any) => ({
+      itemType: "visa",
+      product: i.product || i.billing_product_id || "Visa Service",
+      paxName: i.paxName || i.pax_name || "",
+      description: i.description || i.billing_description || "",
+      quantity: parseNumber(i.quantity ?? i.billing_quantity ?? 1),
+      unitPrice: parseNumber(i.unitPrice ?? i.billing_unit_price ?? 0),
+      costPrice: parseNumber(i.costPrice ?? i.billing_cost_price ?? 0),
+      totalSales: parseNumber(i.totalSales ?? i.billing_total_sales ?? i.billing_subtotal ?? 0),
+      totalCost: parseNumber(i.totalCost ?? 0),
+      profit: parseNumber(i.profit ?? i.billing_profit ?? 0),
+      vendorId: i.vendor || i.billing_comvendor || i.vendorId,
+      // Visa specific fields flattened directly for saving 
+      country: i.country,
+      visaType: i.visaType,
+      visaDuration: i.visaDuration,
+      token: i.token,
+      delivery: i.delivery,
+      visaNo: i.visaNo,
+      mofaNo: i.mofaNo,
+      okalaNo: i.okalaNo,
+    }))
+  } else {
+    // Standard: Mixed rows 
+    normalizedItems = itemsRaw.map((i: any) => {
+      const type = i.itemType || (i.hotelName ? "hotel" : (i.ticketNo ? "ticket" : (i.transportType ? "transport" : "product")))
+      return {
+        itemType: type,
+        product: i.product || i.billing_product_id || i.hotelName || i.ticketNo || i.transportType || "Service",
+        paxName: i.paxName || i.pax_name || "",
+        description: i.description || i.billing_description || "",
+        quantity: parseNumber(i.quantity ?? i.billing_quantity ?? 1),
+        unitPrice: parseNumber(i.unitPrice ?? i.billing_unit_price ?? 0),
+        costPrice: parseNumber(i.costPrice ?? i.billing_cost_price ?? 0),
+        totalSales: parseNumber(i.totalSales ?? i.billing_total_sales ?? i.billing_subtotal ?? 0),
+        totalCost: parseNumber(i.totalCost ?? 0),
+        profit: parseNumber(i.profit ?? i.billing_profit ?? 0),
+        vendorId: i.vendor || i.billing_comvendor || i.vendorId,
+      }
+    })
+  }
+
+  return {
+    invoiceType,
+    general: {
+      invoiceNo: String(general.invoiceNo || "").trim(),
+      salesDate: String(general.salesDate || now),
+      dueDate: general.dueDate || "",
+      clientId: general.clientId,
+      employeeId: general.employeeId,
+      agentId: general.agentId,
+    },
+    items: normalizedItems,
+    summary: {
+      subtotal,
+      totalCost,
+      discount,
+      serviceCharge,
+      vatTax,
+      netTotal,
+      note: String(billing.note || body.billing_note || ''),
+      reference: String(billing.reference || body.billing_reference || ''),
+    },
+    globalDetails: {
+      tickets: body.ticket || body.ticketInfo || [],
+      hotels: body.hotel || body.hotel_information || [],
+      transports: body.transport || body.transport_information || [],
+      passports: body.passport || body.passport_information || [],
+    },
+    moneyReceipt: body.moneyReceipt,
+    showPrevDue: !!(general.invoice_show_prev_due || body.showPrevDue),
+    showDiscount: !!(general.invoice_show_discount || body.showDiscount),
+    agentCommission: parseNumber(body.invoice_agent_com_amount ?? 0),
+    clientPreviousDue: parseNumber(body.invoice_client_previous_due ?? 0),
+  }
+}
+
 export async function getInvoiceById(id: string, companyId?: string) {
   await connectMongoose()
   if (!Types.ObjectId.isValid(id)) throw new AppError("Invalid ID", 400)
   const inv = await Invoice.findById(id).lean()
   if (!inv) throw new AppError("Not found", 404)
-  const invIdStr = String(inv._id)
+  const invId = inv._id
   // Fetch children with compatibility for existing String invoiceId
   const [items, tickets, hotels, transports, passports] = await Promise.all([
-    InvoiceItem.find({ invoiceId: invIdStr, isDeleted: { $ne: true } }).lean(),
-    InvoiceTicket.find({ invoiceId: invIdStr, isDeleted: { $ne: true } }).lean(),
-    InvoiceHotel.find({ invoiceId: invIdStr, isDeleted: { $ne: true } }).lean(),
-    InvoiceTransport.find({ invoiceId: invIdStr, isDeleted: { $ne: true } }).lean(),
-    InvoicePassport.find({ invoiceId: invIdStr, isDeleted: { $ne: true } }).lean(),
+    InvoiceItem.find({ invoiceId: invId, isDeleted: { $ne: true } }).lean(),
+    InvoiceTicket.find({ invoiceId: invId, isDeleted: { $ne: true } }).lean(),
+    InvoiceHotel.find({ invoiceId: invId, isDeleted: { $ne: true } }).lean(),
+    InvoiceTransport.find({ invoiceId: invId, isDeleted: { $ne: true } }).lean(),
+    InvoicePassport.find({ invoiceId: invId, isDeleted: { $ne: true } }).lean(),
   ])
 
   // Collect vendor references
@@ -108,9 +211,6 @@ export async function getInvoiceById(id: string, companyId?: string) {
 }
 
 
-
-function parseNumber(n: any, def = 0): number { const x = Number(n); return isFinite(x) ? x : def }
-
 export async function listInvoices(params: {
   page?: number
   pageSize?: number
@@ -162,7 +262,7 @@ export async function listInvoices(params: {
     .lean()
 
   // Fetch all passports for these invoices
-  const invIds = docs.map((d: any) => String(d._id))
+  const invIds = docs.map((d: any) => d._id)
   const allPassports = await InvoicePassport.find({ invoiceId: { $in: invIds }, isDeleted: { $ne: true } }).lean()
 
   const invoices = docs.map((d: any) => {
@@ -171,12 +271,12 @@ export async function listInvoices(params: {
     const visaItem = d.invoiceType === "visa" ? billingItems[0] : null
 
     // Get passports for this invoice
-    const invIdStr = String(d._id)
-    const invPassports = allPassports.filter((p: any) => String(p.invoiceId) === invIdStr)
+    const invId = d._id
+    const invPassports = allPassports.filter((p: any) => String(p.invoiceId) === String(invId))
     const passportNos = invPassports.map((p: any) => p.passportNo).filter(Boolean).join(", ")
 
     return {
-      id: invIdStr,
+      id: String(invId),
       clientId: String(d.clientId || ""),
       invoiceNo: d.invoiceNo,
       clientName: d.clientName || "",
@@ -255,16 +355,16 @@ export async function listNonCommissionInvoices(params: {
     .lean()
 
   // Fetch all tickets for these invoices to get issue dates
-  const invIds = docs.map((d: any) => String(d._id))
+  const invIds = docs.map((d: any) => d._id)
   const allTickets = await InvoiceTicket.find({ invoiceId: { $in: invIds }, isDeleted: { $ne: true } }).lean()
 
   const invoices = docs.map((d: any) => {
-    const invIdStr = String(d._id)
-    const invTickets = allTickets.filter((t: any) => String(t.invoiceId) === invIdStr)
+    const invId = d._id
+    const invTickets = allTickets.filter((t: any) => String(t.invoiceId) === String(invId))
     const issueDates = Array.from(new Set(invTickets.map((t: any) => t.issueDate || t.createdAt))).filter(Boolean)
 
     return {
-      id: invIdStr,
+      id: String(invId),
       clientId: String(d.clientId || ""),
       invoiceNo: d.invoiceNo,
       clientName: d.clientName || "",
@@ -367,8 +467,8 @@ export async function createNonCommissionInvoice(body: any, companyId?: string) 
     let createdId = ""
     await session.withTransaction(async () => {
       const result = await Invoice.create([headerDoc], { session })
-      const invoiceId = String(result[0]._id)
-      createdId = invoiceId
+      const invoiceId = result[0]._id
+      createdId = String(invoiceId)
 
       // 5. Create Child Records
       for (const item of invoiceItems) {
@@ -387,16 +487,17 @@ export async function createNonCommissionInvoice(body: any, companyId?: string) 
           ticketType: ticketDetails.ticketType,
           airbusClass: ticketDetails.airbusClass,
           issueDate: ticketDetails.issueDate,
-          companyId: companyIdStr,
+          companyId: companyIdStr ? new Types.ObjectId(companyIdStr) : undefined,
           createdAt: now,
           updatedAt: now
         }], { session })
-        const ticketId = String(ticketResult[0]._id)
+        const ticketId = ticketResult[0]._id
 
         // b. Create InvoiceItem (Financial Row) - Linked to Ticket
         await InvoiceItem.create([{
           invoiceId,
-          ticketId,
+          referenceId: ticketId,
+          itemType: "ticket",
           product: "Non-Commission Ticket",
           paxName: ticketDetails.paxName || "",
           description: `Ticket: ${ticketDetails.ticketNo} | Route: ${ticketDetails.route}`,
@@ -407,7 +508,7 @@ export async function createNonCommissionInvoice(body: any, companyId?: string) 
           totalCost: parseNumber(ticketDetails.purchasePrice, 0),
           profit: parseNumber(item.profit, 0),
           vendorId: ticketDetails.vendor ? new Types.ObjectId(ticketDetails.vendor) : null,
-          companyId: companyIdStr,
+          companyId: companyIdStr ? new Types.ObjectId(companyIdStr) : undefined,
           createdAt: now,
           updatedAt: now
         }], { session })
@@ -425,7 +526,7 @@ export async function createNonCommissionInvoice(body: any, companyId?: string) 
             dateOfBirth: p.dob,
             dateOfIssue: p.dateOfIssue,
             dateOfExpire: p.dateOfExpire,
-            companyId: companyIdStr,
+            companyId: companyIdStr ? new Types.ObjectId(companyIdStr) : undefined,
             createdAt: now,
             updatedAt: now
           })), { session })
@@ -443,7 +544,7 @@ export async function createNonCommissionInvoice(body: any, companyId?: string) 
             pickupTime: f.departureTime,
             dropoffTime: f.arrivalTime,
             pickupDate: f.flyDate,
-            companyId: companyIdStr,
+            companyId: companyIdStr ? new Types.ObjectId(companyIdStr) : undefined,
             createdAt: now,
             updatedAt: now
           })), { session })
@@ -484,13 +585,13 @@ export async function getNonCommissionInvoiceById(id: string, companyId?: string
   if (!inv) throw new AppError("Not found", 404)
   if (companyId && String(inv.companyId || "") !== String(companyId)) throw new AppError("Unauthorized", 401)
 
-  const invIdStr = String(inv._id)
+  const invId = inv._id
   // Fetch children
   const [items, tickets, transports, passports] = await Promise.all([
-    InvoiceItem.find({ invoiceId: invIdStr, isDeleted: { $ne: true } }).lean(),
-    InvoiceTicket.find({ invoiceId: invIdStr, isDeleted: { $ne: true } }).lean(),
-    InvoiceTransport.find({ invoiceId: invIdStr, isDeleted: { $ne: true } }).lean(),
-    InvoicePassport.find({ invoiceId: invIdStr, isDeleted: { $ne: true } }).lean(),
+    InvoiceItem.find({ invoiceId: invId, isDeleted: { $ne: true } }).lean(),
+    InvoiceTicket.find({ invoiceId: invId, isDeleted: { $ne: true } }).lean(),
+    InvoiceTransport.find({ invoiceId: invId, isDeleted: { $ne: true } }).lean(),
+    InvoicePassport.find({ invoiceId: invId, isDeleted: { $ne: true } }).lean(),
   ])
 
   // Map to the shape expected by the frontend Edit modal
@@ -499,11 +600,12 @@ export async function getNonCommissionInvoiceById(id: string, companyId?: string
   // and each InvoiceItem record represents one ticket in the UI list.
   
   const reconstructedItems = items.map((ii: any) => {
-    // 1. Find matching ticket for this item using ticketId (preferred) or paxName/description (fallback)
+    // 1. Find matching ticket for this item using referenceId (preferred) or paxName/description (fallback)
     // IMPORTANT: MongoDB .lean() returns _id as an ObjectId, so we use .toString() to compare.
     const ticket = tickets.find((t: any) => 
+      (ii.referenceId && String(t._id) === String(ii.referenceId)) || 
       (ii.ticketId && String(t._id) === String(ii.ticketId)) || 
-      (!ii.ticketId && (t.ticketNo === ii.paxName || t.route === ii.description.split('|')[1]?.split(':')[1]?.trim()))
+      (!ii.referenceId && (t.ticketNo === ii.paxName || t.route === ii.description.split('|')[1]?.split(':')[1]?.trim()))
     ) || tickets[0]
     
     const ticketIdStr = ticket ? String(ticket._id) : null
@@ -512,7 +614,7 @@ export async function getNonCommissionInvoiceById(id: string, companyId?: string
     const itemPaxEntries = passports
       .filter((p: any) => 
         (ticketIdStr && String(p.ticketId) === ticketIdStr) || 
-        (!p.ticketId && String(p.invoiceId) === invIdStr)
+        (!p.ticketId && String(p.invoiceId) === String(invId))
       )
       .map((p: any) => ({
         id: p.id || String(p._id),
@@ -529,7 +631,7 @@ export async function getNonCommissionInvoiceById(id: string, companyId?: string
     const itemFlightEntries = transports
       .filter((tr: any) => 
         (ticketIdStr && String(tr.ticketId) === ticketIdStr) || 
-        (!tr.ticketId && String(tr.invoiceId) === invIdStr)
+        (!tr.ticketId && String(tr.invoiceId) === String(invId))
       )
       .map((tr: any) => ({
         id: tr.id || String(tr._id),
@@ -543,7 +645,7 @@ export async function getNonCommissionInvoiceById(id: string, companyId?: string
       }))
 
     return {
-      id: ii.ticketId || ii.id || String(ii._id),
+      id: ii.referenceId || ii.ticketId || ii.id || String(ii._id),
       ticketDetails: {
         ticketNo: ticket?.ticketNo || "",
         clientPrice: ii.totalSales || 0,
@@ -569,7 +671,7 @@ export async function getNonCommissionInvoiceById(id: string, companyId?: string
 
   return {
     ...inv,
-    id: invIdStr,
+    id: String(invId),
     items: reconstructedItems
   }
 }
@@ -583,12 +685,12 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
     let resultOk = false
     await session.withTransaction(async () => {
       // 1. Delete existing related records (Soft delete or hard delete for replacement)
-      const invIdStr = String(id)
+      const invId = new Types.ObjectId(id)
       await Promise.all([
-        InvoiceItem.deleteMany({ invoiceId: invIdStr }).session(session),
-        InvoiceTicket.deleteMany({ invoiceId: invIdStr }).session(session),
-        InvoicePassport.deleteMany({ invoiceId: invIdStr }).session(session),
-        InvoiceTransport.deleteMany({ invoiceId: invIdStr }).session(session),
+        InvoiceItem.deleteMany({ invoiceId: invId }).session(session),
+        InvoiceTicket.deleteMany({ invoiceId: invId }).session(session),
+        InvoicePassport.deleteMany({ invoiceId: invId }).session(session),
+        InvoiceTransport.deleteMany({ invoiceId: invId }).session(session),
       ])
 
       // 2. Re-create header and children using existing create logic adapted for Update
@@ -646,7 +748,7 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
 
         // a. Create InvoiceTicket (Main Reference)
         const ticketResult = await InvoiceTicket.create([{
-          invoiceId: invIdStr,
+          invoiceId: invId,
           ticketNo: ticketDetails.ticketNo,
           pnr: ticketDetails.pnr,
           gdsPnr: ticketDetails.gdsPnr,
@@ -657,16 +759,17 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
           ticketType: ticketDetails.ticketType,
           airbusClass: ticketDetails.airbusClass,
           issueDate: ticketDetails.issueDate,
-          companyId: companyIdStr,
+          companyId: companyIdStr ? new Types.ObjectId(companyIdStr) : undefined,
           createdAt: now,
           updatedAt: now
         }], { session })
-        const ticketId = String(ticketResult[0]._id)
+        const ticketId = ticketResult[0]._id
 
         // b. Create InvoiceItem (Financial Row) - Linked to Ticket
         await InvoiceItem.create([{
-          invoiceId: invIdStr,
-          ticketId,
+          invoiceId: invId,
+          referenceId: ticketId,
+          itemType: "ticket",
           product: "Non-Commission Ticket",
           paxName: ticketDetails.paxName || "",
           description: `Ticket: ${ticketDetails.ticketNo} | Route: ${ticketDetails.route}`,
@@ -677,7 +780,7 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
           totalCost: parseNumber(ticketDetails.purchasePrice, 0),
           profit: parseNumber(item.profit, 0),
           vendorId: ticketDetails.vendor ? new Types.ObjectId(ticketDetails.vendor) : null,
-          companyId: companyIdStr,
+          companyId: companyIdStr ? new Types.ObjectId(companyIdStr) : undefined,
           createdAt: now,
           updatedAt: now
         }], { session })
@@ -685,7 +788,7 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
         // c. Create InvoicePassports - Linked to Ticket
         if (paxEntries.length > 0) {
           await InvoicePassport.insertMany(paxEntries.map((p: any) => ({
-            invoiceId: invIdStr,
+            invoiceId: invId,
             ticketId,
             passportNo: p.passportId || "",
             name: p.name,
@@ -695,7 +798,7 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
             dateOfBirth: p.dob,
             dateOfIssue: p.dateOfIssue,
             dateOfExpire: p.dateOfExpire,
-            companyId: companyIdStr,
+            companyId: companyIdStr ? new Types.ObjectId(companyIdStr) : undefined,
             createdAt: now,
             updatedAt: now
           })), { session })
@@ -704,7 +807,7 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
         // d. Create InvoiceTransports - Linked to Ticket
         if (flightEntries.length > 0) {
           await InvoiceTransport.insertMany(flightEntries.map((f: any) => ({
-            invoiceId: invIdStr,
+            invoiceId: invId,
             ticketId,
             transportType: `Flight: ${f.flightNo}`,
             referenceNo: f.airline,
@@ -713,7 +816,7 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
             pickupTime: f.departureTime,
             dropoffTime: f.arrivalTime,
             pickupDate: f.flyDate,
-            companyId: companyIdStr,
+            companyId: companyIdStr ? new Types.ObjectId(companyIdStr) : undefined,
             createdAt: now,
             updatedAt: now
           })), { session })
@@ -752,7 +855,7 @@ export async function deleteInvoiceById(id: string, companyId?: string) {
       if (!inv) throw new AppError("Not found", 404)
       if (companyId && String(inv.companyId || "") !== String(companyId)) throw new AppError("Not found", 404)
 
-      const invoiceId = String(inv._id)
+      const invoiceId = inv._id
       const now = new Date().toISOString()
 
       // 1. Fetch items and aggregate costs by vendor to avoid N+1
@@ -832,17 +935,17 @@ export async function deleteInvoiceById(id: string, companyId?: string) {
 
 export async function createInvoice(body: any, companyId?: string) {
   await connectMongoose()
-  const general = body.general || body
-  const billing = body.billing || { items: body.billing_information || [] }
-  const billingItemsRaw = Array.isArray(billing.items) ? billing.items : (Array.isArray(billing) ? billing : [])
   const now = new Date().toISOString()
   const companyIdStr = companyId ? String(companyId) : undefined
 
-  // 1. Validation
+  // 1. Normalize & Validate
+  const payload = normalizePayload(body)
+  const { general, items: billingItems, summary, globalDetails } = payload
+
   if (!general.clientId) throw new AppError("Client is required", 400)
   if (!general.employeeId) throw new AppError("Sales person is required", 400)
   if (!general.salesDate) throw new AppError("Sales date is required", 400)
-  if (billingItemsRaw.length === 0) throw new AppError("At least one billing item is required", 400)
+  if (billingItems.length === 0) throw new AppError("At least one billing item is required", 400)
 
   // 2. Resolve Client & Check Credit Limit
   const clientIdRaw = String(general.clientId || "").trim()
@@ -855,20 +958,13 @@ export async function createInvoice(body: any, companyId?: string) {
   }
   if (!clientDoc) throw new AppError("Client not found", 404)
 
-  const subtotal = parseNumber(billing.subtotal ?? body.invoice_sub_total ?? billingItemsRaw.reduce((s: number, i: any) => s + parseNumber(i.billing_subtotal ?? i.totalSales ?? 0), 0))
-  const totalCost = parseNumber(billing.totalCost ?? billingItemsRaw.reduce((s: number, i: any) => s + parseNumber(i.totalCost ?? 0), 0))
-  const discount = parseNumber(billing.discount ?? body.billing_discount ?? body.discount ?? 0)
-  const serviceCharge = parseNumber(billing.serviceCharge ?? body.service_charge ?? 0)
-  const vatTax = parseNumber(billing.vatTax ?? body.vat_tax ?? 0)
-  const netTotal = parseNumber(body.invoice_net_total ?? (billing.netTotal ?? (subtotal - discount + serviceCharge + vatTax)))
-  
   const creditLimit = parseNumber(clientDoc.creditLimit || 0)
   const presentBalance = parseNumber(clientDoc.presentBalance || 0)
-  if (creditLimit > 0 && presentBalance + netTotal > creditLimit) {
+  if (creditLimit > 0 && presentBalance + summary.netTotal > creditLimit) {
     throw new AppError("Credit limit exceeded", 400, "credit_limit_exceeded")
   }
 
-  // 3. Denormalize Names (Client, Employee, Agent)
+  // 3. Denormalize Names
   const names: any = { clientName: clientDoc.name || "", clientPhone: clientDoc.phone || "" }
   const employeeId = Types.ObjectId.isValid(general.employeeId) ? new Types.ObjectId(general.employeeId) : undefined
   if (employeeId) {
@@ -877,48 +973,23 @@ export async function createInvoice(body: any, companyId?: string) {
   }
   const agentId = Types.ObjectId.isValid(general.agentId) ? new Types.ObjectId(general.agentId) : undefined
 
-  // 4. Normalize Billing Items
-  const billingItems = billingItemsRaw.map((i: any) => {
-    const vId = i.vendor || i.billing_comvendor || i.vendorId
-    return {
-      product: i.product || i.billing_product_id || "",
-      paxName: i.paxName || i.pax_name || "",
-      description: i.description || i.billing_description || "",
-      quantity: parseNumber(i.quantity ?? i.billing_quantity ?? 1),
-      unitPrice: parseNumber(i.unitPrice ?? i.billing_unit_price ?? 0),
-      costPrice: parseNumber(i.costPrice ?? i.billing_cost_price ?? 0),
-      totalSales: parseNumber(i.totalSales ?? i.billing_total_sales ?? i.billing_subtotal ?? 0),
-      totalCost: parseNumber(i.totalCost ?? 0),
-      profit: parseNumber(i.profit ?? i.billing_profit ?? 0),
-      vendorId: (vId && Types.ObjectId.isValid(vId)) ? new Types.ObjectId(vId) : null,
-      country: i.country,
-      visaType: i.visaType,
-      visaDuration: i.visaDuration,
-      token: i.token,
-      delivery: i.delivery,
-      visaNo: i.visaNo,
-      mofaNo: i.mofaNo,
-      okalaNo: i.okalaNo,
-    }
-  })
-
-  // 5. Header Document
+  // 4. Header Document
   const headerDoc: any = {
-    invoiceNo: String(general.invoiceNo || "").trim(),
-    salesDate: String(general.salesDate || now),
-    dueDate: general.dueDate || "",
+    invoiceNo: general.invoiceNo,
+    salesDate: general.salesDate,
+    dueDate: general.dueDate,
     clientId: new Types.ObjectId(clientDoc._id),
     employeeId,
     agentId,
     companyId: companyId ? new Types.ObjectId(companyId) : undefined,
     ...names,
-    invoiceType: body.invoiceType || "standard",
-    billing: { subtotal, totalCost, discount, serviceCharge, vatTax, netTotal, note: String(billing.note || body.billing_note || ''), reference: String(billing.reference || body.billing_reference || '') },
-    showPrevDue: !!(general.invoice_show_prev_due || body.showPrevDue),
-    showDiscount: !!(general.invoice_show_discount || body.showDiscount),
-    agentCommission: parseNumber(body.invoice_agent_com_amount ?? 0),
-    clientPreviousDue: parseNumber(body.invoice_client_previous_due ?? 0),
-    netTotal,
+    invoiceType: payload.invoiceType,
+    billing: summary,
+    showPrevDue: payload.showPrevDue,
+    showDiscount: payload.showDiscount,
+    agentCommission: payload.agentCommission,
+    clientPreviousDue: payload.clientPreviousDue,
+    netTotal: summary.netTotal,
     receivedAmount: 0,
     status: "due",
     createdAt: now,
@@ -932,21 +1003,24 @@ export async function createInvoice(body: any, companyId?: string) {
     await session.withTransaction(async () => {
       // a. Create Invoice Header
       const result = await Invoice.create([headerDoc], { session })
-      const invoiceId = String(result[0]._id)
-      createdId = invoiceId
+      const invoiceId = result[0]._id
+      createdId = String(invoiceId)
 
       // b. Create Child Records
-      const tickets = body.ticket || body.ticketInfo || []
-      const hotels = body.hotel || body.hotel_information || []
-      const transports = body.transport || body.transport_information || []
-      const passports = body.passport || body.passport_information || []
-
       if (billingItems.length) {
-        await InvoiceItem.insertMany(billingItems.map(i => ({ ...i, invoiceId, companyId: companyIdStr, createdAt: now, updatedAt: now })), { session })
+        await InvoiceItem.insertMany(billingItems.map(i => ({ 
+          ...i, 
+          invoiceId, 
+          companyId: companyId ? new Types.ObjectId(companyId) : undefined,
+          vendorId: (i.vendorId && Types.ObjectId.isValid(i.vendorId)) ? new Types.ObjectId(i.vendorId) : null,
+          createdAt: now, 
+          updatedAt: now 
+        })), { session })
+        
         for (const item of billingItems) {
-          if (item.vendorId && item.totalCost > 0) {
+          if (item.vendorId && Types.ObjectId.isValid(item.vendorId) && item.totalCost > 0) {
             await Vendor.updateOne(
-              { _id: item.vendorId },
+              { _id: new Types.ObjectId(item.vendorId) },
               { $inc: { "presentBalance.amount": item.totalCost }, $set: { "presentBalance.type": "due", updatedAt: now } },
               { session }
             )
@@ -954,32 +1028,41 @@ export async function createInvoice(body: any, companyId?: string) {
         }
       }
 
-      if (tickets.length) await InvoiceTicket.insertMany(tickets.map((t: any) => ({ ...t, invoiceId, companyId: companyIdStr, createdAt: now, updatedAt: now })), { session })
-      if (hotels.length) await InvoiceHotel.insertMany(hotels.map((h: any) => ({ ...h, invoiceId, companyId: companyIdStr, createdAt: now, updatedAt: now })), { session })
-      if (transports.length) await InvoiceTransport.insertMany(transports.map((tr: any) => ({ ...tr, invoiceId, companyId: companyIdStr, createdAt: now, updatedAt: now })), { session })
+      const { tickets, hotels, transports, passports } = globalDetails
+      if (tickets.length) await InvoiceTicket.insertMany(tickets.map((t: any) => ({ ...t, invoiceId, companyId: companyId ? new Types.ObjectId(companyId) : undefined, createdAt: now, updatedAt: now })), { session })
+      if (hotels.length) await InvoiceHotel.insertMany(hotels.map((h: any) => ({ ...h, invoiceId, companyId: companyId ? new Types.ObjectId(companyId) : undefined, createdAt: now, updatedAt: now })), { session })
+      if (transports.length) await InvoiceTransport.insertMany(transports.map((tr: any) => ({ ...tr, invoiceId, companyId: companyId ? new Types.ObjectId(companyId) : undefined, createdAt: now, updatedAt: now })), { session })
       if (passports.length) {
         const col = mongoose.connection?.db?.collection("invoice_passports")
         if (col) await col.insertMany(passports.map((p: any, idx: number) => ({
-          id: p.id || String(Date.now() + idx), invoiceId, companyId: companyIdStr,
-          passportNo: p.passportNo || p.passport_no || "", name: p.name || "", email: p.email || "",
-          dateOfIssue: p.dateOfIssue || p.date_of_issue || "", dateOfExpire: p.dateOfExpire || p.date_of_expire || "",
-          paxType: p.paxType || p.pax_type || "", contactNo: p.contactNo || p.mobile || "",
-          dateOfBirth: p.dateOfBirth || p.dob || "", passportId: p.passportId || p.passport_id || "",
-          createdAt: now, updatedAt: now
+          ...p,
+          id: p.id || String(Date.now() + idx), 
+          invoiceId, 
+          companyId: companyId ? new Types.ObjectId(companyId) : undefined,
+          passportNo: p.passportNo || p.passport_no || "", 
+          name: p.name || "", 
+          email: p.email || "",
+          dateOfIssue: p.dateOfIssue || p.date_of_issue || "", 
+          dateOfExpire: p.dateOfExpire || p.date_of_expire || "",
+          paxType: p.paxType || p.pax_type || "", 
+          contactNo: p.contactNo || p.mobile || "",
+          dateOfBirth: p.dateOfBirth || p.dob || "", 
+          passportId: p.passportId || p.passport_id || "",
+          createdAt: now, 
+          updatedAt: now
         })), { session })
       }
 
       // c. Update Client Balance
-      await Client.updateOne({ _id: clientDoc._id }, { $inc: { presentBalance: -netTotal }, $set: { updatedAt: now } }, { session })
+      await Client.updateOne({ _id: clientDoc._id }, { $inc: { presentBalance: -summary.netTotal }, $set: { updatedAt: now } }, { session })
 
       // d. Money Receipt Logic
       let moneyReceiptNo = ""
       let receivedSoFar = 0
-      const moneyReceipt = body.moneyReceipt
+      const moneyReceipt = payload.moneyReceipt
       if (moneyReceipt?.paymentMethod && moneyReceipt?.amount > 0) {
-        const { createMoneyReceipt } = await import("./moneyReceiptService")
         const mrResult = await createMoneyReceipt({
-          clientId: clientDoc._id, invoiceId, paymentTo: "invoice",
+          clientId: clientDoc._id, invoiceId: createdId, paymentTo: "invoice",
           amount: moneyReceipt.amount, discount: moneyReceipt.discount || 0,
           paymentDate: moneyReceipt.paymentDate || general.salesDate || now,
           paymentMethod: moneyReceipt.paymentMethod, accountId: moneyReceipt.accountId,
@@ -992,7 +1075,7 @@ export async function createInvoice(body: any, companyId?: string) {
       }
 
       response = {
-        invoice_id: Number(String(invoiceId).slice(-6)), invoice_no: headerDoc.invoiceNo, net_total: String(netTotal.toFixed(2)),
+        invoice_id: Number(String(createdId).slice(-6)), invoice_no: headerDoc.invoiceNo, net_total: String(summary.netTotal.toFixed(2)),
         invoice_client_id: clientDoc.uniqueId || null, client_name: names.clientName || "", mobile: names.clientPhone || null,
         invclientpayment_amount: String(receivedSoFar.toFixed(2)), money_receipt_num: moneyReceiptNo, sales_by: names.salesByName || "",
         invoice_total_profit: String(billingItems.reduce((s: number, i: any) => s + i.profit, 0).toFixed(2)),
@@ -1016,22 +1099,12 @@ export async function updateInvoiceById(id: string, body: any, companyId?: strin
   if (!inv) throw new AppError("Not found", 404)
   if (companyId && String(inv.companyId || "") !== String(companyId)) throw new AppError("Unauthorized", 401)
 
-  const general = body.general || body
-  const billing = body.billing || { items: body.billing_information || [] }
-  const billingItemsRaw = Array.isArray(billing.items) ? billing.items : (Array.isArray(billing) ? billing : [])
   const now = new Date().toISOString()
-  const companyIdStr = companyId ? String(companyId) : undefined
+  const payload = normalizePayload(body)
+  const { general, items: billingItems, summary, globalDetails } = payload
 
-  // 1. Compute Deltas & Prepare Header Updates
-  const subtotal = parseNumber(billing.subtotal ?? body.invoice_sub_total ?? billingItemsRaw.reduce((s: number, i: any) => s + parseNumber(i.billing_subtotal ?? i.totalSales ?? 0), 0))
-  const totalCost = parseNumber(billing.totalCost ?? billingItemsRaw.reduce((s: number, i: any) => s + parseNumber(i.totalCost ?? 0), 0))
-  const discount = parseNumber(billing.discount ?? body.billing_discount ?? body.discount ?? 0)
-  const serviceCharge = parseNumber(billing.serviceCharge ?? body.service_charge ?? 0)
-  const vatTax = parseNumber(billing.vatTax ?? body.vat_tax ?? 0)
-  const netTotal = parseNumber(body.invoice_net_total ?? (billing.netTotal ?? (subtotal - discount + serviceCharge + vatTax)))
-  
   const oldNet = parseNumber(inv.netTotal || inv.billing?.netTotal, 0)
-  const clientDelta = netTotal - oldNet
+  const clientDelta = summary.netTotal - oldNet
 
   const names: any = { clientName: inv.clientName, clientPhone: inv.clientPhone }
   const employeeId = Types.ObjectId.isValid(general.employeeId) ? new Types.ObjectId(general.employeeId) : inv.employeeId
@@ -1041,19 +1114,19 @@ export async function updateInvoiceById(id: string, body: any, companyId?: strin
   }
 
   const headerUpdates: any = {
-    invoiceNo: String(general.invoiceNo || inv.invoiceNo).trim(),
-    salesDate: String(general.salesDate || inv.salesDate),
+    invoiceNo: general.invoiceNo || inv.invoiceNo,
+    salesDate: general.salesDate || inv.salesDate,
     dueDate: general.dueDate || inv.dueDate || "",
     employeeId,
     agentId: Types.ObjectId.isValid(general.agentId) ? new Types.ObjectId(general.agentId) : inv.agentId,
     ...names,
-    invoiceType: body.invoiceType || inv.invoiceType || "standard",
-    billing: { subtotal, totalCost, discount, serviceCharge, vatTax, netTotal, note: String(billing.note || body.billing_note || ''), reference: String(billing.reference || body.billing_reference || '') },
-    showPrevDue: !!(general.invoice_show_prev_due || body.showPrevDue),
-    showDiscount: !!(general.invoice_show_discount || body.showDiscount),
-    agentCommission: parseNumber(body.invoice_agent_com_amount ?? inv.agentCommission ?? 0),
-    clientPreviousDue: parseNumber(body.invoice_client_previous_due ?? inv.clientPreviousDue ?? 0),
-    netTotal,
+    invoiceType: payload.invoiceType || inv.invoiceType || "standard",
+    billing: summary,
+    showPrevDue: payload.showPrevDue,
+    showDiscount: payload.showDiscount,
+    agentCommission: payload.agentCommission,
+    clientPreviousDue: payload.clientPreviousDue,
+    netTotal: summary.netTotal,
     updatedAt: now,
   }
 
@@ -1074,31 +1147,29 @@ export async function updateInvoiceById(id: string, body: any, companyId?: strin
 
       // 3. Update Header & Replace Children
       await Invoice.updateOne({ _id: id }, { $set: headerUpdates }, { session })
+      const idObj = new Types.ObjectId(id)
       await Promise.all([
-        InvoiceItem.deleteMany({ invoiceId: id }).session(session),
-        InvoiceTicket.deleteMany({ invoiceId: id }).session(session),
-        InvoiceHotel.deleteMany({ invoiceId: id }).session(session),
-        InvoiceTransport.deleteMany({ invoiceId: id }).session(session),
-        InvoicePassport.deleteMany({ invoiceId: id }).session(session),
+        InvoiceItem.deleteMany({ invoiceId: idObj }).session(session),
+        InvoiceTicket.deleteMany({ invoiceId: idObj }).session(session),
+        InvoiceHotel.deleteMany({ invoiceId: idObj }).session(session),
+        InvoiceTransport.deleteMany({ invoiceId: idObj }).session(session),
+        InvoicePassport.deleteMany({ invoiceId: idObj }).session(session),
       ])
 
-      const billingItems = billingItemsRaw.map((i: any) => {
-        const vId = i.vendor || i.billing_comvendor || i.vendorId
-        return {
-          ...i, invoiceId: id, companyId: companyIdStr, updatedAt: now,
-          vendorId: (vId && Types.ObjectId.isValid(vId)) ? new Types.ObjectId(vId) : null,
-          totalSales: parseNumber(i.totalSales ?? i.billing_total_sales ?? i.billing_subtotal ?? 0),
-          totalCost: parseNumber(i.totalCost ?? 0),
-          profit: parseNumber(i.profit ?? i.billing_profit ?? 0),
-        }
-      })
-
       if (billingItems.length) {
-        await InvoiceItem.insertMany(billingItems, { session })
+        await InvoiceItem.insertMany(billingItems.map(i => ({ 
+          ...i, 
+          invoiceId: idObj, 
+          companyId: companyId ? new Types.ObjectId(companyId) : undefined,
+          vendorId: (i.vendorId && Types.ObjectId.isValid(i.vendorId)) ? new Types.ObjectId(i.vendorId) : null,
+          createdAt: now, 
+          updatedAt: now 
+        })), { session })
+        
         for (const item of billingItems) {
-          if (item.vendorId && item.totalCost > 0) {
+          if (item.vendorId && Types.ObjectId.isValid(item.vendorId) && item.totalCost > 0) {
             await Vendor.updateOne(
-              { _id: item.vendorId },
+              { _id: new Types.ObjectId(item.vendorId) },
               { $inc: { "presentBalance.amount": item.totalCost }, $set: { "presentBalance.type": "due", updatedAt: now } },
               { session }
             )
@@ -1106,23 +1177,28 @@ export async function updateInvoiceById(id: string, body: any, companyId?: strin
         }
       }
 
-      const tickets = body.ticket || body.ticketInfo || []
-      const hotels = body.hotel || body.hotel_information || []
-      const transports = body.transport || body.transport_information || []
-      const passports = body.passport || body.passport_information || []
-
-      if (tickets.length) await InvoiceTicket.insertMany(tickets.map((t: any) => ({ ...t, invoiceId: id, companyId: companyIdStr, createdAt: now, updatedAt: now })), { session })
-      if (hotels.length) await InvoiceHotel.insertMany(hotels.map((h: any) => ({ ...h, invoiceId: id, companyId: companyIdStr, createdAt: now, updatedAt: now })), { session })
-      if (transports.length) await InvoiceTransport.insertMany(transports.map((tr: any) => ({ ...tr, invoiceId: id, companyId: companyIdStr, createdAt: now, updatedAt: now })), { session })
+      const { tickets, hotels, transports, passports } = globalDetails
+      if (tickets.length) await InvoiceTicket.insertMany(tickets.map((t: any) => ({ ...t, invoiceId: idObj, companyId: companyId ? new Types.ObjectId(companyId) : undefined, createdAt: now, updatedAt: now })), { session })
+      if (hotels.length) await InvoiceHotel.insertMany(hotels.map((h: any) => ({ ...h, invoiceId: idObj, companyId: companyId ? new Types.ObjectId(companyId) : undefined, createdAt: now, updatedAt: now })), { session })
+      if (transports.length) await InvoiceTransport.insertMany(transports.map((tr: any) => ({ ...tr, invoiceId: idObj, companyId: companyId ? new Types.ObjectId(companyId) : undefined, createdAt: now, updatedAt: now })), { session })
       if (passports.length) {
         const col = mongoose.connection?.db?.collection("invoice_passports")
         if (col) await col.insertMany(passports.map((p: any, idx: number) => ({
-          id: p.id || String(Date.now() + idx), invoiceId: id, companyId: companyIdStr,
-          passportNo: p.passportNo || p.passport_no || "", name: p.name || "", email: p.email || "",
-          dateOfIssue: p.dateOfIssue || p.date_of_issue || "", dateOfExpire: p.dateOfExpire || p.date_of_expire || "",
-          paxType: p.paxType || p.pax_type || "", contactNo: p.contactNo || p.mobile || "",
-          dateOfBirth: p.dateOfBirth || p.dob || "", passportId: p.passportId || p.passport_id || "",
-          createdAt: now, updatedAt: now
+          ...p,
+          id: p.id || String(Date.now() + idx), 
+          invoiceId: idObj, 
+          companyId: companyId ? new Types.ObjectId(companyId) : undefined,
+          passportNo: p.passportNo || p.passport_no || "", 
+          name: p.name || "", 
+          email: p.email || "",
+          dateOfIssue: p.dateOfIssue || p.date_of_issue || "", 
+          dateOfExpire: p.dateOfExpire || p.date_of_expire || "",
+          paxType: p.paxType || p.pax_type || "", 
+          contactNo: p.contactNo || p.mobile || "",
+          dateOfBirth: p.dateOfBirth || p.dob || "", 
+          passportId: p.passportId || p.passport_id || "",
+          createdAt: now, 
+          updatedAt: now
         })), { session })
       }
 

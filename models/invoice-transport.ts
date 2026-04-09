@@ -1,7 +1,7 @@
 import { Schema, model, models } from "mongoose"
 
 const InvoiceTransportSchema = new Schema({
-  invoiceId: { type: String, index: true, required: true },
+  invoiceId: { type: Schema.Types.ObjectId, ref: "Invoice", index: true, required: true },
   // Frontend-aligned fields
   transportType: { type: String },
   referenceNo: { type: String },
@@ -13,9 +13,8 @@ const InvoiceTransportSchema = new Schema({
   transportTypeId: { type: String },
   pickupDate: { type: String },
   dropoffDate: { type: String },
-  ticketId: { type: String, index: true }, // Linked to InvoiceTicket _id
-  companyId: { type: String },
-  id: { type: String },
+  ticketId: { type: Schema.Types.ObjectId, ref: "InvoiceTicket", index: true }, 
+  companyId: { type: Schema.Types.ObjectId, ref: "Company", index: true },
   isDeleted: { type: Boolean, default: false, index: true },
   createdAt: { type: String },
   updatedAt: { type: String },

@@ -1,7 +1,7 @@
 import { Schema, model, models } from "mongoose"
 
 const InvoiceHotelSchema = new Schema({
-  invoiceId: { type: String, index: true, required: true },
+  invoiceId: { type: Schema.Types.ObjectId, ref: "Invoice", index: true, required: true },
   // Frontend-aligned fields
   hotelName: { type: String },
   referenceNo: { type: String },
@@ -12,8 +12,7 @@ const InvoiceHotelSchema = new Schema({
   checkIn: { type: String },
   checkOut: { type: String },
   nights: { type: Number },
-  companyId: { type: String },
-  id: { type: String },
+  companyId: { type: Schema.Types.ObjectId, ref: "Company", index: true },
   isDeleted: { type: Boolean, default: false, index: true },
   createdAt: { type: String },
   updatedAt: { type: String },

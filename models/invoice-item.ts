@@ -1,7 +1,8 @@
 import { Schema, model, models } from "mongoose"
 
 const InvoiceItemSchema = new Schema({
-  invoiceId: { type: String, index: true, required: true }, // stored as String in existing data
+  invoiceId: { type: Schema.Types.ObjectId, ref: "Invoice", index: true, required: true },
+  itemType: { type: String, enum: ['product', 'ticket', 'visa', 'hotel', 'transport'], default: 'product' },
   product: { type: String },
   paxName: { type: String },
   description: { type: String },
@@ -12,15 +13,25 @@ const InvoiceItemSchema = new Schema({
   totalCost: { type: Number, default: 0 },
   profit: { type: Number, default: 0 },
   vendorId: { type: Schema.Types.ObjectId, ref: "Vendor", index: true },
-  ticketId: { type: String, index: true }, // Linked to InvoiceTicket _id
-  paidAmount: { type: Number, default: 0 },
-  dueAmount: { type: Number, default: 0 },
-  companyId: { type: String },
-  id: { type: String },
+  
+  // Visa specific fields (Flattened for performance/simplicity as per payload)
+  country: { type: String },
+  visaType: { type: String },
+  visaDuration: { type: String },
+  token: { type: String },
+  delivery: { type: String },
+  visaNo: { type: String },
+  mofaNo: { type: String },
+  okalaNo: { type: String },
+
+  // Relation links
+  referenceId: { type: Schema.Types.ObjectId, index: true }, // Links to Ticket/Passport/Hotel/Transport doc
+  
+  companyId: { type: Schema.Types.ObjectId, ref: "Company", index: true },
   isDeleted: { type: Boolean, default: false, index: true },
   createdAt: { type: String },
   updatedAt: { type: String },
-}, { collection: "invoice_items", strict: false })
+}, { collection: "invoice_items" })
 
 // Prevent model caching during development
 if (process.env.NODE_ENV === "development" && models.InvoiceItem) {
