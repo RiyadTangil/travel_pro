@@ -144,6 +144,17 @@ export async function getInvoiceById(id: string, companyId: string) {
   const vendorDocs = vendorObjectIds.length ? await Vendor.find({ _id: { $in: vendorObjectIds }, companyId: companyIdObj }).lean() : []
   const vendors = vendorDocs.map(v => ({ id: String(v._id), name: v.name || "", email: v.email || "", mobile: v.mobile || "" }))
 
+  // Collect product names for items
+  const productIds = Array.from(new Set((items || []).map(i => String(i.product || "")).filter(p => Types.ObjectId.isValid(p))))
+  const productDocs = productIds.length ? await mongoose.connection?.db?.collection("products").find({ _id: { $in: productIds.map(pid => new Types.ObjectId(pid)) } }).toArray() : []
+  const productMap = new Map<string, string>()
+  productDocs?.forEach((p: any) => productMap.set(String(p._id), p.product_name))
+
+  const normalizedItems = (items || []).map((i: any) => ({
+    ...i,
+    productName: productMap.get(String(i.product)) || i.product
+  }))
+
   // Include employee detail for the selected salesBy
   let employees: any[] = []
   if (inv.employeeId && Types.ObjectId.isValid(String(inv.employeeId))) {
@@ -182,7 +193,7 @@ export async function getInvoiceById(id: string, companyId: string) {
     dropoffTime: tr.dropoffTime || "",
   }))
 
-  const billingWithItems = { ...(inv.billing || {}), items }
+  const billingWithItems = { ...(inv.billing || {}), items: normalizedItems }
   
   // Fetch client details for prefill
   let clients: any[] = []

@@ -39,7 +39,7 @@ interface BillingItem {
 // The dropdown internally syncs when options change
 const staticFallbackProducts = ["Ticket", "Passport", "Hotel", "Transport", "Visa", "Service", "Miscellaneous"]
 const useProductOptions = () => {
-  const [options, setOptions] = useState<string[]>(staticFallbackProducts)
+  const [options, setOptions] = useState<Array<{ id: string; name: string }>>([])
   useEffect(() => {
     let active = true
     const controller = new AbortController()
@@ -47,13 +47,12 @@ const useProductOptions = () => {
       try {
         const res = await fetch(`/api/products?page=1&pageSize=200`, { signal: controller.signal })
         const json = await res.json()
-        const names: string[] = (json.data || [])
+        const items: Array<{ id: string; name: string }> = (json.data || [])
           .filter((p: any) => p.product_status === 1 && !p.products_is_deleted)
-          .map((p: any) => String(p.product_name))
-        const deduped = Array.from(new Set(names))
-        if (active && deduped.length) setOptions(deduped)
+          .map((p: any) => ({ id: String(p.id), name: String(p.product_name) }))
+        if (active && items.length) setOptions(items)
       } catch (e) {
-        // keep fallback options
+        // keep empty options
       }
     }
     loadProducts()
@@ -89,33 +88,43 @@ interface BillingInformationProps {
   initialItems?: BillingItem[]
   initialTotals?: { subtotal?: number; totalCost?: number; discount?: number; serviceCharge?: number; vatTax?: number; netTotal?: number; agentCommission?: number; invoiceDue?: number; presentBalance?: number; note?: string; reference?: string }
   vendorPreloaded?: Array<{ id: string; name: string; email?: string; mobile?: string }>
-  productOptionsExternal?: string[]
+  productOptionsExternal?: Array<{ id: string; name: string }>
   errors?: Record<string, string>
 }
 
 export function BillingInformation({ invoiceType = "standard", onRequestAddVendor, onChange, initialItems, initialTotals, vendorPreloaded, productOptionsExternal, errors = {} }: BillingInformationProps) {
-  const [items, setItems] = useState<BillingItem[]>([{ 
-    id: "1", 
-    ...initialItem,
-    product: invoiceType === "visa" ? "Invoice(Visa)" : ""
-  }])
   // Always call hooks in a consistent order; avoid conditional hook calls.
   const productOptionsInternal = useProductOptions()
   const productOptions = (productOptionsExternal && productOptionsExternal.length)
     ? productOptionsExternal
     : productOptionsInternal
+
+  const [items, setItems] = useState<BillingItem[]>([])
+
+  useEffect(() => {
+    if (items.length === 0 && productOptions.length > 0) {
+      const visaProduct = productOptions.find(p => p.name === "Invoice(Visa)")
+      setItems([{ 
+        id: "1", 
+        ...initialItem,
+        product: invoiceType === "visa" ? (visaProduct?.id || "Invoice(Visa)") : ""
+      }])
+    }
+  }, [productOptions, invoiceType, items.length])
+
   const vendorPreloadedMemo = useMemo(() => (
     vendorPreloaded?.map(v => ({ id: v.id, name: v.name, email: v.email, mobile: v.mobile }))
   ), [vendorPreloaded])
 
   const addItem = useCallback(() => {
+    const visaProduct = productOptions.find(p => p.name === "Invoice(Visa)")
     const newItem: BillingItem = { 
       id: Date.now().toString(), 
       ...initialItem,
-      product: invoiceType === "visa" ? "Invoice(Visa)" : ""
+      product: invoiceType === "visa" ? (visaProduct?.id || "Invoice(Visa)") : ""
     }
     setItems(prev => [...prev, newItem])
-  }, [invoiceType])
+  }, [invoiceType, productOptions])
 
   const removeItem = useCallback((id: string) => {
     setItems(prev => prev.length > 1 ? prev.filter(i => i.id !== id) : prev)
@@ -166,10 +175,21 @@ export function BillingInformation({ invoiceType = "standard", onRequestAddVendo
 
   useEffect(() => {
     if (initialItems && initialItems.length) {
-      setItems(initialItems.map((i, idx) => ({ id: i.id || String(Date.now() + idx), ...i })))
+      setItems(initialItems.map((i, idx) => ({ 
+        id: i.id || String(Date.now() + idx), 
+        ...i,
+        product: (i as any).productName && !Types.ObjectId.isValid(i.product) ? i.product : (i.product || "")
+      })))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialItems])
+
+  // Helper to check if string is a valid ObjectId
+  const Types = {
+    ObjectId: {
+      isValid: (id: string) => /^[0-9a-fA-F]{24}$/.test(id)
+    }
+  }
 
   useEffect(() => {
     const handle = setTimeout(() => {
@@ -264,7 +284,7 @@ type BillingItemRowProps = {
   index: number
   canRemove: boolean
   invoiceType?: "standard" | "visa" | "non_commission"
-  productOptions: string[]
+  productOptions: Array<{ id: string; name: string }>
   vendorPreloaded?: Array<{ id: string; name: string; email?: string; mobile?: string }>
   onUpdate: (id: string, field: keyof Omit<BillingItem, 'id'>, rawValue: any) => void
   onRemove: (id: string) => void
@@ -273,6 +293,11 @@ type BillingItemRowProps = {
 }
 
 const BillingItemRow = memo(function BillingItemRow({ item, index, canRemove, invoiceType, productOptions, vendorPreloaded, onUpdate, onRemove, onRequestAddVendor, errors = {} }: BillingItemRowProps) {
+  const currentProductName = useMemo(() => {
+    const found = productOptions.find(p => p.id === item.product)
+    return found ? found.name : item.product
+  }, [productOptions, item.product])
+
   return (
     <Card className="relative">
       <CardHeader className="pb-4 bg-gray-50/50">
@@ -299,7 +324,7 @@ const BillingItemRow = memo(function BillingItemRow({ item, index, canRemove, in
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-8 gap-4 mb-4 pb-4 border-b border-dashed">
             <div className="space-y-2">
               <Label className="text-xs font-semibold">Product <span className="text-red-500">*</span></Label>
-              <Input value={item.product} readOnly className="h-8 bg-gray-100 text-xs" />
+              <Input value={currentProductName} readOnly className="h-8 bg-gray-100 text-xs" />
             </div>
             <div className="space-y-2">
               <Label className="text-xs font-semibold">Country <span className="text-red-500">*</span></Label>
@@ -368,19 +393,7 @@ const BillingItemRow = memo(function BillingItemRow({ item, index, canRemove, in
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-10 gap-4">
-          {invoiceType !== "visa" && (
-            <div className="space-y-2">
-              <Label className="text-xs font-semibold">Product <span className="text-red-500">*</span></Label>
-              <CustomDropdown
-                placeholder="Select Product"
-                options={productOptions}
-                value={item.product}
-                onValueChange={(value) => onUpdate(item.id, 'product', value)}
-                className={cn("h-8 text-xs", errors[`billing_${index}_product`] && "border-red-500")}
-              />
-              {errors[`billing_${index}_product`] && <p className="text-[10px] text-red-500 font-medium">{errors[`billing_${index}_product`]}</p>}
-            </div>
-          )}
+       
 
           {invoiceType === "visa" && (
             <div className="space-y-2">
@@ -389,6 +402,22 @@ const BillingItemRow = memo(function BillingItemRow({ item, index, canRemove, in
                 value={item.okalaNo || ""}
                 onChange={(e) => onUpdate(item.id, 'okalaNo', e.target.value)}
                 placeholder="Okala No"
+                className="h-8 text-xs"
+              />
+            </div>
+          )}
+
+          {invoiceType === "standard" && (
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold">Product <span className="text-red-500">*</span></Label>
+              <CustomDropdown
+                placeholder="Select Product"
+                options={productOptions.map(p => p.name)}
+                value={currentProductName}
+                onValueChange={(name) => {
+                  const found = productOptions.find(p => p.name === name)
+                  onUpdate(item.id, 'product', found ? found.id : name)
+                }}
                 className="h-8 text-xs"
               />
             </div>
