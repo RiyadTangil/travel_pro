@@ -202,7 +202,7 @@ export async function getInvoiceById(id: string, companyId?: string) {
   }
 
   return {
-    invoice: { ...inv, id: invIdStr, billing: billingWithItems, tickets: mapTickets, hotels: mapHotels, transports: mapTransports, passports },
+    invoice: { ...inv, id: String(invId), billing: billingWithItems, tickets: mapTickets, hotels: mapHotels, transports: mapTransports, passports },
     vendors,
     employees,
     clients,
