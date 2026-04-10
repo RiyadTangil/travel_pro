@@ -11,7 +11,7 @@ const AccountSchema = new Schema({
   branch: { type: String },
   lastBalance: { type: Number, default: 0 },
   hasTrxn: { type: Boolean, default: false },
-  companyId: { type: Types.ObjectId, ref: "Company", index: true },
+  companyId: { type: Types.ObjectId, ref: "Company", index: true, required: true },
   createdAt: { type: String },
   updatedAt: { type: String },
 }, { collection: "accounts" })

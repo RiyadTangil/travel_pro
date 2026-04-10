@@ -20,7 +20,7 @@ const InvoiceTicketSchema = new Schema({
   fromAirport: { type: String },
   toAirport: { type: String },
   flightDate: { type: String },
-  companyId: { type: Schema.Types.ObjectId, ref: "Company", index: true },
+  companyId: { type: Schema.Types.ObjectId, ref: "Company", index: true, required: true },
   isDeleted: { type: Boolean, default: false, index: true },
   createdAt: { type: String },
   updatedAt: { type: String },

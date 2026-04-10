@@ -6,7 +6,7 @@ const ClientTransactionSchema = new Schema({
   clientId: { type: Types.ObjectId, ref: "Client", index: true, required: false },
   vendorId: { type: Types.ObjectId, ref: "Vendor", index: true, required: false },
   clientName: { type: String },
-  companyId: { type: Types.ObjectId, ref: "Company", index: true },
+  companyId: { type: Types.ObjectId, ref: "Company", index: true, required: true },
   invoiceType: { type: String }, // matches dropdown values
   paymentTypeId: { type: Types.ObjectId, ref: "Account" }, // account id
   accountName: { type: String },

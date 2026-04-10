@@ -1,10 +1,10 @@
-import { Schema, model, models } from "mongoose"
+import { Schema, model, models, Types } from "mongoose"
 
 const VendorSchema = new Schema({
   name: { type: String, required: true },
   email: { type: String },
   mobile: { type: String },
-  companyId: { type: String },
+  companyId: { type: Types.ObjectId, ref: "Company", index: true, required: true },
   presentBalance: {
     type: { type: String, enum: ["due", "advance"], default: "due" },
     amount: { type: Number, default: 0 }

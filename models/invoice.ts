@@ -16,7 +16,7 @@ const InvoiceSchema = new Schema({
   clientId: { type: Types.ObjectId, ref: "Client", index: true },
   employeeId: { type: Types.ObjectId, ref: "Employee", index: true },
   agentId: { type: Types.ObjectId, ref: "Agent", index: true },
-  companyId: { type: Types.ObjectId, ref: "Company", index: true },
+  companyId: { type: Types.ObjectId, ref: "Company", index: true, required: true },
   salesDate: { type: String },
   dueDate: { type: String },
   clientName: { type: String },

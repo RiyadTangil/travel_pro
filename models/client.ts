@@ -22,7 +22,7 @@ const ClientSchema = new Schema({
   walkingCustomer: { type: String, enum: ["No", "Yes"], default: "No" },
   active: { type: Boolean, default: true },
   // Relations
-  companyId: { type: Types.ObjectId, ref: "Company", index: true },
+  companyId: { type: Types.ObjectId, ref: "Company", index: true, required: true },
   createdBy: {
     id: { type: Types.ObjectId, ref: "User" },
     name: { type: String },

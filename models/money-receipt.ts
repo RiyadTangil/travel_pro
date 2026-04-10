@@ -3,7 +3,7 @@ import { Schema, model, models, Types } from "mongoose"
 const MoneyReceiptSchema = new Schema({
   clientId: { type: Types.ObjectId, ref: "Client", index: true, required: true },
   clientName: { type: String },
-  companyId: { type: Types.ObjectId, ref: "Company", index: true },
+  companyId: { type: Types.ObjectId, ref: "Company", index: true, required: true },
   invoiceId: { type: Types.ObjectId, ref: "Invoice", index: true },
   voucherNo: { type: String, index: true, required: true }, // e.g., MR-0047
   paymentTo: { type: String, enum: ["overall", "advance", "invoice", "tickets", "adjust"], required: true },

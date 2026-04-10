@@ -27,7 +27,7 @@ const InvoiceItemSchema = new Schema({
   // Relation links
   referenceId: { type: Schema.Types.ObjectId, index: true }, // Links to Ticket/Passport/Hotel/Transport doc
   
-  companyId: { type: Schema.Types.ObjectId, ref: "Company", index: true },
+  companyId: { type: Schema.Types.ObjectId, ref: "Company", index: true, required: true },
   isDeleted: { type: Boolean, default: false, index: true },
   createdAt: { type: String },
   updatedAt: { type: String },

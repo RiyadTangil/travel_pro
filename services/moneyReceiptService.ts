@@ -24,8 +24,11 @@ async function nextVoucher(prefix: "MR" | "EX") {
   return `${prefix}-${pad(seq)}`
 }
 
-export async function createMoneyReceipt(body: any, companyId?: string) {
+export async function createMoneyReceipt(body: any, companyId: string) {
   await connectMongoose()
+  if (!companyId) throw new AppError("Company ID is required", 401)
+  const companyObjectId = new Types.ObjectId(companyId)
+  
   const session = await mongoose.startSession()
   const now = new Date().toISOString()
 
@@ -51,24 +54,19 @@ export async function createMoneyReceipt(body: any, companyId?: string) {
   const note = String(body.note || body.receipt_note || "")
   const docOneName = String(body.docOneName || body.receipt_scan_copy || "")
   const docTwoName = String(body.docTwoName || body.receipt_scan_copy2 || "")
-  const companyIdStr = companyId ? String(companyId) : (body.companyId || body.company_id || undefined)
-  if (!companyIdStr || !Types.ObjectId.isValid(String(companyIdStr))) {
-    throw new AppError("Company ID is required", 400)
-  }
-  const companyObjectId = new Types.ObjectId(String(companyIdStr))
+
   const accountDoc = await Account.findOne({ _id: accId, companyId: companyObjectId }).lean()
   if (!accountDoc) throw new AppError("Account not found", 404)
   const accountName = String(body.accountName || body.cheque_or_bank_name || body.account_name || accountDoc?.name || "")
 
-
   // Validate client
-  const clientDoc = await Client.findById(clientId).lean()
+  const clientDoc = await Client.findOne({ _id: clientId, companyId: companyObjectId }).lean()
   if (!clientDoc) throw new AppError("Client not found", 404)
 
   // If invoice selected, validate and compute constraints
   let invDoc: any = null
   if (invoiceId) {
-    invDoc = await Invoice.findById(invoiceId).lean()
+    invDoc = await Invoice.findOne({ _id: invoiceId, companyId: companyObjectId }).lean()
     if (!invDoc) throw new AppError("Invoice not found", 404)
     if (String(invDoc.clientId || "") !== String(clientId)) throw new AppError("Invoice does not belong to client", 400)
     const due = Math.max(0, parseNumber(invDoc.netTotal, 0) - parseNumber(invDoc.receivedAmount, 0))
@@ -281,18 +279,13 @@ export async function createMoneyReceipt(body: any, companyId?: string) {
   }
 }
 
-export async function listMoneyReceipts(params: { page?: number; pageSize?: number; clientId?: string; companyId?: string }) {
+export async function listMoneyReceipts(params: { page?: number; pageSize?: number; clientId?: string; companyId: string }) {
   await connectMongoose()
+  if (!params.companyId) throw new AppError("Company ID is required", 401)
   const { page = 1, pageSize = 20, clientId, companyId } = params || {}
-  const filter: any = {}
+  const companyObjectId = new Types.ObjectId(companyId)
+  const filter: any = { companyId: companyObjectId }
   if (clientId && Types.ObjectId.isValid(clientId)) filter.clientId = new Types.ObjectId(clientId)
-  if (companyId) {
-    const cid = String(companyId)
-    filter.$or = [
-      ...(Types.ObjectId.isValid(cid) ? [{ companyId: new Types.ObjectId(cid) }] as any[] : []),
-      { companyId: cid },
-    ]
-  }
   const total = await MoneyReceipt.countDocuments(filter)
   const docs = await MoneyReceipt.find(filter).sort({ createdAt: -1 }).skip((page - 1) * pageSize).limit(pageSize).lean()
   const items = docs.map((r: any) => ({
@@ -319,7 +312,7 @@ export async function listMoneyReceipts(params: { page?: number; pageSize?: numb
   return { items, pagination: { page, pageSize, total } }
 }
 
-export async function updateMoneyReceipt(id: string, body: any, companyId?: string) {
+export async function updateMoneyReceipt(id: string, body: any, companyId: string) {
   await connectMongoose()
   const session = await mongoose.startSession()
   const now = new Date().toISOString()
@@ -329,12 +322,11 @@ export async function updateMoneyReceipt(id: string, body: any, companyId?: stri
   const companyObjectId = new Types.ObjectId(String(companyId))
 
   const perform = async (sess?: any) => {
-    const mr = await MoneyReceipt.findById(idObj).lean()
+    const mr = await MoneyReceipt.findOne({ _id: idObj, companyId: companyObjectId }).lean()
     if (!mr) throw new AppError("Receipt not found", 404)
-    if (String(mr.companyId || "") !== String(companyObjectId)) throw new AppError("Not found", 404)
 
     const clientId = new Types.ObjectId(String(mr.clientId))
-    const clientDoc = await Client.findById(clientId).lean()
+    const clientDoc = await Client.findOne({ _id: clientId, companyId: companyObjectId }).lean()
     if (!clientDoc) throw new AppError("Client not found", 404)
 
     const oldAmount = parseNumber(mr.amount, 0)
@@ -469,7 +461,7 @@ export async function updateMoneyReceipt(id: string, body: any, companyId?: stri
   }
 }
 
-export async function deleteMoneyReceipt(id: string, companyId?: string) {
+export async function deleteMoneyReceipt(id: string, companyId: string) {
   await connectMongoose()
   const session = await mongoose.startSession()
   const now = new Date().toISOString()
@@ -479,29 +471,28 @@ export async function deleteMoneyReceipt(id: string, companyId?: string) {
   const companyObjectId = new Types.ObjectId(String(companyId))
 
   const perform = async (sess?: any) => {
-    const mr = await MoneyReceipt.findById(idObj).lean()
+    const mr = await MoneyReceipt.findOne({ _id: idObj, companyId: companyObjectId }).lean()
     if (!mr) throw new AppError("Receipt not found", 404)
-    if (String(mr.companyId || "") !== String(companyObjectId)) throw new AppError("Not found", 404)
 
     const clientId = new Types.ObjectId(String(mr.clientId))
-    const clientDoc = await Client.findById(clientId).lean()
+    const clientDoc = await Client.findOne({ _id: clientId, companyId: companyObjectId }).lean()
     if (!clientDoc) throw new AppError("Client not found", 404)
 
     const paid = Math.max(0, parseNumber(mr.amount, 0) - parseNumber(mr.discount, 0))
 
     // Reverse client present balance
     const newClientPresent = parseNumber(clientDoc.presentBalance, 0) - paid
-    await Client.updateOne({ _id: clientId }, { $set: { presentBalance: newClientPresent, updatedAt: now } }, sess ? { session: sess } : undefined)
+    await Client.updateOne({ _id: clientId, companyId: companyObjectId }, { $set: { presentBalance: newClientPresent, updatedAt: now } }, sess ? { session: sess } : undefined)
 
     // If invoice linked, subtract received
     if (mr.invoiceId) {
-      const invDoc = await Invoice.findById(mr.invoiceId).lean()
+      const invDoc = await Invoice.findOne({ _id: mr.invoiceId, companyId: companyObjectId }).lean()
       if (!invDoc) throw new AppError("Invoice not found", 404)
       const net = parseNumber(invDoc.netTotal, 0)
       const currentReceived = parseNumber(invDoc.receivedAmount, 0)
       const newReceived = Math.max(0, currentReceived - paid)
       const newStatus = newReceived >= net ? "paid" : newReceived > 0 ? "partial" : "due"
-      await Invoice.updateOne({ _id: mr.invoiceId }, { $set: { receivedAmount: newReceived, status: newStatus, updatedAt: now } }, sess ? { session: sess } : undefined)
+      await Invoice.updateOne({ _id: mr.invoiceId, companyId: companyObjectId }, { $set: { receivedAmount: newReceived, status: newStatus, updatedAt: now } }, sess ? { session: sess } : undefined)
     }
 
     // Adjust account balance (reverse receipt amount)
@@ -513,24 +504,24 @@ export async function deleteMoneyReceipt(id: string, companyId?: string) {
     )
 
     // Reverse allocations recorded for this receipt
-    const allocs = await MoneyReceiptAllocation.find({ moneyReceiptId: idObj }).lean()
+    const allocs = await MoneyReceiptAllocation.find({ moneyReceiptId: idObj, companyId: companyObjectId }).lean()
     for (const a of (allocs || [])) {
-      const invDoc = a.invoiceId ? await Invoice.findById(a.invoiceId).lean() : null
+      const invDoc = a.invoiceId ? await Invoice.findOne({ _id: a.invoiceId, companyId: companyObjectId }).lean() : null
       if (invDoc) {
         const net = parseNumber(invDoc.netTotal, 0)
         const currentReceived = parseNumber(invDoc.receivedAmount, 0)
         const newReceived = Math.max(0, currentReceived - parseNumber(a.appliedAmount, 0))
         const newStatus = newReceived >= net ? "paid" : newReceived > 0 ? "partial" : "due"
-        await Invoice.updateOne({ _id: invDoc._id }, { $set: { receivedAmount: newReceived, status: newStatus, updatedAt: now } }, sess ? { session: sess } : undefined)
+        await Invoice.updateOne({ _id: invDoc._id, companyId: companyObjectId }, { $set: { receivedAmount: newReceived, status: newStatus, updatedAt: now } }, sess ? { session: sess } : undefined)
       }
     }
     // Delete allocation rows
-    await MoneyReceiptAllocation.deleteMany({ moneyReceiptId: idObj }, sess ? { session: sess } : undefined)
+    await MoneyReceiptAllocation.deleteMany({ moneyReceiptId: idObj, companyId: companyObjectId }, sess ? { session: sess } : undefined)
     // Delete INVOICE transactions created by allocations and any OVERALL leftover for this voucher
-    await ClientTransaction.deleteMany({ voucherNo: String(mr.voucherNo), clientId, direction: "receiv" }, sess ? { session: sess } : undefined)
+    await ClientTransaction.deleteMany({ voucherNo: String(mr.voucherNo), clientId, companyId: companyObjectId, direction: "receiv" }, sess ? { session: sess } : undefined)
 
     // Delete receipt
-    await MoneyReceipt.deleteOne({ _id: idObj }, sess ? { session: sess } : undefined)
+    await MoneyReceipt.deleteOne({ _id: idObj, companyId: companyObjectId }, sess ? { session: sess } : undefined)
 
     return { deleted_id: String(idObj), present_balance: newClientPresent }
   }
@@ -547,24 +538,23 @@ export async function deleteMoneyReceipt(id: string, companyId?: string) {
   }
 }
 
-export async function createReceiptAllocations(receiptId: string, allocations: Array<{ invoiceId: string; amount: number; paymentDate?: string }>, companyId?: string) {
+export async function createReceiptAllocations(receiptId: string, allocations: Array<{ invoiceId: string; amount: number; paymentDate?: string }>, companyId: string) {
   await connectMongoose()
   const session = await mongoose.startSession()
   const now = new Date().toISOString()
   if (!Types.ObjectId.isValid(String(receiptId))) throw new AppError("Invalid receiptId", 400)
   const receiptObjId = new Types.ObjectId(String(receiptId))
-  if (!companyId || !Types.ObjectId.isValid(String(companyId))) throw new AppError("Company ID is required", 400)
+  if (!companyId || !Types.ObjectId.isValid(String(companyId))) throw new AppError("Company ID is required", 401)
   const companyObjectId = new Types.ObjectId(String(companyId))
 
   const perform = async (sess?: any) => {
-    const mr = await MoneyReceipt.findById(receiptObjId).lean()
+    const mr = await MoneyReceipt.findOne({ _id: receiptObjId, companyId: companyObjectId }).lean()
     if (!mr) throw new AppError("Receipt not found", 404)
-    if (String(mr.companyId || "") !== String(companyObjectId)) throw new AppError("Not found", 404)
     const clientId = new Types.ObjectId(String(mr.clientId))
 
     // Compute remaining from source of truth to support legacy receipts
     const paid = Math.max(0, parseNumber(mr.amount, 0) - parseNumber(mr.discount, 0))
-    const existingAllocs = await MoneyReceiptAllocation.find({ moneyReceiptId: receiptObjId }).lean()
+    const existingAllocs = await MoneyReceiptAllocation.find({ moneyReceiptId: receiptObjId, companyId: companyObjectId }).lean()
     const appliedExisting = (existingAllocs || []).reduce((s, a: any) => s + Math.max(0, parseNumber(a.appliedAmount, 0)), 0)
     const remaining = Math.max(0, paid - appliedExisting)
     if (!Array.isArray(allocations) || !allocations.length) throw new AppError("No allocations provided", 400)
@@ -578,7 +568,7 @@ export async function createReceiptAllocations(receiptId: string, allocations: A
       const invIdStr = String(row.invoiceId || "").trim()
       if (!Types.ObjectId.isValid(invIdStr)) throw new AppError("Invalid invoiceId", 400)
       const invId = new Types.ObjectId(invIdStr)
-      const inv = await Invoice.findById(invId).lean()
+      const inv = await Invoice.findOne({ _id: invId, companyId: companyObjectId }).lean()
       if (!inv) throw new AppError("Invoice not found", 404)
       if (String(inv.clientId || "") !== String(clientId)) throw new AppError("Invoice does not belong to this client", 400)
       const net = parseNumber(inv.netTotal, 0)
@@ -606,13 +596,13 @@ export async function createReceiptAllocations(receiptId: string, allocations: A
       }
       await new MoneyReceiptAllocation(allocDoc).save(sess ? { session: sess } : undefined)
 
-      const inv = await Invoice.findById(v.invoiceId).lean()
+      const inv = await Invoice.findOne({ _id: v.invoiceId, companyId: companyObjectId }).lean()
       if (inv) {
         const net = parseNumber(inv.netTotal, 0)
         const recv = parseNumber(inv.receivedAmount, 0)
         const newRecv = recv + v.amount
         const status = newRecv >= net ? "paid" : (newRecv > 0 ? "partial" : "due")
-        await Invoice.updateOne({ _id: v.invoiceId }, { $set: { receivedAmount: newRecv, status, updatedAt: now } }, sess ? { session: sess } : undefined)
+        await Invoice.updateOne({ _id: v.invoiceId, companyId: companyObjectId }, { $set: { receivedAmount: newRecv, status, updatedAt: now } }, sess ? { session: sess } : undefined)
       }
 
       // Per-invoice client transaction reflecting allocation
@@ -638,11 +628,11 @@ export async function createReceiptAllocations(receiptId: string, allocations: A
     // Update receipt totals (overwrite to avoid drift)
     const newAppliedTotal = appliedExisting + totalApply
     const newRemaining = Math.max(0, paid - newAppliedTotal)
-    await MoneyReceipt.updateOne({ _id: receiptObjId }, { $set: { allocatedAmount: newAppliedTotal, remainingAmount: newRemaining, updatedAt: now } }, sess ? { session: sess } : undefined)
+    await MoneyReceipt.updateOne({ _id: receiptObjId, companyId: companyObjectId }, { $set: { allocatedAmount: newAppliedTotal, remainingAmount: newRemaining, updatedAt: now } }, sess ? { session: sess } : undefined)
 
     // Adjust leftover ADVANCE/OVERALL transaction
     const leftover = newRemaining
-    const baseFilter: any = { voucherNo: String(mr.voucherNo || ""), clientId, direction: "receiv" }
+    const baseFilter: any = { voucherNo: String(mr.voucherNo || ""), clientId, companyId: companyObjectId, direction: "receiv" }
     const possible = ["ADVANCE", "OVERALL"]
     let existingLeftover: any = null
     for (const t of possible) {
@@ -651,9 +641,9 @@ export async function createReceiptAllocations(receiptId: string, allocations: A
     }
     if (existingLeftover) {
       if (leftover > 0) {
-        await ClientTransaction.updateOne({ _id: existingLeftover._id }, { $set: { amount: leftover, date: String(mr?.paymentDate || now), updatedAt: now } }, sess ? { session: sess } : undefined)
+        await ClientTransaction.updateOne({ _id: existingLeftover._id, companyId: companyObjectId }, { $set: { amount: leftover, date: String(mr?.paymentDate || now), updatedAt: now } }, sess ? { session: sess } : undefined)
       } else {
-        await ClientTransaction.deleteOne({ _id: existingLeftover._id }, sess ? { session: sess } : undefined)
+        await ClientTransaction.deleteOne({ _id: existingLeftover._id, companyId: companyObjectId }, sess ? { session: sess } : undefined)
       }
     } else if (leftover > 0) {
       const txnLeft: any = {
@@ -688,7 +678,7 @@ export async function createReceiptAllocations(receiptId: string, allocations: A
   } finally { await session.endSession() }
 }
 
-export async function deleteReceiptAllocation(receiptId: string, allocId: string, companyId?: string) {
+export async function deleteReceiptAllocation(receiptId: string, allocId: string, companyId: string) {
   await connectMongoose()
   const session = await mongoose.startSession()
   const now = new Date().toISOString()
@@ -696,43 +686,42 @@ export async function deleteReceiptAllocation(receiptId: string, allocId: string
   if (!Types.ObjectId.isValid(String(allocId))) throw new AppError("Invalid allocId", 400)
   const receiptObjId = new Types.ObjectId(String(receiptId))
   const allocObjId = new Types.ObjectId(String(allocId))
-  if (!companyId || !Types.ObjectId.isValid(String(companyId))) throw new AppError("Company ID is required", 400)
+  if (!companyId || !Types.ObjectId.isValid(String(companyId))) throw new AppError("Company ID is required", 401)
   const companyObjectId = new Types.ObjectId(String(companyId))
 
   const perform = async (sess?: any) => {
-    const mr = await MoneyReceipt.findById(receiptObjId).lean()
+    const mr = await MoneyReceipt.findOne({ _id: receiptObjId, companyId: companyObjectId }).lean()
     if (!mr) throw new AppError("Receipt not found", 404)
-    if (String(mr.companyId || "") !== String(companyObjectId)) throw new AppError("Not found", 404)
 
-    const alloc = await MoneyReceiptAllocation.findOne({ _id: allocObjId, moneyReceiptId: receiptObjId }).lean()
+    const alloc = await MoneyReceiptAllocation.findOne({ _id: allocObjId, moneyReceiptId: receiptObjId, companyId: companyObjectId }).lean()
     if (!alloc) throw new AppError("Allocation not found", 404)
     const apply = Math.max(0, parseNumber((alloc as any).appliedAmount, 0))
     const clientId = new Types.ObjectId(String(mr.clientId))
 
     // Reverse invoice receivedAmount
-    const inv = alloc.invoiceId ? await Invoice.findById(alloc.invoiceId).lean() : null
+    const inv = alloc.invoiceId ? await Invoice.findOne({ _id: alloc.invoiceId, companyId: companyObjectId }).lean() : null
     if (inv) {
       const net = parseNumber(inv.netTotal, 0)
       const recv = parseNumber(inv.receivedAmount, 0)
       const newRecv = Math.max(0, recv - apply)
       const status = newRecv >= net ? "paid" : (newRecv > 0 ? "partial" : "due")
-      await Invoice.updateOne({ _id: inv._id }, { $set: { receivedAmount: newRecv, status, updatedAt: now } }, sess ? { session: sess } : undefined)
+      await Invoice.updateOne({ _id: inv._id, companyId: companyObjectId }, { $set: { receivedAmount: newRecv, status, updatedAt: now } }, sess ? { session: sess } : undefined)
     }
 
     // Delete allocation row
-    await MoneyReceiptAllocation.deleteOne({ _id: allocObjId }, sess ? { session: sess } : undefined)
+    await MoneyReceiptAllocation.deleteOne({ _id: allocObjId, companyId: companyObjectId }, sess ? { session: sess } : undefined)
 
     // Update receipt totals
-    await MoneyReceipt.updateOne({ _id: receiptObjId }, { $inc: { allocatedAmount: -apply, remainingAmount: apply }, $set: { updatedAt: now } }, sess ? { session: sess } : undefined)
+    await MoneyReceipt.updateOne({ _id: receiptObjId, companyId: companyObjectId }, { $inc: { allocatedAmount: -apply, remainingAmount: apply }, $set: { updatedAt: now } }, sess ? { session: sess } : undefined)
 
     // Delete matching per-invoice transaction for this allocation (best-effort match by voucher, invoice and amount)
-    const filterTxn: any = { voucherNo: String((alloc as any).voucherNo || mr.voucherNo || ""), clientId, direction: "receiv", invoiceType: "INVOICE", amount: apply }
+    const filterTxn: any = { voucherNo: String((alloc as any).voucherNo || mr.voucherNo || ""), clientId, companyId: companyObjectId, direction: "receiv", invoiceType: "INVOICE", amount: apply }
     await ClientTransaction.deleteOne(filterTxn, sess ? { session: sess } : undefined)
 
     // Adjust leftover ADVANCE/OVERALL transaction
-    const newMr = await MoneyReceipt.findById(receiptObjId).lean()
+    const newMr = await MoneyReceipt.findOne({ _id: receiptObjId, companyId: companyObjectId }).lean()
     const leftover = Math.max(0, parseNumber((newMr as any)?.remainingAmount, 0))
-    const baseFilter: any = { voucherNo: String(mr.voucherNo || ""), clientId, direction: "receiv" }
+    const baseFilter: any = { voucherNo: String(mr.voucherNo || ""), clientId, companyId: companyObjectId, direction: "receiv" }
     const possible = ["ADVANCE", "OVERALL"]
     let existingLeftover: any = null
     for (const t of possible) {
@@ -741,9 +730,9 @@ export async function deleteReceiptAllocation(receiptId: string, allocId: string
     }
     if (existingLeftover) {
       if (leftover > 0) {
-        await ClientTransaction.updateOne({ _id: existingLeftover._id }, { $set: { amount: leftover, date: String(newMr?.paymentDate || now), updatedAt: now } }, sess ? { session: sess } : undefined)
+        await ClientTransaction.updateOne({ _id: existingLeftover._id, companyId: companyObjectId }, { $set: { amount: leftover, date: String(newMr?.paymentDate || now), updatedAt: now } }, sess ? { session: sess } : undefined)
       } else {
-        await ClientTransaction.deleteOne({ _id: existingLeftover._id }, sess ? { session: sess } : undefined)
+        await ClientTransaction.deleteOne({ _id: existingLeftover._id, companyId: companyObjectId }, sess ? { session: sess } : undefined)
       }
     } else if (leftover > 0) {
       const txnLeft: any = {
@@ -778,20 +767,19 @@ export async function deleteReceiptAllocation(receiptId: string, allocId: string
   } finally { await session.endSession() }
 }
 
-export async function listReceiptAllocations(receiptId: string, companyId?: string) {
+export async function listReceiptAllocations(receiptId: string, companyId: string) {
   await connectMongoose()
   if (!Types.ObjectId.isValid(String(receiptId))) throw new AppError("Invalid receiptId", 400)
   const receiptObjId = new Types.ObjectId(String(receiptId))
-  if (!companyId || !Types.ObjectId.isValid(String(companyId))) throw new AppError("Company ID is required", 400)
+  if (!companyId || !Types.ObjectId.isValid(String(companyId))) throw new AppError("Company ID is required", 401)
   const companyObjectId = new Types.ObjectId(String(companyId))
 
-  const mr = await MoneyReceipt.findById(receiptObjId).lean()
+  const mr = await MoneyReceipt.findOne({ _id: receiptObjId, companyId: companyObjectId }).lean()
   if (!mr) throw new AppError("Receipt not found", 404)
-  if (String(mr.companyId || "") !== String(companyObjectId)) throw new AppError("Not found", 404)
 
-  const rows = await MoneyReceiptAllocation.find({ moneyReceiptId: receiptObjId }).sort({ paymentDate: 1, createdAt: 1 }).lean()
+  const rows = await MoneyReceiptAllocation.find({ moneyReceiptId: receiptObjId, companyId: companyObjectId }).sort({ paymentDate: 1, createdAt: 1 }).lean()
   const invIds = rows.map((r: any) => r.invoiceId).filter(Boolean)
-  const invDocs = invIds.length ? await Invoice.find({ _id: { $in: invIds } }).lean() : []
+  const invDocs = invIds.length ? await Invoice.find({ _id: { $in: invIds }, companyId: companyObjectId }).lean() : []
   const invMap = new Map<string, any>()
   for (const i of invDocs) invMap.set(String((i as any)._id), i)
 
