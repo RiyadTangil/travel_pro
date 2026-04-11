@@ -251,11 +251,8 @@ export async function listInvoices(params: {
   if (params.status) filter.status = params.status
   if (params.invoiceType) {
     filter.invoiceType = params.invoiceType
-  } else {
-    // If no type specified, exclude non_commission from general list if needed
-    // Actually, usually the general list shows standard
-    filter.invoiceType = { $in:'standard' }
-  }
+  } 
+  
   console.log("Filter:", filter)
   
   if (params.search) {
@@ -271,54 +268,143 @@ export async function listInvoices(params: {
     if (params.dateTo) filter.salesDate.$lte = params.dateTo
   }
 
-  const total = await Invoice.countDocuments(filter)
-  const docs = await Invoice.find(filter)
-    .sort({ salesDate: -1, createdAt: -1 })
-    .skip(skip)
-    .limit(pageSize)
-    .lean()
-
-  // Fetch all passports for these invoices
-  const invIds = docs.map((d: any) => d._id)
-  const allPassports = await InvoicePassport.find({ invoiceId: { $in: invIds }, isDeleted: { $ne: true } }).lean()
-
-  const invoices = docs.map((d: any) => {
-    // Handle Visa fields for list display if available
-    const billingItems = d.billing?.items || []
-    const visaItem = d.invoiceType === "visa" ? billingItems[0] : null
-
-    // Get passports for this invoice
-    const invId = d._id
-    const invPassports = allPassports.filter((p: any) => String(p.invoiceId) === String(invId))
-    const passportNos = invPassports.map((p: any) => p.passportNo).filter(Boolean).join(", ")
-
-    return {
-      id: String(invId),
-      clientId: String(d.clientId || ""),
-      invoiceNo: d.invoiceNo,
-      clientName: d.clientName || "",
-      clientPhone: d.clientPhone || "",
-      salesDate: d.salesDate,
-      dueDate: d.dueDate || "",
-      salesPrice: parseNumber(d.netTotal, 0),
-      totalCost: parseNumber(d.billing?.totalCost || 0, 0),
-      receivedAmount: parseNumber(d.receivedAmount, 0),
-      dueAmount: Math.max(0, parseNumber(d.netTotal, 0) - parseNumber(d.receivedAmount, 0)),
-      mrNo: "", // We can populate this if needed
-      passportNo: passportNos, 
-      salesBy: d.salesByName || "",
-      status: d.status || "due",
-      invoiceType: d.invoiceType || "standard",
-      createdAt: d.createdAt || new Date().toISOString(),
-      updatedAt: d.updatedAt || new Date().toISOString(),
-      // Add Visa fields if it's a visa invoice
-      ...(visaItem ? {
-        country: visaItem.country,
-        visaType: visaItem.visaType,
-        visaNo: visaItem.visaNo
-      } : {})
+  const result = await Invoice.aggregate([
+    { $match: filter },
+    { $sort: { salesDate: -1, createdAt: -1 } },
+    {
+      $facet: {
+        metadata: [{ $count: "total" }],
+        data: [
+          { $skip: skip },
+          { $limit: pageSize },
+          // Lookup passports
+          {
+            $lookup: {
+              from: "invoice_passports",
+              let: { invoiceId: "$_id" },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: {
+                      $and: [
+                        { $eq: ["$invoiceId", "$$invoiceId"] },
+                        { $ne: ["$isDeleted", true] }
+                      ]
+                    }
+                  }
+                },
+                { $project: { passportNo: 1, _id: 0 } }
+              ],
+              as: "passports"
+            }
+          },
+          // Lookup MRs
+          {
+            $lookup: {
+              from: "money_receipts",
+              let: { invoiceId: "$_id" },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: { $eq: ["$invoiceId", "$$invoiceId"] }
+                  }
+                },
+                { $project: { voucherNo: 1, _id: 0 } }
+              ],
+              as: "moneyReceipts"
+            }
+          },
+          // Projection
+          {
+            $project: {
+              id: { $toString: "$_id" },
+              clientId: { $toString: { $ifNull: ["$clientId", ""] } },
+              invoiceNo: 1,
+              clientName: { $ifNull: ["$clientName", ""] },
+              clientPhone: { $ifNull: ["$clientPhone", ""] },
+              salesDate: 1,
+              dueDate: { $ifNull: ["$dueDate", ""] },
+              salesPrice: { $ifNull: ["$netTotal", 0] },
+              totalCost: { $ifNull: ["$billing.totalCost", 0] },
+              receivedAmount: { $ifNull: ["$receivedAmount", 0] },
+              dueAmount: {
+                $max: [
+                  0,
+                  {
+                    $subtract: [
+                      { $ifNull: ["$netTotal", 0] },
+                      { $ifNull: ["$receivedAmount", 0] }
+                    ]
+                  }
+                ]
+              },
+              mrNo: {
+                $reduce: {
+                  input: "$moneyReceipts.voucherNo",
+                  initialValue: "",
+                  in: {
+                    $cond: [
+                      { $eq: ["$$value", ""] },
+                      "$$this",
+                      { $concat: ["$$value", ", ", "$$this"] }
+                    ]
+                  }
+                }
+              },
+              passportNo: {
+                $reduce: {
+                  input: {
+                    $filter: {
+                      input: "$passports.passportNo",
+                      as: "p",
+                      cond: { $and: [{ $ne: ["$$p", null] }, { $ne: ["$$p", ""] }] }
+                    }
+                  },
+                  initialValue: "",
+                  in: {
+                    $cond: [
+                      { $eq: ["$$value", ""] },
+                      "$$this",
+                      { $concat: ["$$value", ", ", "$$this"] }
+                    ]
+                  }
+                }
+              },
+              salesBy: { $ifNull: ["$salesByName", ""] },
+              status: { $ifNull: ["$status", "due"] },
+              invoiceType: { $ifNull: ["$invoiceType", "standard"] },
+              createdAt: { $ifNull: ["$createdAt", { $toString: "$$NOW" }] },
+              updatedAt: { $ifNull: ["$updatedAt", { $toString: "$$NOW" }] },
+              country: {
+                $cond: {
+                  if: { $eq: ["$invoiceType", "visa"] },
+                  then: { $arrayElemAt: ["$billing.items.country", 0] },
+                  else: "$$REMOVE"
+                }
+              },
+              visaType: {
+                $cond: {
+                  if: { $eq: ["$invoiceType", "visa"] },
+                  then: { $arrayElemAt: ["$billing.items.visaType", 0] },
+                  else: "$$REMOVE"
+                }
+              },
+              visaNo: {
+                $cond: {
+                  if: { $eq: ["$invoiceType", "visa"] },
+                  then: { $arrayElemAt: ["$billing.items.visaNo", 0] },
+                  else: "$$REMOVE"
+                }
+              }
+            }
+          }
+        ]
+      }
     }
-  })
+  ])
+
+  const invoices = result[0]?.data || []
+  const total = result[0]?.metadata?.[0]?.total || 0
 
   return {
     items: invoices,
@@ -376,11 +462,16 @@ export async function listNonCommissionInvoices(params: {
   // Fetch all tickets for these invoices to get issue dates
   const invIds = docs.map((d: any) => d._id)
   const allTickets = await InvoiceTicket.find({ invoiceId: { $in: invIds }, isDeleted: { $ne: true } }).lean()
+  const allMRs = await MoneyReceipt.find({ invoiceId: { $in: invIds } }).lean()
 
   const invoices = docs.map((d: any) => {
     const invId = d._id
     const invTickets = allTickets.filter((t: any) => String(t.invoiceId) === String(invId))
     const issueDates = Array.from(new Set(invTickets.map((t: any) => t.issueDate || t.createdAt))).filter(Boolean)
+
+    // Get MRs for this invoice
+    const invMRs = allMRs.filter((m: any) => String(m.invoiceId) === String(invId))
+    const mrNos = invMRs.map((m: any) => m.voucherNo).filter(Boolean).join(", ")
 
     return {
       id: String(invId),
@@ -396,7 +487,7 @@ export async function listNonCommissionInvoices(params: {
       totalCost: parseNumber(d.billing?.totalCost || 0, 0),
       receivedAmount: parseNumber(d.receivedAmount, 0),
       dueAmount: Math.max(0, parseNumber(d.netTotal, 0) - parseNumber(d.receivedAmount, 0)),
-      mrNo: "", // We can populate this if needed
+      mrNo: mrNos,
       passportNo: "", 
       salesBy: d.salesByName || "",
       status: d.status || "due",

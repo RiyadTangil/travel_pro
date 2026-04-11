@@ -53,6 +53,7 @@ export default function InvoicesPage() {
       const params = new URLSearchParams({
         page: String(page),
         pageSize: String(pageSize),
+        invoiceType: "standard",
         search: filters.search || "",
         status: filters.status || "",
         dateFrom: filters.dateFrom || "",

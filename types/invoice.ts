@@ -3,6 +3,7 @@ export interface Invoice {
   invoiceNo: string
   clientName: string
   clientPhone: string
+  invoiceType: string
   salesDate: string
   dueDate: string
   salesPrice: number
