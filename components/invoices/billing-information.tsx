@@ -324,7 +324,16 @@ const BillingItemRow = memo(function BillingItemRow({ item, index, canRemove, in
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-8 gap-4 mb-4 pb-4 border-b border-dashed">
             <div className="space-y-2">
               <Label className="text-xs font-semibold">Product <span className="text-red-500">*</span></Label>
-              <Input value={currentProductName} readOnly className="h-8 bg-gray-100 text-xs" />
+              <CustomDropdown
+                placeholder="Select Product"
+                options={productOptions.map(p => p.name)}
+                value={currentProductName}
+                onValueChange={(name) => {
+                  const found = productOptions.find(p => p.name === name)
+                  onUpdate(item.id, 'product', found ? found.id : name)
+                }}
+                className="h-8 text-xs"
+              />
             </div>
             <div className="space-y-2">
               <Label className="text-xs font-semibold">Country <span className="text-red-500">*</span></Label>

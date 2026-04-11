@@ -160,7 +160,7 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
     lookups?.transportTypes?.map(t => t.name)
   ), [lookups?.transportTypes])
   const productOptionsExternalMemo = useMemo(() => (
-    lookups?.products?.map(p => p.name)
+    lookups?.products
   ), [lookups?.products])
   const vendorsMemo = useMemo(() => (
     lookups?.vendors
