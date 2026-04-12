@@ -38,13 +38,15 @@ export function InvoiceActions({
       >
         View
       </Button>
-      <Button
-        variant="outline"
-        onClick={() => onEdit?.(invoice)}
-        className="h-7 px-2 text-[10px] bg-blue-500 hover:bg-blue-600 text-white border-none"
-      >
-        Edit
-      </Button>
+      {status === "due" && (
+        <Button
+          variant="outline"
+          onClick={() => onEdit?.(invoice)}
+          className="h-7 px-2 text-[10px] bg-blue-500 hover:bg-blue-600 text-white border-none"
+        >
+          Edit
+        </Button>
+      )}
       {status === "due" && (
         <Button
           variant="destructive"
@@ -62,16 +64,15 @@ export function InvoiceActions({
         >
           Money Receipt
         </Button>
-      )} 
+      )}
       {invoice.invoiceType === "non_commission" && (
-      <Button
-        variant="outline"
-
-        className="h-7 px-2 text-[10px] bg-sky-400 hover:bg-sky-500 text-white border-none"
-      >
-        Partial Cost
-      </Button>
-      )} 
+        <Button
+          variant="outline"
+          className="h-7 px-2 text-[10px] bg-sky-400 hover:bg-sky-500 text-white border-none"
+        >
+          Partial Cost
+        </Button>
+      )}
     </div>
   );
 }

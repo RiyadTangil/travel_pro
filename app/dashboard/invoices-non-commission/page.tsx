@@ -7,6 +7,17 @@ import { Input } from "@/components/ui/input"
 import { NonCommissionTable } from "@/components/invoices/non-commission-table"
 import { PaginationWithLinks } from "@/components/ui/pagination-with-links"
 import { DateRangePicker } from "@/components/ui/date-range-picker" // Assuming this exists or using Input[type=date]
+import { MoneyReceiptModal } from "@/components/invoices/money-receipt-modal"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 // Dummy data based on the provided image
 import { AddNonCommissionModal } from "@/components/invoices/add-non-commission-modal"
@@ -89,6 +100,37 @@ export default function NonCommissionInvoicesPage() {
     setIsModalOpen(true)
   }
 
+  const [invoiceToDelete, setInvoiceToDelete] = useState<any>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const handleDelete = useCallback((invoice: any) => {
+    setInvoiceToDelete(invoice)
+  }, [])
+
+  const confirmDelete = async () => {
+    if (!invoiceToDelete) return
+    try {
+      setIsDeleting(true)
+      const res = await fetch(`/api/invoices/${invoiceToDelete.id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error("Delete failed")
+      toast({ title: "Success", description: `Invoice ${invoiceToDelete.invoiceNo} deleted successfully` })
+      fetchInvoices()
+    } catch (e) {
+      toast({ title: "Error", description: "Failed to delete invoice", variant: "destructive" })
+    } finally {
+      setIsDeleting(false)
+      setInvoiceToDelete(null)
+    }
+  }
+
+  const [moneyReceiptOpen, setMoneyReceiptOpen] = useState(false)
+  const [selectedInvoiceForMR, setSelectedInvoiceForMR] = useState<any>(undefined)
+
+  const handleMoneyReceipt = useCallback((invoice: any) => {
+    setSelectedInvoiceForMR(invoice)
+    setMoneyReceiptOpen(true)
+  }, [])
+
   return (
     <div className="space-y-6 p-6">
       {/* Breadcrumb */}
@@ -159,8 +201,8 @@ export default function NonCommissionInvoicesPage() {
           invoices={invoices}
           onView={(inv) => console.log("View", inv)}
           onEdit={handleEdit}
-          onDelete={(inv) => console.log("Delete", inv)}
-          onMoneyReceipt={(inv) => console.log("MR", inv)}
+          onDelete={handleDelete}
+          onMoneyReceipt={handleMoneyReceipt}
           onPartialCost={(inv) => console.log("Partial Cost", inv)}
         />
         
@@ -181,6 +223,44 @@ export default function NonCommissionInvoicesPage() {
           onInvoiceAdded={() => fetchInvoices()}
           initialInvoiceId={editInvoiceId}
         />
+
+      <MoneyReceiptModal
+        open={moneyReceiptOpen}
+        onClose={() => setMoneyReceiptOpen(false)}
+        invoice={selectedInvoiceForMR}
+        onSubmit={() => fetchInvoices()}
+      />
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!invoiceToDelete} onOpenChange={(open) => !open && setInvoiceToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will soft-delete invoice <strong>{invoiceToDelete?.invoiceNo}</strong>. 
+              The client and vendor balances will be adjusted automatically to revert the financial impact.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={(e) => {
+                e.preventDefault()
+                confirmDelete()
+              }}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : "Confirm Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
