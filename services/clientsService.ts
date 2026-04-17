@@ -123,8 +123,27 @@ export async function updateClientById(id: string, body: any) {
   return { ...updated, id: String(updated._id) }
 }
 
+import { Invoice } from "@/models/invoice"
+import { ClientTransaction } from "@/models/client-transaction"
+import { AppError } from "@/errors/AppError"
+
 export async function deleteClientById(id: string) {
   await connectMongoose()
+  if (!isValidObjectId(id)) throw new AppError("Invalid client ID", 400)
+  const clientId = new Types.ObjectId(id)
+
+  // 1. Check if client has any invoices
+  const invoiceCount = await Invoice.countDocuments({ clientId, isDeleted: { $ne: true } })
+  if (invoiceCount > 0) {
+    throw new AppError("Cannot delete client with existing invoices", 400)
+  }
+
+  // 2. Check if client has any transactions
+  const transactionCount = await ClientTransaction.countDocuments({ clientId })
+  if (transactionCount > 0) {
+    throw new AppError("Cannot delete client with existing transactions", 400)
+  }
+
   const deleted = await Client.findByIdAndDelete(id).lean()
   if (!deleted) return null
   return { ...deleted, id: String(deleted._id) }

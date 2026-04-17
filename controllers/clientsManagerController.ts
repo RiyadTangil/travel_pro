@@ -51,7 +51,7 @@ export async function getById(id: string) {
   try {
     const client = await getClientById(id)
     if (!client) return fail({ error: "not_found", message: "Client not found" }, 404)
-    return ok(client)
+    return ok({ data: client })
   } catch (e: any) {
     if (isAppError(e)) return fail({ error: e.code || "error", message: e.message }, e.status)
     console.error("clientsManagerController.getById error:", e)
@@ -86,7 +86,7 @@ export async function updateById(id: string, body: any) {
     }
     const updated = await updateClientById(id, parsed.data)
     if (!updated) return fail({ error: "not_found", message: "Client not found" }, 404)
-    return ok(updated)
+    return ok({ data: updated })
   } catch (e: any) {
     if (isAppError(e)) return fail({ error: e.code || "error", message: e.message }, e.status)
     console.error("clientsManagerController.updateById error:", e)

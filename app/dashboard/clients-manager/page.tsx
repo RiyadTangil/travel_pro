@@ -24,7 +24,7 @@ export default function ClientsManagerPage() {
   const { data: session } = useSession()
   const [clients, setClients] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
-  const [filters, setFilters] = useState<{ categoryId?: string; userId?: string; search?: string }>({})
+  const [filters, setFilters] = useState<{ categoryId?: string; userId?: string; search?: string; status?: string }>({})
   const [modalOpen, setModalOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [editingClientId, setEditingClientId] = useState<string | null>(null)
@@ -42,6 +42,7 @@ export default function ClientsManagerPage() {
       if (filters.search) params.append("search", filters.search)
       if (filters.categoryId) params.append("categoryId", filters.categoryId)
       if (filters.userId) params.append("userId", filters.userId)
+      if (filters.status) params.append("status", filters.status)
       const res = await fetch(`/api/clients-manager?${params.toString()}`)
       const data = await res.json()
       setClients(data.data || data.clients || [])
@@ -62,27 +63,31 @@ export default function ClientsManagerPage() {
       setEditBusyIds((prev) => [...prev, id])
       const res = await fetch(`/api/clients-manager/${id}`)
       const data = await res.json()
-      if (!data || data.error) {
-        toast({ title: "Edit", description: data?.error || `Client ${id} not found` })
+      if (!data?.data || data.error ) {
+        toast({ title: "Edit", description: data?.error || data?.message || `Client ${id} not found` })
         setEditBusyIds((prev) => prev.filter((x) => x !== id))
         return
       }
+      const clientData = data.data
       setEditingClientId(id)
+      
+      const phoneValue = clientData.phone || clientData.mobile || ""
+      
       setInitialValues({
-        categoryId: data.categoryId || "",
-        clientType: data.clientType || "Individual",
-        name: data.name || "",
-        email: data.email || "",
-        gender: data.gender || "",
-        phone: data.phone || "",
-        address: data.address || "",
-        walkingCustomer: data.walkingCustomer || "No",
-        source: data.source || "",
-        designation: data.designation || "",
-        tradeLicenseNo: data.tradeLicenseNo || "",
-        openingBalanceType: data.openingBalanceType || "",
-        openingBalanceAmount: String(data.openingBalanceAmount || ""),
-        creditLimit: String(data.creditLimit || ""),
+        categoryId: clientData.categoryId ? String(clientData.categoryId) : "",
+        clientType: clientData.clientType || "Individual",
+        name: clientData.name || "",
+        email: clientData.email || "",
+        gender: clientData.gender || "",
+        phone: phoneValue,
+        address: clientData.address || "",
+        walkingCustomer: clientData.walkingCustomer || "No",
+        source: clientData.source || "",
+        designation: clientData.designation || "",
+        tradeLicenseNo: clientData.tradeLicenseNo || "",
+        openingBalanceType: clientData.openingBalanceType || "",
+        openingBalanceAmount: String(clientData.openingBalanceAmount || ""),
+        creditLimit: String(clientData.creditLimit || ""),
       })
       setModalOpen(true)
     } catch (e) {
@@ -91,9 +96,34 @@ export default function ClientsManagerPage() {
       setEditBusyIds((prev) => prev.filter((x) => x !== id))
     }
   }
+
+  const handleOpenAddModal = () => {
+    setEditingClientId(null)
+    setInitialValues(undefined)
+    setModalOpen(true)
+  }
   const deleteClient = (id: string) => {
     setDeletingId(id)
     setConfirmOpen(true)
+  }
+
+  const toggleStatus = async (id: string, active: boolean) => {
+    try {
+      setStatusBusyIds((prev) => [...prev, id])
+      const res = await fetch(`/api/clients-manager/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to update status")
+      toast({ title: "Status Updated", description: `Client is now ${active ? "Active" : "Inactive"}` })
+      fetchClients()
+    } catch (e) {
+      toast({ title: "Failed to update status", description: e instanceof Error ? e.message : "Unknown error" })
+    } finally {
+      setStatusBusyIds((prev) => prev.filter((x) => x !== id))
+    }
   }
 
   const mapped = useMemo(() => {
@@ -107,12 +137,7 @@ export default function ClientsManagerPage() {
       presentBalance: typeof c.presentBalance === "number" ? c.presentBalance : 0,
       active: !!c.active,
     }))
-      .filter((item) => {
-        const search = (filters.search || "").toLowerCase()
-        if (!search) return true
-        return item.name?.toLowerCase().includes(search) || item.email?.toLowerCase().includes(search)
-      })
-  }, [clients, filters])
+  }, [clients])
 
   const handleCreate = async (payload: Record<string, any>) => {
     try {
@@ -190,34 +215,18 @@ export default function ClientsManagerPage() {
         <Card className="mx-auto  mx-2">
           <CardHeader className="space-y-3">
             <CardTitle className="text-base">Clients Manager</CardTitle>
-            <ClientsManagerToolbar onAddClient={() => setModalOpen(true)} onFilterChange={setFilters} />
+            <ClientsManagerToolbar onAddClient={handleOpenAddModal} onFilterChange={setFilters} />
           </CardHeader>
           <CardContent>
               <ClientsManagerTable 
-                clients={mapped} 
+                rows={mapped} 
                 onView={viewClient} 
                 onEdit={editClient} 
                 onDelete={deleteClient}
-                onToggleStatus={async (id, active) => {
-                  try {
-                    setStatusBusyIds((prev) => [...prev, id])
-                    const res = await fetch(`/api/clients-manager/${id}`, {
-                      method: "PUT",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ active }),
-                    })
-                    const data = await res.json()
-                    if (!res.ok) throw new Error(data.error || "Failed to update status")
-                    toast({ title: "Status Updated", description: `Client is now ${active ? "Active" : "Inactive"}` })
-                    fetchClients()
-                  } catch (e) {
-                    toast({ title: "Failed to update status", description: e instanceof Error ? e.message : "Unknown error" })
-                  } finally {
-                    setStatusBusyIds((prev) => prev.filter((x) => x !== id))
-                  }
-                }}
+                onToggleStatus={toggleStatus}
                 statusIds={statusBusyIds}
                 editingIds={editBusyIds}
+                loading={loading}
               />
           </CardContent>
         </Card>
@@ -244,13 +253,21 @@ export default function ClientsManagerPage() {
           try {
             const res = await fetch(`/api/clients-manager/${deletingId}`, { method: "DELETE" })
             const data = await res.json()
-            if (!res.ok) throw new Error(data.error || "Failed to delete client")
+            if (!res.ok) {
+              // Extract the message from the backend response if available
+              const errorMsg = data.message || data.error || "Failed to delete client"
+              throw new Error(errorMsg)
+            }
             toast({ title: "Client deleted" })
             setConfirmOpen(false)
             setDeletingId(null)
             fetchClients()
           } catch (e) {
-            toast({ title: "Failed to delete", description: e instanceof Error ? e.message : "Unknown error" })
+            toast({ 
+              title: "Failed to delete", 
+              description: e instanceof Error ? e.message : "Unknown error",
+              variant: "destructive"
+            })
           }
         }}
       />

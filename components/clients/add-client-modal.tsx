@@ -8,6 +8,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
+import { EmailInput } from "@/components/ui/email-input"
+import { cn } from "@/lib/utils"
+
 type CategoryOption = { id: string; name: string; prefix: string }
 
 interface AddClientModalProps {
@@ -28,6 +31,7 @@ interface AddClientModalProps {
     designation: string
     tradeLicenseNo: string
     openingBalanceType: string
+    openingBalanceAmount: string
     creditLimit: string
   }>
   mode?: "add" | "edit"
@@ -82,12 +86,27 @@ export default function AddClientModal({ open, onOpenChange, onSubmit, loading, 
         openingBalanceAmount: (initialValues as any).openingBalanceAmount || "",
         creditLimit: initialValues.creditLimit || "",
       })
+    } else {
+      reset({
+        categoryId: "",
+        clientType: "Individual",
+        name: "",
+        email: "",
+        gender: "",
+        phone: "",
+        address: "",
+        walkingCustomer: "No",
+        source: "",
+        designation: "",
+        tradeLicenseNo: "",
+        openingBalanceType: "",
+        openingBalanceAmount: "",
+        creditLimit: "",
+      })
     }
   }, [open, initialValues, reset])
 
   const onSubmitForm = async (data: any) => {
-    if (!data.name) return
-    if (!data.clientType) return
     const amountNum = typeof data.openingBalanceAmount === "string"
       ? parseFloat(data.openingBalanceAmount || "0") || 0
       : (Number(data.openingBalanceAmount) || 0)
@@ -110,16 +129,16 @@ export default function AddClientModal({ open, onOpenChange, onSubmit, loading, 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{mode === "edit" ? "Edit Client Information" : "Add Client Information"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmitForm)} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="space-y-2">
-              <Label>Client Category *</Label>
+              <Label className={cn(errors.categoryId && "text-red-500")}>Client Category *</Label>
               <Select value={watch("categoryId")} onValueChange={(v) => setValue("categoryId", v, { shouldValidate: true })}>
-                <SelectTrigger>
+                <SelectTrigger className={cn(errors.categoryId && "border-red-500 focus:ring-red-500")}>
                   <SelectValue placeholder="Select a Category" />
                 </SelectTrigger>
                 <SelectContent>
@@ -128,11 +147,14 @@ export default function AddClientModal({ open, onOpenChange, onSubmit, loading, 
                   ))}
                 </SelectContent>
               </Select>
+              {errors.categoryId && <p className="text-red-600 text-[10px] font-medium uppercase tracking-tight">Category is required</p>}
+              <input type="hidden" {...register("categoryId", { required: true })} />
             </div>
+
             <div className="space-y-2">
-              <Label>Client Type *</Label>
+              <Label className={cn(errors.clientType && "text-red-500")}>Client Type *</Label>
               <Select value={watch("clientType")} onValueChange={(v) => setValue("clientType", v, { shouldValidate: true })}>
-                <SelectTrigger>
+                <SelectTrigger className={cn(errors.clientType && "border-red-500 focus:ring-red-500")}>
                   <SelectValue placeholder="Select client type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -140,16 +162,34 @@ export default function AddClientModal({ open, onOpenChange, onSubmit, loading, 
                   <SelectItem value="Corporate">Corporate</SelectItem>
                 </SelectContent>
               </Select>
+              {errors.clientType && <p className="text-red-600 text-[10px] font-medium uppercase tracking-tight">Type is required</p>}
+              <input type="hidden" {...register("clientType", { required: true })} />
             </div>
+
             <div className="space-y-2">
-              <Label>Name *</Label>
-              <Input {...register("name", { required: "Name is required" })} placeholder="Name" />
-              {errors.name && <p className="text-red-600 text-xs">{String(errors.name.message)}</p>}
+              <Label className={cn(errors.name && "text-red-500")}>Name *</Label>
+              <Input 
+                {...register("name", { required: "Name is required" })} 
+                placeholder="Name" 
+                className={cn(errors.name && "border-red-500 focus-visible:ring-red-500")}
+              />
+              {errors.name && <p className="text-red-600 text-[10px] font-medium uppercase tracking-tight">{String(errors.name.message)}</p>}
             </div>
+
             <div className="space-y-2">
-              <Label>Email</Label>
-              <Input {...register("email")} placeholder="Email" />
+              <Label className={cn(errors.email && "text-red-500")}>Email</Label>
+              <EmailInput 
+                {...register("email", { 
+                  pattern: {
+                    value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                    message: "Invalid email address"
+                  }
+                })} 
+                placeholder="Email" 
+                error={errors.email?.message}
+              />
             </div>
+
             <div className="space-y-2">
               <Label>Gender</Label>
               <Select value={watch("gender")} onValueChange={(v) => setValue("gender", v)}>
@@ -163,14 +203,22 @@ export default function AddClientModal({ open, onOpenChange, onSubmit, loading, 
                 </SelectContent>
               </Select>
             </div>
+
             <div className="space-y-2">
-              <Label>Mobile</Label>
-              <Input {...register("phone")} placeholder="phone" />
+              <Label className={cn(errors.phone && "text-red-500")}>Mobile *</Label>
+              <Input 
+                {...register("phone", { required: "Mobile is required" })} 
+                placeholder="Mobile Number" 
+                className={cn(errors.phone && "border-red-500 focus-visible:ring-red-500")}
+              />
+              {errors.phone && <p className="text-red-600 text-[10px] font-medium uppercase tracking-tight">{String(errors.phone.message)}</p>}
             </div>
+
             <div className="space-y-2">
               <Label>Address</Label>
               <Input {...register("address")} placeholder="Address" />
             </div>
+
             <div className="space-y-2">
               <Label>Walking Customer</Label>
               <Select value={watch("walkingCustomer")} onValueChange={(v) => setValue("walkingCustomer", v)}>
@@ -183,6 +231,7 @@ export default function AddClientModal({ open, onOpenChange, onSubmit, loading, 
                 </SelectContent>
               </Select>
             </div>
+
             <div className="space-y-2 col-span-1 lg:col-span-4">
               <Label>Client Source</Label>
               <Select value={watch("source")} onValueChange={(v) => setValue("source", v)}>
@@ -232,13 +281,14 @@ export default function AddClientModal({ open, onOpenChange, onSubmit, loading, 
             </div>
             <div className="space-y-2">
               <Label>Credit Limit</Label>
-              <Input {...register("creditLimit")} placeholder="Credit Limit" />
+              <Input {...register("creditLimit")} placeholder="Credit Limit" type="number" step="0.01" />
             </div>
           </div>
 
-          <div className="flex justify-end">
-            <Button type="submit" className="bg-blue-600 hover:bg-blue-700" disabled={loading}>
-              {loading ? (mode === "edit" ? "Saving..." : "Saving...") : (mode === "edit" ? "Save Changes" : "Add Client Information")}
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit" className="bg-blue-600 hover:bg-blue-700 min-w-[140px]" disabled={loading}>
+              {loading ? (mode === "edit" ? "Updating..." : "Adding...") : (mode === "edit" ? "Save Changes" : "Add Client")}
             </Button>
           </div>
         </form>

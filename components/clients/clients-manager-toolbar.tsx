@@ -4,14 +4,16 @@ import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Download, X } from "lucide-react"
+import { Download, Plus, Search, X } from "lucide-react"
+
+import { ClearableSelect } from "@/components/ui/clearable-select"
 
 type Category = { id: string; name: string }
 type User = { id: string; name: string }
 
 interface ToolbarProps {
   onAddClient(): void
-  onFilterChange(filters: { categoryId?: string; userId?: string; search?: string }): void
+  onFilterChange(filters: { categoryId?: string; userId?: string; search?: string; status?: string }): void
 }
 
 export default function ClientsManagerToolbar({ onAddClient, onFilterChange }: ToolbarProps) {
@@ -20,6 +22,7 @@ export default function ClientsManagerToolbar({ onAddClient, onFilterChange }: T
 
   const [categoryId, setCategoryId] = useState<string | undefined>()
   const [userId, setUserId] = useState<string | undefined>()
+  const [status, setStatus] = useState<string | undefined>()
   const [search, setSearch] = useState("")
 
   useEffect(() => {
@@ -34,57 +37,74 @@ export default function ClientsManagerToolbar({ onAddClient, onFilterChange }: T
   }, [])
 
   useEffect(() => {
-    onFilterChange({ categoryId, userId, search })
-  }, [categoryId, userId, search])
+    const timer = setTimeout(() => {
+      onFilterChange({ categoryId, userId, search, status })
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [categoryId, userId, search, status, onFilterChange])
 
-  const exportDisabled = useMemo(() => false, [])
+  const categoryOptions = useMemo(() => categories.map(c => ({ label: c.name, value: c.id })), [categories])
+  const userOptions = useMemo(() => users.map(u => ({ label: u.name, value: u.id })), [users])
+  const statusOptions = [
+    { label: "Active", value: "active" },
+    { label: "Inactive", value: "inactive" }
+  ]
 
   return (
-    <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+    <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between bg-white p-4 rounded-lg border shadow-sm mb-6">
       <div className="flex gap-2">
-        <Button onClick={onAddClient} className="bg-sky-600 hover:bg-sky-700">+ Add Client</Button>
-        <Button variant="outline" disabled={exportDisabled}>
+        <Button onClick={onAddClient} className="bg-blue-600 hover:bg-blue-700">
+          <Plus className="mr-2 h-4 w-4" /> Add Client
+        </Button>
+        <Button variant="outline">
           <Download className="mr-2 h-4 w-4" /> Excel Report
         </Button>
       </div>
       <div className="flex flex-1 gap-2 items-center">
-        <div className="flex items-center gap-1">
-          <Select value={categoryId} onValueChange={setCategoryId}>
-            <SelectTrigger className="w-52"><SelectValue placeholder="Select Category" /></SelectTrigger>
-            <SelectContent>
-              {categories.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Clear category filter"
-            onClick={() => setCategoryId(undefined)}
-            disabled={!categoryId}
-            className="h-9 w-9"
-            title="Clear"
-          >
-            <X className="h-4 w-4" />
-          </Button>
+        <div className="w-52">
+          <ClearableSelect
+            options={categoryOptions}
+            value={categoryId}
+            onChange={(val) => setCategoryId(val || undefined)}
+            placeholder="Select Category"
+          />
         </div>
 
-        <Select value={userId} onValueChange={setUserId}>
-          <SelectTrigger className="w-48"><SelectValue placeholder="Select User" /></SelectTrigger>
-          <SelectContent>
-            {users.map((u) => (
-              <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="w-48">
+          <ClearableSelect
+            options={userOptions}
+            value={userId}
+            onChange={(val) => setUserId(val || undefined)}
+            placeholder="Select User"
+          />
+        </div>
 
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by clients"
-          className="ml-auto max-w-sm"
-        />
+        <div className="w-40">
+          <ClearableSelect
+            options={statusOptions}
+            value={status}
+            onChange={(val) => setStatus(val || undefined)}
+            placeholder="Select Status"
+          />
+        </div>
+
+        <div className="relative flex-1 max-w-sm ml-auto">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search clients..."
+            className="pl-9 h-10"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
