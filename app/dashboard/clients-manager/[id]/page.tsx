@@ -15,6 +15,10 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { useEffect, useState } from "react"
+import { ClientInvoicesTab } from "@/components/clients/client-invoices-tab"
+import { ClientReceiptsTab } from "@/components/clients/client-receipts-tab"
+import { ClientLedgerTab } from "@/components/clients/client-ledger-tab"
+import ClientLedgerPage from "../../reports/client-ledger/page"
 
 export default function ClientDetailsPage() {
   const router = useRouter()
@@ -30,7 +34,7 @@ export default function ClientDetailsPage() {
         const res = await fetch(`/api/clients-manager/${id}`)
         const data = await res.json()
         if (!res.ok) throw new Error(data.error || "Failed to load client")
-        setClient(data.client)
+        setClient(data.data)
       } catch (e) {
         console.error(e)
       } finally {
@@ -67,11 +71,11 @@ export default function ClientDetailsPage() {
 
         {/* Return Button */}
         <div className="mb-4">
-          <Button variant="outline" onClick={() => router.push("/dashboard/clients-manager")}>Return to Client List</Button>
+          <Button onClick={() => router.push("/dashboard/clients-manager")}>Return to Client List</Button>
         </div>
 
         {/* Tabs */}
-        <Tabs defaultValue="details" className="mx-auto max-w-6xl">
+        <Tabs defaultValue="details" >
           <TabsList>
             <TabsTrigger value="details">Details</TabsTrigger>
             <TabsTrigger value="invoice">Invoice</TabsTrigger>
@@ -138,13 +142,20 @@ export default function ClientDetailsPage() {
             </Card>
           </TabsContent>
 
-          {/* Placeholder contents for other tabs */}
-          <TabsContent value="invoice" className="mt-4"><Card><CardContent>Invoice list (coming soon)</CardContent></Card></TabsContent>
-          <TabsContent value="payments" className="mt-4"><Card><CardContent>Payments (coming soon)</CardContent></Card></TabsContent>
+          {/* Other tabs */}
+          <TabsContent value="invoice" className="mt-4">
+            <ClientInvoicesTab clientId={id} />
+          </TabsContent>
+          <TabsContent value="payments" className="mt-4">
+            <ClientReceiptsTab clientId={id} />
+          </TabsContent>
           <TabsContent value="quotation" className="mt-4"><Card><CardContent>Quotation (coming soon)</CardContent></Card></TabsContent>
           <TabsContent value="refund-product" className="mt-4"><Card><CardContent>Refund Product (coming soon)</CardContent></Card></TabsContent>
           <TabsContent value="upload-passports" className="mt-4"><Card><CardContent>Uploaded Passports (coming soon)</CardContent></Card></TabsContent>
-          <TabsContent value="ledger" className="mt-4"><Card><CardContent>Clients Ledger (coming soon)</CardContent></Card></TabsContent>
+          <TabsContent value="ledger" className="mt-4">
+            <ClientLedgerPage clientId={id}/>
+            {/* <ClientLedgerTab clientId={id} /> */}
+          </TabsContent>
         </Tabs>
       </main>
     </div>

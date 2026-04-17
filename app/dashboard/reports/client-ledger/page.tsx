@@ -40,10 +40,10 @@ interface ClientDetails {
   note: string
 }
 
-export default function ClientLedgerPage() {
+export default function ClientLedgerPage({ clientId }: { clientId: string }) {
   const { lookups } = useInvoiceLookups()
   const searchParams = useSearchParams()
-  const [selectedClient, setSelectedClient] = useState("")
+  const [selectedClient, setSelectedClient] = useState(clientId)
   const [dateFrom, setDateFrom] = useState<Date | undefined>()
   const [dateTo, setDateTo] = useState<Date | undefined>()
   

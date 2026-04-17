@@ -136,7 +136,7 @@ export default function AddClientModal({ open, onOpenChange, onSubmit, loading, 
         <form onSubmit={handleSubmit(onSubmitForm)} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="space-y-2">
-              <Label className={cn(errors.categoryId && "text-red-500")}>Client Category *</Label>
+              <Label className={cn(errors.categoryId && "text-red-500")}>Client Category  <span className="text-red-500">*</span></Label>
               <Select value={watch("categoryId")} onValueChange={(v) => setValue("categoryId", v, { shouldValidate: true })}>
                 <SelectTrigger className={cn(errors.categoryId && "border-red-500 focus:ring-red-500")}>
                   <SelectValue placeholder="Select a Category" />
@@ -152,7 +152,7 @@ export default function AddClientModal({ open, onOpenChange, onSubmit, loading, 
             </div>
 
             <div className="space-y-2">
-              <Label className={cn(errors.clientType && "text-red-500")}>Client Type *</Label>
+              <Label className={cn(errors.clientType && "text-red-500")}>Client Type  <span className="text-red-500">*</span></Label>
               <Select value={watch("clientType")} onValueChange={(v) => setValue("clientType", v, { shouldValidate: true })}>
                 <SelectTrigger className={cn(errors.clientType && "border-red-500 focus:ring-red-500")}>
                   <SelectValue placeholder="Select client type" />
@@ -167,7 +167,7 @@ export default function AddClientModal({ open, onOpenChange, onSubmit, loading, 
             </div>
 
             <div className="space-y-2">
-              <Label className={cn(errors.name && "text-red-500")}>Name *</Label>
+              <Label className={cn(errors.name && "text-red-500")}>Name  <span className="text-red-500">*</span></Label>
               <Input 
                 {...register("name", { required: "Name is required" })} 
                 placeholder="Name" 
@@ -205,7 +205,7 @@ export default function AddClientModal({ open, onOpenChange, onSubmit, loading, 
             </div>
 
             <div className="space-y-2">
-              <Label className={cn(errors.phone && "text-red-500")}>Mobile *</Label>
+              <Label className={cn(errors.phone && "text-red-500")}>Mobile  <span className="text-red-500">*</span></Label>
               <Input 
                 {...register("phone", { required: "Mobile is required" })} 
                 placeholder="Mobile Number" 
