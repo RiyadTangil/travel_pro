@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import ClientsManagerToolbar from "@/components/clients/clients-manager-toolbar"
 import ClientsManagerTable from "@/components/clients/clients-manager-table"
 import AddClientModal from "@/components/clients/add-client-modal"
-import { ConfirmationDialog } from "@/components/clients/confirmation-dialog"
+import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { toast } from "@/components/ui/use-toast"
 import Loader from "@/components/ui/loader"
 

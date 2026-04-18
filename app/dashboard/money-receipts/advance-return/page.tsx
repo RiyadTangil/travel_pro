@@ -4,12 +4,13 @@ import { useMemo, useState, useEffect, useCallback } from "react"
 import { useSession } from "next-auth/react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Table, Tag } from "antd"
 import AdvanceReturnModal from "@/components/money-receipts/AdvanceReturnModal"
 import FilterBar from "@/components/money-receipts/FilterBar"
 import { PageWrapper } from "@/components/shared/page-wrapper"
 import { DateRange } from "react-day-picker"
 import { Loader2, Plus } from "lucide-react"
+import { DeleteButton } from "@/components/shared/delete-button"
 
 type AdvanceReturnRow = {
   id: string
@@ -75,9 +76,76 @@ export default function AdvanceReturnPage() {
 
   const handleRefresh = () => { load() }
 
+  const handleDelete = async (id: string) => {
+    setDeletingId(id)
+    try {
+      await fetch(`/api/advance-returns/${id}`, { method: "DELETE", headers: { "x-company-id": session?.user?.companyId ?? "" } })
+      load()
+    } catch { }
+    setDeletingId(null)
+  }
+
+  const columns = [
+    {
+      title: "SL.",
+      key: "sl",
+      width: 60,
+      render: (_: any, __: any, index: number) => index + 1,
+    },
+    {
+      title: "Return Date",
+      dataIndex: "returnDate",
+      key: "returnDate",
+      render: (date: string) => new Date(date).toLocaleDateString("en-GB"),
+    },
+    {
+      title: "Voucher No",
+      dataIndex: "voucherNo",
+      key: "voucherNo",
+      render: (text: string) => <Tag color="blue">{text}</Tag>,
+    },
+    {
+      title: "Client Name",
+      dataIndex: "clientName",
+      key: "clientName",
+      render: (text: string) => <span className="text-blue-500 font-medium">{text}</span>,
+    },
+    {
+      title: "Advance Amount",
+      dataIndex: "advanceAmount",
+      key: "advanceAmount",
+      align: "right" as const,
+      render: (amount: number) => <span className="font-semibold">{amount.toLocaleString()}</span>,
+    },
+    {
+      title: "Action",
+      key: "action",
+      width: 220,
+      render: (_: any, r: AdvanceReturnRow) => (
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" className="bg-sky-500 hover:bg-sky-600 text-white hover:text-white">View</Button>
+          <Button
+            variant="default"
+            size="sm"
+            className="bg-sky-500 hover:bg-sky-600"
+            onClick={() => { setEditingRow(r); setOpenEdit(true) }}
+          >
+            Edit
+          </Button>
+          <DeleteButton
+            onDelete={() => handleDelete(r.id)}
+            isLoading={deletingId === r.id}
+            title="Delete Advance Return"
+            description={`Are you sure you want to delete advance return ${r.voucherNo}?`}
+          />
+        </div>
+      ),
+    },
+  ]
+
   return (
     <PageWrapper breadcrumbs={[{ label: "Money Receipt" }, { label: "Advance Return" }]}>
-      <div className="flex items-center justify-between px-2">
+      <div className="flex items-center justify-between px-2 mb-4">
         <div>
           <Button onClick={() => setOpenAdd(true)} className="bg-sky-500 hover:bg-sky-600">
             <Plus className="h-4 w-4 mr-2" />
@@ -93,75 +161,25 @@ export default function AdvanceReturnPage() {
         />
       </div>
       <Card className="mx-2">
-        <CardHeader className="space-y-3">
-
-
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-gray-100">
-                <TableHead className="w-12">SL.</TableHead>
-                <TableHead>Return Date</TableHead>
-                <TableHead>Voucher No</TableHead>
-                <TableHead>Client Name</TableHead>
-                <TableHead>Advance Amount</TableHead>
-                <TableHead>Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading && rows.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-6 text-gray-500 flex items-center justify-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading...
-                  </TableCell>
-                </TableRow>
-              ) : filtered.map((r, idx) => (
-                <TableRow key={r.id}>
-                  <TableCell className="font-medium">{idx + 1}</TableCell>
-                  <TableCell>{new Date(r.returnDate).toLocaleDateString("en-GB")}</TableCell>
-                  <TableCell className="font-medium">{r.voucherNo}</TableCell>
-                  <TableCell className="text-blue-500 font-medium">{r.clientName}</TableCell>
-                  <TableCell className="text-right font-semibold">{r.advanceAmount.toLocaleString()}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Button variant="secondary" size="sm" className="bg-sky-500 hover:bg-sky-600 text-white hover:text-white">View</Button>
-                      <Button
-                        variant="default"
-                        size="sm"
-                        className="bg-sky-500 hover:bg-sky-600"
-                        onClick={() => { setEditingRow(r); setOpenEdit(true) }}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={async () => {
-                          if (!confirm("Are you sure?")) return
-                          setDeletingId(r.id)
-                          try {
-                            await fetch(`/api/advance-returns/${r.id}`, { method: "DELETE", headers: { "x-company-id": session?.user?.companyId ?? "" } })
-                            load()
-                          } catch { }
-                          setDeletingId(null)
-                        }}
-                        disabled={deletingId === r.id}
-                      >
-                        {deletingId === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Delete"}
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {!loading && filtered.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-6 text-gray-500">No data</TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+        <CardContent className="p-0">
+          <Table
+            columns={columns}
+            dataSource={filtered}
+            rowKey="id"
+            loading={loading}
+            pagination={{
+              current: page,
+              pageSize: pageSize,
+              total: total,
+              onChange: (p, ps) => {
+                setPage(p)
+                setPageSize(ps)
+              },
+              showSizeChanger: true,
+              showTotal: (total) => `Total ${total} items`,
+            }}
+            className="border-none"
+          />
         </CardContent>
       </Card>
 

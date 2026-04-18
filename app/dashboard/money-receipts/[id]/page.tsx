@@ -5,10 +5,10 @@ import { useSession } from "next-auth/react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tabs, Table, Tag } from "antd"
 import ReceiptAdjustModal from "@/components/money-receipts/ReceiptAdjustModal"
-// import ReceiptAdjustModal from "@/components/money-receipts/ReceiptAdjustModal"
+import { PageWrapper } from "@/components/shared/page-wrapper"
+import { Plus } from "lucide-react"
 
 type AllocationRow = {
   id: string
@@ -44,153 +44,187 @@ export default function ViewMoneyReceiptPage() {
 
   useEffect(() => {
     const ctrl = new AbortController()
-    ;(async () => {
-      try {
-        setLoading(true)
-        const res = await fetch(`/api/money-receipts/${moneyReceiptId}/allocations`, {
-          signal: ctrl.signal,
-          headers: { "x-company-id": session?.user?.companyId ?? "" },
-        })
-        const json = await res.json()
-        const items = Array.isArray(json?.items) ? json.items : []
-        const mapped: AllocationRow[] = items.map((it: any) => ({
-          id: String(it.id || crypto.randomUUID()),
-          paymentDate: String(it.paymentDate || new Date().toISOString()),
-          invoiceNo: String(it.invoiceNo || ""),
-          salesDate: String(it.salesDate || new Date().toISOString()),
-          paymentAmount: Number(it.paymentAmount || 0),
-          invoiceAmount: Number(it.invoiceAmount || 0),
-        }))
-        setAllocations(mapped)
-      } finally {
-        setLoading(false)
-      }
-    })()
+      ; (async () => {
+        try {
+          setLoading(true)
+          const res = await fetch(`/api/money-receipts/${moneyReceiptId}/allocations`, {
+            signal: ctrl.signal,
+            headers: { "x-company-id": session?.user?.companyId ?? "" },
+          })
+          const json = await res.json()
+          const items = Array.isArray(json?.items) ? json.items : []
+          const mapped: AllocationRow[] = items.map((it: any) => ({
+            id: String(it.id || crypto.randomUUID()),
+            paymentDate: String(it.paymentDate || new Date().toISOString()),
+            invoiceNo: String(it.invoiceNo || ""),
+            salesDate: String(it.salesDate || new Date().toISOString()),
+            paymentAmount: Number(it.paymentAmount || 0),
+            invoiceAmount: Number(it.invoiceAmount || 0),
+          }))
+          setAllocations(mapped)
+        } finally {
+          setLoading(false)
+        }
+      })()
     return () => ctrl.abort()
   }, [moneyReceiptId, session?.user?.companyId])
 
-  return (
-    <div className="space-y-6">
-      <Breadcrumb>
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbLink href="/dashboard/money-receipts">Money Receipt</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>View Money Receipt</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
+  const columns = [
+    {
+      title: "SL",
+      key: "sl",
+      width: 60,
+      render: (_: any, __: any, index: number) => index + 1,
+    },
+    {
+      title: "Payment Date",
+      dataIndex: "paymentDate",
+      key: "paymentDate",
+      render: (date: string) => new Date(date).toLocaleDateString("en-GB"),
+    },
+    {
+      title: "Invoice No",
+      dataIndex: "invoiceNo",
+      key: "invoiceNo",
+      render: (text: string) => <Tag color="blue">{text}</Tag>,
+    },
+    {
+      title: "Sales Date",
+      dataIndex: "salesDate",
+      key: "salesDate",
+      render: (date: string) => new Date(date).toLocaleDateString("en-GB"),
+    },
+    {
+      title: "Payment Amount",
+      dataIndex: "paymentAmount",
+      key: "paymentAmount",
+      align: "right" as const,
+      render: (amount: number) => <span className="font-semibold text-green-600">{amount.toLocaleString()}</span>,
+    },
+    {
+      title: "Invoice Amount",
+      dataIndex: "invoiceAmount",
+      key: "invoiceAmount",
+      align: "right" as const,
+      render: (amount: number) => amount.toLocaleString(),
+    },
+  ]
 
-      <div className="flex items-center justify-between">
-        <div className="space-x-2">
-          <Button variant="secondary" onClick={() => router.push("/dashboard/money-receipts")}>Return to Money Receipt List</Button>
-          <Button variant="outline" onClick={() => window.print()}>Print</Button>
+  const tabItems = [
+    {
+      key: "invoice",
+      label: "Invoice",
+      children: (
+        <div className="rounded-md border bg-white p-4 h-[60vh] flex items-center justify-center text-muted-foreground shadow-sm">
+          Invoice content will appear here
         </div>
+      ),
+    },
+    {
+      key: "details",
+      label: "Details",
+      children: (
+        <div className="rounded-md border bg-white shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between p-4 border-b bg-gray-50/50">
+            <div className="text-lg font-semibold text-gray-800">Receipt Details</div>
+            {paymentTo === "advance" && (
+              <Button 
+                onClick={() => setOpenAdjust(true)}
+                className="bg-sky-500 hover:bg-sky-600 flex items-center gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                Add Invoice
+              </Button>
+            )}
+          </div>
+          <div className="p-0">
+            <Table
+              columns={columns}
+              dataSource={allocations}
+              rowKey="id"
+              loading={loading}
+              pagination={false}
+              className="border-none"
+            />
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "single",
+      label: "Single Copy",
+      children: (
+        <div className="rounded-md border bg-white p-4 h-[60vh] flex items-center justify-center text-muted-foreground shadow-sm">
+          Single copy view will appear here
+        </div>
+      ),
+    },
+  ]
+
+  return (
+    <PageWrapper breadcrumbs={[{ label: "Money Receipt" }, { label: "View Money Receipt" }]}>
+
+      <div className="space-y-6 px-4">
+
+        <div className="flex items-center justify-between pt-2">
+          <div className="space-x-3">
+            <Button 
+              variant="outline"
+              onClick={() => router.push("/dashboard/money-receipts")}
+            >
+              Return to Money Receipt List
+            </Button>
+            <Button 
+              className="bg-sky-500 hover:bg-sky-600"
+              onClick={() => window.print()}
+            >
+              Print
+            </Button>
+          </div>
+        </div>
+
+        <Tabs 
+          defaultActiveKey="details" 
+          items={tabItems} 
+          className="bg-white p-4 rounded-lg border shadow-sm"
+        />
+
+        <ReceiptAdjustModal
+          open={openAdjust}
+          onOpenChange={(o) => setOpenAdjust(o)}
+          paymentDate={paymentDate}
+          remainingAmount={remainingAmount}
+          clientId={clientId}
+          onSubmit={async (rows) => {
+            try {
+              const payload = rows.map(r => ({ invoiceId: r.invoiceId, amount: r.amount, paymentDate: r.paymentDate }))
+              const res = await fetch(`/api/money-receipts/${moneyReceiptId}/allocations`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "x-company-id": session?.user?.companyId ?? "" },
+                body: JSON.stringify(payload),
+              })
+              const json = await res.json()
+              if (!res.ok) throw new Error(json?.error || "Failed to allocate")
+              const reload = await fetch(`/api/money-receipts/${moneyReceiptId}/allocations`, { headers: { "x-company-id": session?.user?.companyId ?? "" } })
+              const j2 = await reload.json()
+              const items = Array.isArray(j2?.items) ? j2.items : []
+              const mapped: AllocationRow[] = items.map((it: any) => ({
+                id: String(it.id || crypto.randomUUID()),
+                paymentDate: String(it.paymentDate || new Date().toISOString()),
+                invoiceNo: String(it.invoiceNo || ""),
+                salesDate: String(it.salesDate || new Date().toISOString()),
+                paymentAmount: Number(it.paymentAmount || 0),
+                invoiceAmount: Number(it.invoiceAmount || 0),
+              }))
+              setAllocations(mapped)
+            } catch (e) {
+              console.error(e)
+            }
+          }}
+          voucherNo={voucherNo}
+          clientName={clientName}
+        />
       </div>
-
-      <Tabs defaultValue="details" className="w-full">
-        <TabsList>
-          <TabsTrigger value="invoice">Invoice</TabsTrigger>
-          <TabsTrigger value="details">Details</TabsTrigger>
-          <TabsTrigger value="single">Single Copy</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="invoice">
-          <div className="rounded-md border bg-white p-4 h-[60vh] flex items-center justify-center text-muted-foreground">
-            Invoice content will appear here
-          </div>
-        </TabsContent>
-
-        <TabsContent value="details">
-          <div className="rounded-md border bg-white">
-            <div className="flex items-center justify-between p-4">
-              <div className="text-lg font-semibold">Receipt Details</div>
-              {paymentTo === "advance" && (
-                <Button onClick={() => setOpenAdjust(true)}>Add Invoice</Button>
-              )}
-            </div>
-            <div className="px-4 pb-4">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>SL</TableHead>
-                    <TableHead>Payment Date</TableHead>
-                    <TableHead>Invoice No</TableHead>
-                    <TableHead>Sales Date</TableHead>
-                    <TableHead>Payment Amount</TableHead>
-                    <TableHead>Invoice Amount</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {allocations.map((row, idx) => (
-                    <TableRow key={row.id}>
-                      <TableCell>{idx + 1}</TableCell>
-                      <TableCell>{new Date(row.paymentDate).toLocaleDateString("en-GB")}</TableCell>
-                      <TableCell>{row.invoiceNo}</TableCell>
-                      <TableCell>{new Date(row.salesDate).toLocaleDateString("en-GB")}</TableCell>
-                      <TableCell>{Number(row.paymentAmount || 0).toLocaleString()}</TableCell>
-                      <TableCell>{Number(row.invoiceAmount || 0).toLocaleString()}</TableCell>
-                    </TableRow>
-                  ))}
-                  {allocations.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground">No allocations yet</TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="single">
-          <div className="rounded-md border bg-white p-4 h-[60vh] flex items-center justify-center text-muted-foreground">
-            Single copy view will appear here
-          </div>
-        </TabsContent>
-      </Tabs>
-
-      <ReceiptAdjustModal
-        open={openAdjust}
-        onOpenChange={(o) => setOpenAdjust(o)}
-        paymentDate={paymentDate}
-        remainingAmount={remainingAmount}
-        clientId={clientId}
-        onSubmit={async (rows) => {
-          try {
-            const payload = rows.map(r => ({ invoiceId: r.invoiceId, amount: r.amount, paymentDate: r.paymentDate }))
-            const res = await fetch(`/api/money-receipts/${moneyReceiptId}/allocations`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "x-company-id": session?.user?.companyId ?? "" },
-              body: JSON.stringify(payload),
-            })
-            const json = await res.json()
-            if (!res.ok) throw new Error(json?.error || "Failed to allocate")
-            const reload = await fetch(`/api/money-receipts/${moneyReceiptId}/allocations`, { headers: { "x-company-id": session?.user?.companyId ?? "" } })
-            const j2 = await reload.json()
-            const items = Array.isArray(j2?.items) ? j2.items : []
-            const mapped: AllocationRow[] = items.map((it: any) => ({
-              id: String(it.id || crypto.randomUUID()),
-              paymentDate: String(it.paymentDate || new Date().toISOString()),
-              invoiceNo: String(it.invoiceNo || ""),
-              salesDate: String(it.salesDate || new Date().toISOString()),
-              paymentAmount: Number(it.paymentAmount || 0),
-              invoiceAmount: Number(it.invoiceAmount || 0),
-            }))
-            setAllocations(mapped)
-          } catch (e) {
-            console.error(e)
-          }
-        }}
-        voucherNo={voucherNo}
-        clientName={clientName}
-      />
-    </div>
+    </PageWrapper>
   )
 }
