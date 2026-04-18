@@ -556,7 +556,7 @@ export async function deleteVendorPayment(id: string, companyId?: string) {
   }
 }
 
-export async function listVendorPayments({ page = 1, pageSize = 20, search = "", companyId }: any) {
+export async function listVendorPayments({ page = 1, pageSize = 20, search = "", startDate, endDate, companyId }: any) {
   await connectMongoose()
   const skip = (page - 1) * pageSize
 
@@ -567,6 +567,12 @@ export async function listVendorPayments({ page = 1, pageSize = 20, search = "",
       { voucherNo: { $regex: search, $options: "i" } },
       { receiptNo: { $regex: search, $options: "i" } }
     ]
+  }
+
+  if (startDate || endDate) {
+    query.paymentDate = {}
+    if (startDate) query.paymentDate.$gte = startDate
+    if (endDate) query.paymentDate.$lte = endDate
   }
 
   const [items, total] = await Promise.all([

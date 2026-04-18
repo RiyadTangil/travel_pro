@@ -25,6 +25,8 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Loader2 } from "lucide-react"
 
+import { PageWrapper } from "@/components/shared/page-wrapper"
+
 export default function InvoicesPage() {
   const { toast } = useToast()
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -156,98 +158,96 @@ export default function InvoicesPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Invoices</h1>
-          <p className="text-gray-600">Manage your invoices and billing information</p>
+    <PageWrapper breadcrumbs={[{ label: "Invoices" }]}>
+      <div className="px-4 space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">Invoices</h1>
+          <Button 
+            onClick={() => setIsModalOpen(true)}
+            className="bg-blue-600 hover:bg-blue-700"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Invoice
+          </Button>
         </div>
-        <Button 
-          onClick={() => setIsModalOpen(true)}
-          className="bg-blue-600 hover:bg-blue-700"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Invoice
-        </Button>
-      </div>
 
-      {/* Filters */}
-      <InvoiceFilters 
-        filters={filters}
-        onFiltersChange={setFilters}
-        salesByOptions={salesByOptions}
-      />
-
-      {/* Invoice Table */}
-      <div className="relative">
-        {loading && (
-          <div className="absolute inset-0 bg-white/50 z-10 flex items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-          </div>
-        )}
-        <InvoiceTable
-          invoices={invoices}
-          onView={handleView}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          onMoneyReceipt={handleMoneyReceipt}
+        {/* Filters */}
+        <InvoiceFilters 
+          filters={filters}
+          onFiltersChange={setFilters}
+          salesByOptions={salesByOptions}
         />
-        
-        <PaginationWithLinks
-          totalCount={pagination.total}
-          pageSize={pagination.pageSize}
-          page={pagination.page}
-          setPage={(p) => loadInvoices(p)}
-          onPageSizeChange={(s) => loadInvoices(1, s)}
+
+        {/* Invoice Table */}
+        <div className="relative">
+          {loading && (
+            <div className="absolute inset-0 bg-white/50 z-10 flex items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            </div>
+          )}
+          <InvoiceTable
+            invoices={invoices}
+            onView={handleView}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onMoneyReceipt={handleMoneyReceipt}
+          />
+          
+          <PaginationWithLinks
+            totalCount={pagination.total}
+            pageSize={pagination.pageSize}
+            page={pagination.page}
+            setPage={(p) => loadInvoices(p)}
+            onPageSizeChange={(s) => loadInvoices(1, s)}
+          />
+        </div>
+
+        {/* Add Invoice Modal */}
+        <AddInvoiceModal 
+          isOpen={isModalOpen} 
+          onClose={() => { setIsModalOpen(false); setEditingInvoice(undefined) }}
+          onInvoiceAdded={handleAddInvoice}
+          initialInvoice={editingInvoice}
         />
+
+        <MoneyReceiptModal
+          open={moneyReceiptOpen}
+          onClose={() => setMoneyReceiptOpen(false)}
+          invoice={selectedInvoice}
+          onSubmit={() => loadInvoices(pagination.page)}
+        />
+
+        {/* Delete Confirmation */}
+        <AlertDialog open={!!invoiceToDelete} onOpenChange={(open) => !open && setInvoiceToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will soft-delete invoice <strong>{invoiceToDelete?.invoiceNo}</strong>. 
+                The client and vendor balances will be adjusted automatically to revert the financial impact.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={(e) => {
+                  e.preventDefault()
+                  confirmDelete()
+                }}
+                className="bg-red-600 hover:bg-red-700"
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : "Confirm Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
-
-      {/* Add Invoice Modal */}
-      <AddInvoiceModal 
-        isOpen={isModalOpen} 
-        onClose={() => { setIsModalOpen(false); setEditingInvoice(undefined) }}
-        onInvoiceAdded={handleAddInvoice}
-        initialInvoice={editingInvoice}
-      />
-
-      <MoneyReceiptModal
-        open={moneyReceiptOpen}
-        onClose={() => setMoneyReceiptOpen(false)}
-        invoice={selectedInvoice}
-        onSubmit={() => loadInvoices(pagination.page)}
-      />
-
-      {/* Delete Confirmation */}
-      <AlertDialog open={!!invoiceToDelete} onOpenChange={(open) => !open && setInvoiceToDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will soft-delete invoice <strong>{invoiceToDelete?.invoiceNo}</strong>. 
-              The client and vendor balances will be adjusted automatically to revert the financial impact.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={(e) => {
-                e.preventDefault()
-                confirmDelete()
-              }}
-              className="bg-red-600 hover:bg-red-700"
-              disabled={isDeleting}
-            >
-              {isDeleting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Deleting...
-                </>
-              ) : "Confirm Delete"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+    </PageWrapper>
   )
 }

@@ -1,15 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { DashboardHeader } from "@/components/dashboard/header"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
+import { PageWrapper } from "@/components/shared/page-wrapper"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { AgentToolbar } from "@/components/agents/agent-toolbar"
 import { AgentTable } from "@/components/agents/agent-table"
@@ -121,31 +113,8 @@ export default function AgentProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Top Header */}
-      <header className="bg-white shadow-sm">
-        <div className="mx-auto px-4 py-4">
-          <DashboardHeader />
-        </div>
-      </header>
-
-      <main className="flex-grow px-4 py-6">
-        {/* Breadcrumb */}
-        <div className="mb-4">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Agent Profile</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-
-        <Card>
+    <PageWrapper breadcrumbs={[{ label: "Agent Profile" }]}>
+        <Card className="mx-4">
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg">Agent Profile</CardTitle>
@@ -203,7 +172,6 @@ export default function AgentProfilePage() {
             else if (mode === "edit") await handleUpdate(payload)
           }}
         />
-      </main>
-    </div>
+    </PageWrapper>
   )
 }

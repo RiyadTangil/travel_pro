@@ -11,6 +11,8 @@ import { ClearableSelect } from "@/components/ui/clearable-select"
 type Category = { id: string; name: string }
 type User = { id: string; name: string }
 
+import { SearchInput } from "@/components/shared/search-input"
+
 interface ToolbarProps {
   onAddClient(): void
   onFilterChange(filters: { categoryId?: string; userId?: string; search?: string; status?: string }): void
@@ -88,23 +90,12 @@ export default function ClientsManagerToolbar({ onAddClient, onFilterChange }: T
           />
         </div>
 
-        <div className="relative flex-1 max-w-sm ml-auto">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search clients..."
-            className="pl-9 h-10"
-          />
-          {search && (
-            <button
-              onClick={() => setSearch("")}
-              className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search clients..."
+          className="max-w-sm ml-auto"
+        />
       </div>
     </div>
   )

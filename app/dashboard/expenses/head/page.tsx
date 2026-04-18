@@ -1,22 +1,15 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useCallback } from "react"
 import axios from "axios"
 import { useSession } from "next-auth/react"
-import { DashboardHeader } from "@/components/dashboard/header"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import ExpenseHeadModal from "@/components/expenses/ExpenseHeadModal"
-import { RefreshCcw, Loader2 } from "lucide-react"
+import { RefreshCcw, Loader2, Plus } from "lucide-react"
+import { SearchInput } from "@/components/shared/search-input"
+import { PageWrapper } from "@/components/shared/page-wrapper"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -60,7 +53,7 @@ export default function ExpenseHeadPage() {
     headers: { "x-company-id": session?.user?.companyId ?? "" },
   })
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
@@ -76,44 +69,32 @@ export default function ExpenseHeadPage() {
       setPage(Number(pag?.page || page))
       setPageSize(Number(pag?.pageSize || pageSize))
     } catch { } finally { setLoading(false) }
-  }
+  }, [session?.user?.companyId, page, pageSize, search])
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [load])
 
   const handleRefresh = () => { load() }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white shadow-sm">
-        <div className="mx-auto px-4 py-4">
-          <DashboardHeader />
-        </div>
-      </header>
-
-      <main className="flex-grow py-6">
-        <div className="mb-4 px-4">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Expense Head</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-
+    <PageWrapper breadcrumbs={[{ label: "Expense Head" }]}>
         <Card className="mx-2">
           <CardHeader className="space-y-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base">Expense Head</CardTitle>
-              <div className="flex items-center gap-2">
-                <Button onClick={handleRefresh} variant="outline" title="Refresh" aria-label="Refresh">
+              <CardTitle className="text-base font-semibold">Expense Head</CardTitle>
+              <div className="flex items-center gap-3">
+                <SearchInput 
+                  value={search}
+                  onChange={setSearch}
+                  placeholder="Search heads..."
+                  className="w-64"
+                />
+                <Button onClick={handleRefresh} variant="outline" size="icon" title="Refresh">
                   <RefreshCcw className="h-4 w-4" />
                 </Button>
-                <Button onClick={() => setOpenAdd(true)} className="bg-sky-500 hover:bg-sky-600">+ Add New Head</Button>
+                <Button onClick={() => setOpenAdd(true)} className="bg-sky-500 hover:bg-sky-600">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add New Head
+                </Button>
               </div>
             </div>
           </CardHeader>
@@ -128,7 +109,14 @@ export default function ExpenseHeadPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((r, idx) => (
+                {loading && rows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center py-6 text-gray-500 flex items-center justify-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading...
+                    </TableCell>
+                  </TableRow>
+                ) : filtered.map((r, idx) => (
                   <TableRow key={r.id}>
                     <TableCell className="font-medium">{idx + 1}</TableCell>
                     <TableCell className="font-medium">{r.name}</TableCell>
@@ -156,17 +144,15 @@ export default function ExpenseHeadPage() {
                     </TableCell>
                   </TableRow>
                 ))}
-                {filtered.length === 0 && (
+                {!loading && filtered.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-6 text-gray-500">{loading ? "Loading..." : "No data"}</TableCell>
+                    <TableCell colSpan={4} className="text-center py-6 text-gray-500">No data</TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
           </CardContent>
         </Card>
-      </main>
-
       <ExpenseHeadModal
         open={openAdd}
         mode="add"
@@ -231,6 +217,6 @@ export default function ExpenseHeadPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-    </div>
+    </PageWrapper>
   )
 }

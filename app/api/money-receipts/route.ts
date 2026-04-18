@@ -7,8 +7,20 @@ export async function GET(request: NextRequest) {
     const page = Number.parseInt(searchParams.get("page") || "1")
     const pageSize = Number.parseInt(searchParams.get("pageSize") || "20")
     const clientId = searchParams.get("clientId") || undefined
+    const search = searchParams.get("search") || undefined
+    const startDate = searchParams.get("startDate") || undefined
+    const endDate = searchParams.get("endDate") || undefined
     const companyId = request.headers.get('x-company-id') || undefined
-    const result = await listMoneyReceipts({ page, pageSize, clientId: clientId || undefined, companyId })
+    
+    const result = await listMoneyReceipts({ 
+      page, 
+      pageSize, 
+      clientId, 
+      search,
+      startDate,
+      endDate,
+      companyId 
+    })
     return NextResponse.json(result)
   } catch (err) {
     console.error("money-receipts GET error", err)

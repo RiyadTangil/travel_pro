@@ -2,13 +2,15 @@
 
 import { useState, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Plus, RotateCcw, Search, Loader2 } from "lucide-react"
-import { Input } from "@/components/ui/input"
+import { Plus, Loader2 } from "lucide-react"
 import { InvoiceTable } from "@/components/invoices/invoice-table"
 import { PaginationWithLinks } from "@/components/ui/pagination-with-links"
 import { AddVisaInvoiceModal } from "@/components/invoices/add-visa-invoice-modal"
 import { AssignEmployeeModal } from "@/components/invoices/assign-employee-modal"
 import { MoneyReceiptModal } from "@/components/invoices/money-receipt-modal"
+import { PageWrapper } from "@/components/shared/page-wrapper"
+import FilterBar from "@/components/money-receipts/FilterBar"
+import { DateRange } from "react-day-picker"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,6 +27,7 @@ export default function VisaInvoicesPage() {
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
+  const [dateRange, setDateRange] = useState<DateRange | undefined>()
   const [invoices, setInvoices] = useState<any[]>([])
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
@@ -40,13 +43,18 @@ export default function VisaInvoicesPage() {
   const fetchInvoices = useCallback(async (params = {}) => {
     setLoading(true)
     try {
-      const qs = new URLSearchParams({
+      const queryParams: any = {
         page: String(pagination.page),
         pageSize: String(pagination.pageSize),
         search: search,
         invoiceType: "visa",
         ...params
-      }).toString()
+      }
+
+      if (dateRange?.from) queryParams.startDate = dateRange.from.toISOString().slice(0, 10)
+      if (dateRange?.to) queryParams.endDate = dateRange.to.toISOString().slice(0, 10)
+
+      const qs = new URLSearchParams(queryParams).toString()
       
       const res = await fetch(`/api/invoices?${qs}`)
       const data = await res.json()
@@ -64,11 +72,11 @@ export default function VisaInvoicesPage() {
     } finally {
       setLoading(false)
     }
-  }, [pagination.page, pagination.pageSize, search, toast])
+  }, [pagination.page, pagination.pageSize, search, dateRange, toast])
 
   useEffect(() => {
     fetchInvoices()
-  }, [pagination.page, pagination.pageSize])
+  }, [fetchInvoices])
 
   const handleRefresh = () => {
     fetchInvoices()
@@ -130,59 +138,71 @@ export default function VisaInvoicesPage() {
     setMoneyReceiptOpen(true)
   }, [])
 
+  const handlePageChange = (newPage: number) => {
+    setPagination(prev => ({ ...prev, page: newPage }))
+  }
+
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Visa Invoices</h1>
-        <Button onClick={handleCreateNew} className="bg-blue-600 hover:bg-blue-700">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Visa Invoice
-        </Button>
-      </div>
+    <PageWrapper breadcrumbs={[{ label: "Invoice" }, { label: "Visa Invoice" }]}>
+      <div className="space-y-6 px-4">
+        {/* Toolbar */}
+        <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-lg shadow-sm border">
+          <div className="flex items-center gap-3">
+            <Button 
+              onClick={handleCreateNew}
+              className="bg-sky-500 hover:bg-sky-600 text-white rounded-md h-10 px-6 flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Create
+            </Button>
+          </div>
 
-      <div className="flex items-center gap-4 bg-white p-4 rounded-lg shadow-sm">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input 
-            placeholder="Search by invoice no, client name..." 
-            className="pl-9"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+          <FilterBar
+            dateRange={dateRange}
+            search={search}
+            onDateRangeChange={setDateRange}
+            onSearchChange={setSearch}
+            onRefresh={handleRefresh}
           />
         </div>
-        <Button variant="outline" onClick={handleRefresh}>
-          <RotateCcw className="h-4 w-4 mr-2" />
-          Refresh
-        </Button>
-      </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        {/* Table Section */}
+        <div className="relative bg-white rounded-lg shadow-sm border p-4">
+          {loading && invoices.length === 0 ? (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 className="h-8 w-8 animate-spin text-sky-500" />
+            </div>
+          ) : (
+            <>
+              <InvoiceTable
+                invoices={invoices}
+                onView={(inv) => console.log("View", inv)}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                onMoneyReceipt={handleMoneyReceipt}
+                onAssignBy={handleAssignBy}
+                onPartialCost={(inv) => console.log("Partial Cost", inv)}
+              />
+              
+              <div className="mt-4">
+                <PaginationWithLinks
+                  totalCount={pagination.total}
+                  pageSize={pagination.pageSize}
+                  page={pagination.page}
+                  setPage={handlePageChange}
+                  onPageSizeChange={() => {}}
+                />
+              </div>
+            </>
+          )}
         </div>
-      ) : (
-        <div className="space-y-4">
-          <InvoiceTable 
-            invoices={invoices}
-            onEdit={handleEdit}
-            onAssignBy={handleAssignBy}
-            onDelete={handleDelete}
-            onMoneyReceipt={handleMoneyReceipt}
-          />
-          <PaginationWithLinks
-            page={pagination.page}
-            pageSize={pagination.pageSize}
-            totalCount={pagination.total}
-            pageSizeSelectOptions={[10, 20, 50]}
-          />
-        </div>
-      )}
+      </div>
 
       <AddVisaInvoiceModal 
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        initialInvoiceId={editInvoiceId}
+        isOpen={isModalOpen} 
+        onClose={() => { setIsModalOpen(false); setEditInvoiceId(null) }} 
         onInvoiceAdded={() => fetchInvoices()}
+        initialInvoiceId={editInvoiceId}
       />
 
       <AssignEmployeeModal
@@ -190,6 +210,7 @@ export default function VisaInvoicesPage() {
         onClose={() => setIsAssignModalOpen(false)}
         invoiceId={assignData?.id || ""}
         passports={assignData?.passports || []}
+        onAssigned={() => fetchInvoices()}
       />
 
       <MoneyReceiptModal
@@ -216,19 +237,18 @@ export default function VisaInvoicesPage() {
                 e.preventDefault()
                 confirmDelete()
               }}
-              className="bg-red-600 hover:bg-red-700"
               disabled={isDeleting}
+              className="bg-red-600 hover:bg-red-700 text-white"
             >
-              {isDeleting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Deleting...
-                </>
-              ) : "Confirm Delete"}
+              {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Confirm Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </PageWrapper>
   )
 }
+
+ 
+            

@@ -1,23 +1,16 @@
 "use client"
 
-import { useMemo, useState, useEffect } from "react"
+import { useMemo, useState, useEffect, useCallback } from "react"
 import { useSession } from "next-auth/react"
-import { DashboardHeader } from "@/components/dashboard/header"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
+import { PageWrapper } from "@/components/shared/page-wrapper"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import FilterBar from "@/components/money-receipts/FilterBar"
 import VendorAdvanceReturnModal from "@/components/vendors/vendor-advance-return-modal"
 import { format } from "date-fns"
-import { Loader2 } from "lucide-react"
+import { Loader2, Plus } from "lucide-react"
+import { DateRange } from "react-day-picker"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,8 +45,7 @@ export default function VendorAdvanceReturnPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
-  const [startDate, setStartDate] = useState<string>("")
-  const [endDate, setEndDate] = useState<string>("")
+  const [dateRange, setDateRange] = useState<DateRange | undefined>()
   const [search, setSearch] = useState<string>("")
 
   const [openAdd, setOpenAdd] = useState(false)
@@ -63,25 +55,25 @@ export default function VendorAdvanceReturnPage() {
   const filtered = useMemo(() => {
     return rows.filter((r) => {
       const dOk = (() => {
-        if (startDate && r.returnDate < startDate) return false
-        if (endDate && r.returnDate > endDate) return false
+        if (dateRange?.from && new Date(r.returnDate) < dateRange.from) return false
+        if (dateRange?.to && new Date(r.returnDate) > dateRange.to) return false
         return true
       })()
       const q = search.trim().toLowerCase()
       const sOk = !q || [r.voucherNo, r.vendorName, r.paymentType, r.paymentDetails, r.returnNote || ""].some((v) => v.toLowerCase().includes(q))
       return dOk && sOk
     })
-  }, [rows, startDate, endDate, search])
+  }, [rows, dateRange, search])
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
       params.set("page", String(page))
       params.set("pageSize", String(pageSize))
       if (search) params.set("search", search)
-      if (startDate) params.set("dateFrom", startDate)
-      if (endDate) params.set("dateTo", endDate)
+      if (dateRange?.from) params.set("dateFrom", dateRange.from.toISOString().slice(0, 10))
+      if (dateRange?.to) params.set("dateTo", dateRange.to.toISOString().slice(0, 10))
       const res = await fetch(`/api/vendors/advance-return?${params.toString()}`, { headers: { "x-company-id": session?.user?.companyId ?? "" } })
       const data = await res.json()
       const items: VendorAdvanceReturnRow[] = Array.isArray(data?.items) ? data.items : []
@@ -91,16 +83,16 @@ export default function VendorAdvanceReturnPage() {
       setPage(Number(pag?.page || page))
       setPageSize(Number(pag?.pageSize || pageSize))
     } catch { } finally { setLoading(false) }
-  }
+  }, [session?.user?.companyId, page, pageSize, search, dateRange])
 
-  useEffect(() => { load() }, [session?.user?.companyId])
+  useEffect(() => { load() }, [load])
 
   const handleRefresh = () => { load() }
 
   const handleDelete = async () => {
     if (!confirmDeleteId) return
     setDeletingId(confirmDeleteId)
-    setConfirmDeleteId(null) // Close modal immediately, show loader on button
+    setConfirmDeleteId(null)
     try {
       const res = await fetch(`/api/vendors/advance-return/${confirmDeleteId}`, { method: "DELETE", headers: { "x-company-id": session?.user?.companyId ?? "" } })
       await res.json()
@@ -110,44 +102,24 @@ export default function VendorAdvanceReturnPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white shadow-sm">
-        <div className="mx-auto px-4 py-4">
-          <DashboardHeader />
-        </div>
-      </header>
-
-      <main className="flex-grow py-6">
-        <div className="mb-4 px-4">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>List of Advance Return</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-
+    <PageWrapper breadcrumbs={[{ label: "Advance Return" }]}>
         <Card className="mx-2">
           <CardHeader className="space-y-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base">Advance Return</CardTitle>
+              <CardTitle className="text-base font-semibold">Advance Return</CardTitle>
               <FilterBar
-                startDate={startDate}
-                endDate={endDate}
+                dateRange={dateRange}
                 search={search}
-                onStartDateChange={setStartDate}
-                onEndDateChange={setEndDate}
+                onDateRangeChange={setDateRange}
                 onSearchChange={setSearch}
                 onRefresh={handleRefresh}
               />
             </div>
             <div>
-              <Button onClick={() => setOpenAdd(true)} className="bg-sky-500 hover:bg-sky-600">+ Add Advance Return</Button>
+              <Button onClick={() => setOpenAdd(true)} className="bg-sky-500 hover:bg-sky-600">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Advance Return
+              </Button>
             </div>
           </CardHeader>
           <CardContent>
@@ -158,7 +130,7 @@ export default function VendorAdvanceReturnPage() {
                   <TableHead>Return Date</TableHead>
                   <TableHead>Voucher No</TableHead>
                   <TableHead>Vendor Name</TableHead>
-                  <TableHead>Advance Amount</TableHead>
+                  <TableHead className="text-right">Advance Amount</TableHead>
                   <TableHead>Return Note</TableHead>
                   <TableHead>Action</TableHead>
                 </TableRow>
@@ -173,8 +145,8 @@ export default function VendorAdvanceReturnPage() {
                     <TableCell className="font-medium">{idx + 1}</TableCell>
                     <TableCell>{r.returnDate ? format(new Date(r.returnDate), "dd-MM-yyyy") : "-"}</TableCell>
                     <TableCell className="font-medium">{r.voucherNo}</TableCell>
-                    <TableCell className="text-blue-500">{r.vendorName}</TableCell>
-                    <TableCell className="text-right">{r.advanceAmount.toLocaleString()}</TableCell>
+                    <TableCell className="text-blue-500 font-medium">{r.vendorName}</TableCell>
+                    <TableCell className="text-right font-semibold">{r.advanceAmount.toLocaleString()}</TableCell>
                     <TableCell>{r.returnNote || ""}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -208,7 +180,6 @@ export default function VendorAdvanceReturnPage() {
             </Table>
           </CardContent>
         </Card>
-      </main>
 
       <VendorAdvanceReturnModal
         open={openAdd}
@@ -222,7 +193,7 @@ export default function VendorAdvanceReturnPage() {
               accountId: payload.accountId,
               accountName: payload.accountName,
               advanceAmount: Number(payload.advanceAmount || 0),
-              amount: Number(payload.advanceAmount || 0), // API expects amount
+              amount: Number(payload.advanceAmount || 0),
               returnDate: payload.returnDate,
               note: payload.returnNote || "",
             }
@@ -284,6 +255,6 @@ export default function VendorAdvanceReturnPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </PageWrapper>
   )
 }

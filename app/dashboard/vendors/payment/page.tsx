@@ -1,15 +1,15 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 import PaymentModal from "@/components/vendors/payment-modal"
 import PaymentTable from "@/components/vendors/payment-table"
-import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
 import { useInvoiceLookups } from "@/hooks/useInvoiceLookups"
 import { Card, CardContent } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { DashboardHeader } from "@/components/dashboard/header"
+import { PageWrapper } from "@/components/shared/page-wrapper"
+import FilterBar from "@/components/money-receipts/FilterBar"
+import { DateRange } from "react-day-picker"
 import { useSession } from "next-auth/react"
 import { toast } from "sonner"
 
@@ -19,6 +19,7 @@ export default function VendorPaymentPage() {
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState("")
+  const [dateRange, setDateRange] = useState<DateRange | undefined>()
   const [editPayment, setEditPayment] = useState<any>(undefined)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -33,10 +34,15 @@ export default function VendorPaymentPage() {
     })) || []
   ), [lookups?.accounts])
 
-  const loadPayments = async () => {
+  const loadPayments = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await fetch(`/api/vendors/payment?page=1&pageSize=50&search=${search}`, {
+      const params = new URLSearchParams({ page: "1", pageSize: "50" })
+      if (search) params.append("search", search)
+      if (dateRange?.from) params.append("startDate", dateRange.from.toISOString().slice(0, 10))
+      if (dateRange?.to) params.append("endDate", dateRange.to.toISOString().slice(0, 10))
+
+      const res = await fetch(`/api/vendors/payment?${params.toString()}`, {
         headers: { "x-company-id": session?.user?.companyId || "" }
       })
       const result = await res.json()
@@ -64,11 +70,11 @@ export default function VendorPaymentPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [session?.user?.companyId, search, dateRange])
 
   useEffect(() => {
     loadPayments()
-  }, [session, search])
+  }, [loadPayments])
 
   const handlePaymentSubmit = async (formData: any) => {
     try {
@@ -105,18 +111,15 @@ export default function VendorPaymentPage() {
   }
 
   const handleEdit = (row: any) => {
-    // Populate form data from raw item
     const raw = row.raw
-    // We need to shape it for the form defaultValues
-    // Note: PaymentModal expects flat values mostly, but invoiceVendors is array
     const formData = {
         paymentTo: raw.paymentTo,
-        invoiceId: raw.invoiceId?._id || raw.invoiceId, // raw.invoiceId might be populated object or id
+        invoiceId: raw.invoiceId?._id || raw.invoiceId,
         invoiceVendors: raw.invoiceVendors?.map((v: any) => ({
-            vendorId: v.vendorId?._id || v.vendorId, // might be populated
+            vendorId: v.vendorId?._id || v.vendorId,
             amount: v.amount
         })) || [],
-        vendorId: raw.vendorId, // if we had it stored directly
+        vendorId: raw.vendorId,
         paymentMethod: raw.paymentMethod,
         accountId: raw.accountId?._id || raw.accountId,
         amount: raw.amount,
@@ -156,48 +159,29 @@ export default function VendorPaymentPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white shadow-sm">
-        <div className="mx-auto px-4 py-4">
-          <DashboardHeader />
-        </div>
-      </header>
-
-      <main className="flex-grow py-6">
-        <div className="mb-4 px-4">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Vendor Payments</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-
+    <PageWrapper breadcrumbs={[{ label: "Vendor Payments" }]}>
         <div className="mx-4 mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
            <Button onClick={() => { setEditPayment(undefined); setOpenModal(true) }} className="bg-sky-500 hover:bg-sky-600">
              <Plus className="w-4 h-4 mr-2" /> Add Payment
            </Button>
 
-           <div className="flex items-center gap-2">
-               <Input 
-                 placeholder="Search by voucher..." 
-                 value={search}
-                 onChange={(e) => setSearch(e.target.value)}
-                 className="w-64 bg-white"
-               />
-           </div>
+           <FilterBar
+             dateRange={dateRange}
+             search={search}
+             onDateRangeChange={setDateRange}
+             onSearchChange={setSearch}
+             onRefresh={loadPayments}
+           />
         </div>
 
         <Card className="mx-4 border-none shadow-none bg-transparent">
           <CardContent className="p-0">
             <div className="bg-white rounded-md border shadow-sm overflow-hidden">
               {loading && (
-                <div className="p-4 text-sm text-gray-600 text-center">Loading payments...</div>
+                <div className="p-4 text-sm text-gray-600 text-center flex items-center justify-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading payments...
+                </div>
               )}
               <PaymentTable 
                 data={data} 
@@ -208,16 +192,18 @@ export default function VendorPaymentPage() {
             </div>
           </CardContent>
         </Card>
-      </main>
 
       <PaymentModal 
         open={openModal} 
         onOpenChange={setOpenModal}
         onSubmit={handlePaymentSubmit}
         accountsPreloaded={accountsPreloaded}
-        initialData={editPayment} // Pass initial data for edit
+        initialData={editPayment}
         loading={saving}
       />
-    </div>
+    </PageWrapper>
   )
 }
+
+import { Loader2 } from "lucide-react"
+

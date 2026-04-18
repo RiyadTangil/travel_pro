@@ -3,20 +3,12 @@
 import { useEffect, useState } from "react"
 import axios from "axios"
 import { useSession } from "next-auth/react"
-import { DashboardHeader } from "@/components/dashboard/header"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
+import { PageWrapper } from "@/components/shared/page-wrapper"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Loader2, Printer, ArrowLeft } from "lucide-react"
-import { DateRangePickerWithPresets } from "@/components/ui/date-range-with-presets"
+import { DateRangePickerWithPresets } from "@/components/shared/date-range-with-presets"
 import {
   Select,
   SelectContent,
@@ -114,32 +106,7 @@ export default function TransactionHistoryPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white shadow-sm print:hidden">
-        <div className="mx-auto px-4 py-4">
-          <DashboardHeader />
-        </div>
-      </header>
-
-      <main className="flex-grow py-6 print:py-0">
-        <div className="mb-4 px-4 print:hidden">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard/accounts">Accounts</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Transaction History</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-
+    <PageWrapper breadcrumbs={[{ label: "Accounts", href: "/dashboard/accounts" }, { label: "Transaction History" }]}>
         <div className="mx-4 mb-4 flex justify-between items-center print:hidden">
             <div className="flex items-center gap-2">
                <Link href="/dashboard/accounts">
@@ -199,42 +166,55 @@ export default function TransactionHistoryPage() {
                       <TableCell className="text-gray-600">{r.voucherNo}</TableCell>
                       <TableCell className="text-gray-600">{r.accountName}</TableCell>
                       <TableCell className="text-gray-600">{r.particulars}</TableCell>
-                      <TableCell className={cn("font-semibold uppercase", r.trType === "DEBIT" ? "text-red-500" : "text-green-500")}>
-                        {r.trType}
+                      <TableCell className="text-gray-600">
+                        <span className={cn(
+                          "px-2 py-0.5 rounded-full text-[10px] font-bold",
+                          r.trType === "DEBIT" ? "bg-red-100 text-red-600" : "bg-green-100 text-green-600"
+                        )}>
+                          {r.trType}
+                        </span>
                       </TableCell>
-                      <TableCell className="text-right text-red-500 font-medium">
-                        {r.debit > 0 ? r.debit.toLocaleString(undefined, { minimumFractionDigits: 2 }) : ""}
+                      <TableCell className="text-right text-gray-600">
+                        {r.debit > 0 ? r.debit.toLocaleString() : "-"}
                       </TableCell>
-                      <TableCell className="text-right text-green-500 font-medium">
-                        {r.credit > 0 ? r.credit.toLocaleString(undefined, { minimumFractionDigits: 2 }) : ""}
+                      <TableCell className="text-right text-gray-600">
+                        {r.credit > 0 ? r.credit.toLocaleString() : "-"}
                       </TableCell>
-                      <TableCell className={cn("text-right font-medium", (r.totalLastBalance || 0) >= 0 ? "text-red-500" : "text-green-500")}>
-                        {Math.abs(r.totalLastBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      <TableCell className="text-right font-bold text-gray-800">
+                        {r.totalLastBalance.toLocaleString()}
                       </TableCell>
-                      <TableCell className="text-gray-600 max-w-[200px] truncate" title={r.note}>{r.note}</TableCell>
+                      <TableCell className="text-gray-600 max-w-[150px] truncate" title={r.note}>{r.note}</TableCell>
                     </TableRow>
                   ))}
-                  {rows.length === 0 && (
+                  {rows.length === 0 && !loading && (
                     <TableRow>
-                      <TableCell colSpan={10} className="text-center py-8 text-gray-500">
-                        {loading ? <Loader2 className="h-6 w-6 animate-spin mx-auto" /> : "No transactions found"}
+                      <TableCell colSpan={10} className="text-center py-10 text-gray-500">
+                        No transactions found.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {rows.length === 0 && loading && (                    <TableRow>
+                      <TableCell colSpan={10} className="text-center py-10">
+                        <Loader2 className="h-6 w-6 animate-spin mx-auto text-gray-400" />
                       </TableCell>
                     </TableRow>
                   )}
                 </TableBody>
               </Table>
             </div>
-
-            {/* Pagination */}
-            <PaginationWithLinks 
-              totalCount={total}
-              pageSize={pageSize}
-              page={page}
-              setPage={setPage}
-            />
+            
+            {!loading && total > pageSize && (
+              <div className="mt-4 print:hidden">
+                <PaginationWithLinks
+                  page={page}
+                  pageSize={pageSize}
+                  totalCount={total}
+                  onPageChange={setPage}
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
-      </main>
-    </div>
+    </PageWrapper>
   )
 }

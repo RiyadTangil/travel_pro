@@ -3,15 +3,8 @@
 import { useEffect, useMemo, useState } from "react"
 import axios from "axios"
 import { useSession } from "next-auth/react"
-import { DashboardHeader } from "@/components/dashboard/header"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
+import { PageWrapper } from "@/components/shared/page-wrapper"
+import { SearchInput } from "@/components/shared/search-input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -28,7 +21,6 @@ import {
 } from "@/components/ui/alert-dialog"
 import ExpenseModal from "@/components/expenses/ExpenseModal"
 import { DateInput } from "@/components/ui/date-input"
-import { Input } from "@/components/ui/input"
 
 type ExpenseRow = {
   id: string
@@ -104,27 +96,7 @@ export default function ExpenseHistoryPage() {
   useEffect(() => { load() }, [page, pageSize, startDate, endDate, search])
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white shadow-sm">
-        <div className="mx-auto px-4 py-4">
-          <DashboardHeader />
-        </div>
-      </header>
-
-      <main className="flex-grow py-6">
-        <div className="mb-4 px-4">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Expense</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
+    <PageWrapper breadcrumbs={[{ label: "Expense" }, { label: "History" }]}>
 
         <div className="mx-4 mb-4 flex justify-between items-center">
             <div className="flex items-center gap-2">
@@ -146,10 +118,11 @@ export default function ExpenseHistoryPage() {
                     className="border-none shadow-none w-32"
                   />
                </div>
-               <Input 
+               <SearchInput 
                  placeholder="Search Here..." 
                  value={search}
                  onChange={(e) => setSearch(e.target.value)}
+                 onClear={() => setSearch("")}
                  className="w-64 bg-white"
                />
             </div>
@@ -210,7 +183,6 @@ export default function ExpenseHistoryPage() {
             </Table>
           </CardContent>
         </Card>
-      </main>
 
       <ExpenseModal
         open={openAdd}
@@ -285,6 +257,6 @@ export default function ExpenseHistoryPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </PageWrapper>
   )
 }

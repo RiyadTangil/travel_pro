@@ -3,15 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { DashboardHeader } from "@/components/dashboard/header"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
+import { PageWrapper } from "@/components/shared/page-wrapper"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import ClientsManagerToolbar from "@/components/clients/clients-manager-toolbar"
 import ClientsManagerTable from "@/components/clients/clients-manager-table"
@@ -188,31 +180,8 @@ export default function ClientsManagerPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Header (same as dashboard) */}
-      <header className="bg-white shadow-sm">
-        <div className="mx-auto px-4 py-4">
-          <DashboardHeader />
-        </div>
-      </header>
-
-      <main className="flex-grow   py-6">
-        {/* Breadcrumb */}
-        <div className="mb-4 px-4">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Clients</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-
-        <Card className="mx-auto  mx-2">
+    <PageWrapper breadcrumbs={[{ label: "Clients" }]}>
+        <Card className="mx-auto mx-2">
           <CardHeader className="space-y-3">
             <CardTitle className="text-base">Clients Manager</CardTitle>
             <ClientsManagerToolbar onAddClient={handleOpenAddModal} onFilterChange={setFilters} />
@@ -230,7 +199,6 @@ export default function ClientsManagerPage() {
               />
           </CardContent>
         </Card>
-      </main>
 
       <AddClientModal 
         open={modalOpen} 
@@ -256,21 +224,18 @@ export default function ClientsManagerPage() {
             if (!res.ok) {
               // Extract the message from the backend response if available
               const errorMsg = data.message || data.error || "Failed to delete client"
-              throw new Error(errorMsg)
+              toast({ title: "Error", description: errorMsg })
+              return
             }
-            toast({ title: "Client deleted" })
-            setConfirmOpen(false)
-            setDeletingId(null)
+            toast({ title: "Deleted", description: "Client has been removed" })
             fetchClients()
           } catch (e) {
-            toast({ 
-              title: "Failed to delete", 
-              description: e instanceof Error ? e.message : "Unknown error",
-              variant: "destructive"
-            })
+            toast({ title: "Error", description: "Network error while deleting" })
+          } finally {
+            setDeletingId(null)
           }
         }}
       />
-    </div>
+    </PageWrapper>
   )
 }

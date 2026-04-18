@@ -3,23 +3,15 @@
 import { useEffect, useState } from "react"
 import axios from "axios"
 import { useSession } from "next-auth/react"
-import { DashboardHeader } from "@/components/dashboard/header"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
+import { PageWrapper } from "@/components/shared/page-wrapper"
+import { SearchInput } from "@/components/shared/search-input"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Loader2, Plus } from "lucide-react"
-import { Input } from "@/components/ui/input"
 import { PaginationWithLinks } from "@/components/ui/pagination-with-links"
 import BalanceTransferModal from "@/components/accounts/BalanceTransferModal"
-import { DateRangePickerWithPresets } from "@/components/ui/date-range-with-presets"
+import { DateRangePickerWithPresets } from "@/components/shared/date-range-with-presets"
 import { DateRange } from "react-day-picker"
 import {
   AlertDialog,
@@ -79,10 +71,7 @@ export default function BalanceTransferPage() {
       if (dateRange?.to) params.set("dateTo", dateRange.to.toISOString().slice(0, 10))
 
       const res = await client.get(`/api/balance-transfer?${params.toString()}`)
-      const data = res.data?.data || res.data // handle both { data: ... } or direct ...
-      // Adjust based on controller response structure
-      // My controller returns `ok(result)` which is `{ success: true, data: result }`?
-      // Wait, let me check `utils/api-response`.
+      const data = res.data?.data || res.data
       
       const items = data.items || data.data?.items || []
       const pagination = data.pagination || data.data?.pagination || {}
@@ -140,32 +129,7 @@ export default function BalanceTransferPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white shadow-sm">
-        <div className="mx-auto px-4 py-4">
-          <DashboardHeader />
-        </div>
-      </header>
-
-      <main className="flex-grow py-6">
-        <div className="mb-4 px-4">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard/accounts">Accounts</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Balance Transfer</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-
+    <PageWrapper breadcrumbs={[{ label: "Accounts", href: "/dashboard/accounts" }, { label: "Balance Transfer" }]}>
         <div className="mx-4 mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
            <Button onClick={handleAdd} className="bg-sky-500 hover:bg-sky-600">
              <Plus className="w-4 h-4 mr-2" /> Add Balance Transfer
@@ -177,10 +141,11 @@ export default function BalanceTransferPage() {
                  onDateChange={setDateRange}
                  className="bg-white"
                />
-               <Input 
+               <SearchInput 
                  placeholder="Search Here..." 
                  value={search}
                  onChange={(e) => setSearch(e.target.value)}
+                 onClear={() => setSearch("")}
                  className="w-64 bg-white"
                />
            </div>
@@ -198,8 +163,8 @@ export default function BalanceTransferPage() {
                     <TableHead className="font-bold text-gray-900 bg-gray-200/50">Transfer From</TableHead>
                     <TableHead className="font-bold text-gray-900 bg-gray-200/50">Transfer To</TableHead>
                     <TableHead className="font-bold text-gray-900 bg-gray-200/50">Amount</TableHead>
-                    <TableHead className="font-bold text-gray-900 bg-gray-200/50">Charge Amount</TableHead>
-                    <TableHead className="font-bold text-gray-900 bg-gray-200/50">Note</TableHead>
+                    <TableHead className="font-bold text-gray-900 bg-gray-200/50">Charge</TableHead>
+                    <TableHead className="font-bold text-gray-900 bg-gray-200/50">Total Amount</TableHead>
                     <TableHead className="font-bold text-gray-900 bg-gray-200/50 text-center">Action</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -207,28 +172,27 @@ export default function BalanceTransferPage() {
                   {rows.map((r, idx) => (
                     <TableRow key={r.id} className="hover:bg-gray-50 border-b last:border-0">
                       <TableCell className="font-medium text-gray-600">{(page - 1) * pageSize + idx + 1}</TableCell>
-                      <TableCell className="text-gray-600 whitespace-nowrap">
+                      <TableCell className="text-gray-800 font-medium">
                         {new Date(r.date).toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' })}
                       </TableCell>
-                      <TableCell className="text-gray-600">{r.voucherNo}</TableCell>
+                      <TableCell className="text-gray-600 font-medium">{r.voucherNo}</TableCell>
                       <TableCell className="text-gray-600">{r.transferFromName}</TableCell>
                       <TableCell className="text-gray-600">{r.transferToName}</TableCell>
-                      <TableCell className="text-gray-800 font-medium">{r.amount.toLocaleString()}</TableCell>
-                      <TableCell className="text-gray-800 font-medium">{r.transferCharge.toLocaleString()}</TableCell>
-                      <TableCell className="text-gray-600 max-w-[150px] truncate" title={r.note}>{r.note}</TableCell>
+                      <TableCell className="text-gray-600 font-medium">{r.amount.toLocaleString()}</TableCell>
+                      <TableCell className="text-gray-600">{r.transferCharge.toLocaleString()}</TableCell>
+                      <TableCell className="text-gray-800 font-bold">{r.totalAmount.toLocaleString()}</TableCell>
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-2">
-                          <Button size="sm" className="bg-sky-500 hover:bg-sky-600 text-white h-7 px-2">View</Button>
                           <Button 
                             size="sm" 
-                            className="bg-sky-500 hover:bg-sky-600 text-white h-7 px-2"
+                            className="bg-sky-500 hover:bg-sky-600 text-white h-8 px-3"
                             onClick={() => handleEdit(r)}
                           >
                             Edit
                           </Button>
                           <Button
                             size="sm"
-                            className="bg-red-500 hover:bg-red-600 text-white h-7 px-2"
+                            className="bg-red-500 hover:bg-red-600 text-white h-8 px-3"
                             onClick={() => setConfirmDeleteId(r.id)}
                             disabled={deletingId === r.id}
                           >
@@ -238,10 +202,17 @@ export default function BalanceTransferPage() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {rows.length === 0 && (
+                  {rows.length === 0 && !loading && (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8 text-gray-500">
-                        {loading ? <Loader2 className="h-6 w-6 animate-spin mx-auto" /> : "No records found"}
+                      <TableCell colSpan={9} className="text-center py-10 text-gray-500">
+                        No balance transfers found.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {rows.length === 0 && loading && (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-10 text-gray-500">
+                         <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                       </TableCell>
                     </TableRow>
                   )}
@@ -253,45 +224,51 @@ export default function BalanceTransferPage() {
               totalCount={total}
               pageSize={pageSize}
               page={page}
-              setPage={setPage}
+              onPageChange={setPage}
             />
           </CardContent>
         </Card>
-      </main>
 
-      <BalanceTransferModal 
-        open={openModal}
-        onOpenChange={setOpenModal}
-        mode={modalMode}
-        initialValues={editingRow ? {
-            transferFromId: editingRow.transferFromId,
-            transferFromName: editingRow.transferFromName,
-            transferToId: editingRow.transferToId,
-            transferToName: editingRow.transferToName,
-            amount: String(editingRow.amount),
-            transferCharge: String(editingRow.transferCharge),
-            date: editingRow.date,
-            note: editingRow.note
-        } : undefined}
-        onSubmit={handleModalSubmit}
-      />
+        <BalanceTransferModal 
+          open={openModal}
+          onOpenChange={setOpenModal}
+          mode={modalMode}
+          initialValues={editingRow ? {
+              transferFromId: editingRow.transferFromId,
+              transferFromName: editingRow.transferFromName,
+              transferToId: editingRow.transferToId,
+              transferToName: editingRow.transferToName,
+              amount: String(editingRow.amount),
+              transferCharge: String(editingRow.transferCharge),
+              date: editingRow.date,
+              note: editingRow.note
+          } : undefined}
+          onSubmit={handleModalSubmit}
+        />
 
-      <AlertDialog open={!!confirmDeleteId} onOpenChange={(open) => !open && setConfirmDeleteId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the balance transfer and revert the account balances.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-red-500 hover:bg-red-600">
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+        <AlertDialog open={!!confirmDeleteId} onOpenChange={(o) => !o && setConfirmDeleteId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the balance transfer record.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={!!deletingId}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-red-500 hover:bg-red-600 text-white"
+                onClick={(e) => {
+                  e.preventDefault()
+                  handleDelete()
+                }}
+                disabled={!!deletingId}
+              >
+                {deletingId ? <Loader2 className="w-4 h-4 animate-spin" /> : "Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+    </PageWrapper>
   )
 }

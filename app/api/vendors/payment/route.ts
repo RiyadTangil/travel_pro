@@ -7,9 +7,11 @@ export async function GET(req: NextRequest) {
     const page = Number(searchParams.get("page") || 1)
     const pageSize = Number(searchParams.get("pageSize") || 20)
     const search = searchParams.get("search") || ""
+    const startDate = searchParams.get("startDate") || undefined
+    const endDate = searchParams.get("endDate") || undefined
     const companyId = req.headers.get("x-company-id") || undefined
 
-    const result = await listVendorPayments({ page, pageSize, search, companyId })
+    const result = await listVendorPayments({ page, pageSize, search, startDate, endDate, companyId })
     return NextResponse.json(result)
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })

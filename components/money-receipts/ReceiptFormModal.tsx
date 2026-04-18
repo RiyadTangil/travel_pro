@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { SharedModal } from "@/components/shared/shared-modal"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -115,7 +115,7 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
         amount: defaults?.amount ?? 0,
         discount: defaults?.discount ?? 0,
         paymentDate: defaults?.paymentDate ? new Date(defaults.paymentDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
-        manualReceiptNo: mode === "create" ? nextVoucher : (defaults?.manualReceiptNo ?? ""),
+        manualReceiptNo: mode === "create" ? "" : (defaults?.manualReceiptNo ?? ""),
         note: defaults?.note ?? "",
         showBalance: defaults?.showBalance ?? true,
       })
@@ -276,20 +276,20 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[70%] max-w-[70%]">
-        <DialogHeader>
-          <DialogTitle>Create Money Receipt</DialogTitle>
-        </DialogHeader>
-        <div className="max-h-[80vh] overflow-y-auto p-2">
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+    <SharedModal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={mode === "edit" ? "Edit Money Receipt" : "Create Money Receipt"}
+      maxWidth="max-w-5xl"
+    >
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
               {/* Select Client */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="clientId"
-                  render={({ field }) => (
+                  render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel>
                         <span className="text-destructive mr-1">*</span> Select Client:
@@ -300,9 +300,10 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
                           onChange={(id) => field.onChange(id || "")}
                           preloaded={clients}
                           placeholder="Select client"
+                          className={fieldState.error ? "border-red-500" : undefined}
                         />
                       </FormControl>
-                      <FormMessage />
+                      <FormMessage className="text-xs text-red-500" />
                     </FormItem>
                   )}
                 />
@@ -327,14 +328,14 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
               <FormField
                 control={form.control}
                 name="paymentTo"
-                render={({ field }) => (
+                render={({ field, fieldState }) => (
                   <FormItem>
                     <FormLabel>
                       <span className="text-destructive mr-1">*</span> Payment To:
                     </FormLabel>
                     <FormControl>
                       <Select value={field.value} onValueChange={field.onChange} disabled={!selectedClientId}>
-                        <SelectTrigger>
+                        <SelectTrigger className={fieldState.error ? "border-red-500" : undefined}>
                           <SelectValue placeholder="Payment To:" />
                         </SelectTrigger>
                         <SelectContent>
@@ -437,14 +438,14 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
                 <FormField
                   control={form.control}
                   name="paymentMethod"
-                  render={({ field }) => (
+                  render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel>
                         <span className="text-destructive mr-1">*</span> Payment Method:
                       </FormLabel>
                       <FormControl>
                         <Select value={field.value} onValueChange={field.onChange}>
-                          <SelectTrigger>
+                          <SelectTrigger className={fieldState.error ? "border-red-500" : undefined}>
                             <SelectValue placeholder="Select Payment Method" />
                           </SelectTrigger>
                           <SelectContent>
@@ -454,7 +455,7 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
                           </SelectContent>
                         </Select>
                       </FormControl>
-                      <FormMessage />
+                      <FormMessage className="text-xs text-red-500" />
                     </FormItem>
                   )}
                 />
@@ -463,14 +464,14 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
                 <FormField
                   control={form.control}
                   name="accountId"
-                  render={({ field }) => (
+                  render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel>
                         <span className="text-destructive mr-1">*</span> Account:
                       </FormLabel>
                       <FormControl>
-                        <Select value={field.value} onValueChange={field.onChange} disabled={!paymentMethod}>
-                          <SelectTrigger>
+                        <Select value={field.value} onValueChange={field.onChange} disabled={!form.watch("paymentMethod")}>
+                          <SelectTrigger className={fieldState.error ? "border-red-500" : undefined}>
                             <SelectValue placeholder="Select Account:" />
                           </SelectTrigger>
                           <SelectContent>
@@ -480,7 +481,7 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
                           </SelectContent>
                         </Select>
                       </FormControl>
-                      <FormMessage />
+                      <FormMessage className="text-xs text-red-500" />
                     </FormItem>
                   )}
                 />
@@ -491,15 +492,15 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
                 <FormField
                   control={form.control}
                   name="amount"
-                  render={({ field }) => (
+                  render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel>
                         <span className="text-destructive mr-1">*</span> Amount:
                       </FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" placeholder="Amount:" {...field} />
+                        <Input type="number" step="0.01" placeholder="Amount:" {...field} className={fieldState.error ? "border-red-500" : undefined} />
                       </FormControl>
-                      <FormMessage />
+                      <FormMessage className="text-xs text-red-500" />
                     </FormItem>
                   )}
                 />
@@ -525,7 +526,7 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
                 <FormField
                   control={form.control}
                   name="paymentDate"
-                  render={({ field }) => (
+                  render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel>
                         <span className="text-destructive mr-1">*</span> Payment Date:
@@ -535,9 +536,10 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
                           value={field.value ? new Date(field.value) : undefined}
                           onChange={(d) => field.onChange(d ? d.toISOString().slice(0, 10) : "")}
                           placeholder="Select date"
+                          className={fieldState.error ? "border-red-500" : undefined}
                         />
                       </FormControl>
-                      <FormMessage />
+                      <FormMessage className="text-xs text-red-500" />
                     </FormItem>
                   )}
                 />
@@ -546,13 +548,17 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
                 <FormField
                   control={form.control}
                   name="manualReceiptNo"
-                  render={({ field }) => (
+                  render={({ field, fieldState }) => (
                     <FormItem>
                       <FormLabel>Manual Money receipt no</FormLabel>
                       <FormControl>
-                        <Input placeholder="Manual Money receipt no" {...field} />
+                        <Input 
+                          placeholder="Manual Money receipt no" 
+                          {...field} 
+                          className={fieldState.error ? "border-red-500" : undefined}
+                        />
                       </FormControl>
-                      <FormMessage />
+                      <FormMessage className="text-xs text-red-500" />
                     </FormItem>
                   )}
                 />
@@ -607,13 +613,15 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
                 />
               </div>
 
-              <div className="pt-2">
-                <Button type="submit" className="w-fit" disabled={submitting}>{mode === "edit" ? (submitting ? "Updating..." : "Update Receipt") : (submitting ? "Creating..." : "Create Money Receipt")}</Button>
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-3 pt-4 border-t">
+                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+                <Button type="submit"  disabled={submitting}>
+                  {mode === "edit" ? (submitting ? "Updating..." : "Update Receipt") : (submitting ? "Creating..." : "Create Money Receipt")}
+                </Button>
               </div>
             </form>
           </Form>
-        </div>
-      </DialogContent>
-    </Dialog>
+    </SharedModal>
   )
 }

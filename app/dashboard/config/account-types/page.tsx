@@ -18,6 +18,9 @@ import { Label } from "@/components/ui/label"
 
 type AccountTypeItem = { id: string; name: string }
 
+import { PageWrapper } from "@/components/shared/page-wrapper"
+import { SearchInput } from "@/components/shared/search-input"
+
 export default function AccountTypesPage() {
   const [items, setItems] = useState<AccountTypeItem[]>([])
   const [search, setSearch] = useState("")
@@ -55,34 +58,13 @@ export default function AccountTypesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white shadow-sm">
-        <div className="mx-auto px-4 py-4">
-          <DashboardHeader />
-        </div>
-      </header>
-
-      <main className="flex-grow py-6">
-        <div className="mb-4 px-4">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Account Types</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-
+    <PageWrapper breadcrumbs={[{ label: "Config", href: "/dashboard/config" }, { label: "Account Types" }]}>
         <Card className="mx-2">
           <CardHeader className="space-y-3">
             <div className="flex items-center justify-between gap-2">
               <CardTitle className="text-base">Manage Account Types</CardTitle>
               <div className="flex items-center gap-2">
-                <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search..." className="w-56" />
+                <SearchInput value={search} onChange={(e) => setSearch(e.target.value)} onClear={() => setSearch("")} placeholder="Search..." className="w-56" />
                 <Button onClick={() => { setEditing(null); setName(""); setOpen(true) }} className="bg-sky-600 hover:bg-sky-700">+ Add Type</Button>
               </div>
             </div>
@@ -118,7 +100,6 @@ export default function AccountTypesPage() {
             </div>
           </CardContent>
         </Card>
-      </main>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-[460px]">
@@ -136,6 +117,6 @@ export default function AccountTypesPage() {
           </form>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageWrapper>
   )
 }

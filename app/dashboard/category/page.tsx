@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/button"
 import CategoryTable, { CategoryItem } from "@/components/categories/category-table"
 import { CategoryModal } from "@/components/categories/category-modal"
 
+import { PageWrapper } from "@/components/shared/page-wrapper"
+
 export default function CategoryPage() {
   const { data: session } = useSession()
   const [items, setItems] = useState<CategoryItem[]>([])
@@ -75,28 +77,7 @@ export default function CategoryPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white shadow-sm">
-        <div className="mx-auto px-4 py-4">
-          <DashboardHeader />
-        </div>
-      </header>
-
-      <main className="flex-grow   py-6">
-        <div className="mb-4">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Category</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-
+    <PageWrapper breadcrumbs={[{ label: "Category" }]}>
         <Card className="mx-auto max-w-6xl">
           <CardHeader className="grid grid-cols-2 items-center">
             <CardTitle className="text-base">Category</CardTitle>
@@ -118,7 +99,6 @@ export default function CategoryPage() {
             />
           </CardContent>
         </Card>
-      </main>
 
       <CategoryModal
         isOpen={isModalOpen}
@@ -149,6 +129,6 @@ export default function CategoryPage() {
         submitLabel={editingItem ? "Save" : "Submit"}
         loading={loading}
       />
-    </div>
+    </PageWrapper>
   )
 }

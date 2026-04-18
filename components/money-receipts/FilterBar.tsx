@@ -3,42 +3,47 @@
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { RotateCcw } from "lucide-react"
-import { DateInput } from "@/components/ui/date-input"
+import { SearchInput } from "@/components/shared/search-input"
+import { DateRangePickerWithPresets } from "@/components/shared/date-range-with-presets"
+import { DateRange } from "react-day-picker"
 
 type Props = {
-  startDate?: string
-  endDate?: string
-  search?: string
-  onStartDateChange: (value: string) => void
-  onEndDateChange: (value: string) => void
-  onSearchChange: (value: string) => void
+  dateRange: DateRange | undefined
+  search: string
+  onDateRangeChange: (range: DateRange | undefined) => void
+  onSearchChange: (val: string) => void
   onRefresh: () => void
+  showRefresh?: boolean
 }
 
-export default function FilterBar({ startDate, endDate, search, onStartDateChange, onEndDateChange, onSearchChange, onRefresh }: Props) {
+export default function FilterBar({ 
+  dateRange, 
+  search, 
+  onDateRangeChange, 
+  onSearchChange, 
+  onRefresh,
+  showRefresh = true
+}: Props) {
   return (
-    <div className="flex items-center gap-2">
-      <DateInput
-        value={startDate ? new Date(startDate) : undefined}
-        onChange={(d) => onStartDateChange(d ? d.toISOString().slice(0, 10) : "")}
-        placeholder="Start date..."
-        className="w-40"
+    <div className="flex items-center gap-3 mb-4 bg-white p-3 rounded-md border shadow-sm">
+      <DateRangePickerWithPresets
+        date={dateRange}
+        onDateChange={onDateRangeChange}
+        className="w-[300px]"
       />
-      <DateInput
-        value={endDate ? new Date(endDate) : undefined}
-        onChange={(d) => onEndDateChange(d ? d.toISOString().slice(0, 10) : "")}
-        placeholder="End date..."
-        className="w-40"
+      
+      <SearchInput 
+        value={search}
+        onChange={onSearchChange}
+        placeholder="Search receipts..."
+        className="max-w-sm"
       />
-      <Input
-        placeholder="Search Here..."
-        value={search ?? ""}
-        onChange={(e) => onSearchChange(e.target.value)}
-        className="w-56"
-      />
-      <Button type="button" variant="ghost" size="icon" onClick={onRefresh}>
-        <RotateCcw className="h-4 w-4" />
-      </Button>
+
+      {showRefresh && (
+        <Button type="button" variant="outline" size="icon" onClick={onRefresh} title="Refresh">
+          <RotateCcw className="h-4 w-4" />
+        </Button>
+      )}
     </div>
   )
 }

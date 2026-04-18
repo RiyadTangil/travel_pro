@@ -4,11 +4,11 @@ import { useState, useMemo, useEffect, useCallback } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { DashboardHeader } from "@/components/dashboard/header"
+import { PageWrapper } from "@/components/shared/page-wrapper"
 import { format } from "date-fns"
 import { Search, Printer, FileSpreadsheet } from "lucide-react"
 import { ClearableSelect } from "@/components/ui/clearable-select"
-import { DateRangePickerWithPresets } from "@/components/ui/date-range-with-presets"
+import { DateRangePickerWithPresets } from "@/components/shared/date-range-with-presets"
 import { DateRange } from "react-day-picker"
 import Link from "next/link"
 import { toast } from "@/components/ui/use-toast"
@@ -107,12 +107,8 @@ export default function VendorPurchasePaymentPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white shadow-sm px-4 py-4">
-        <DashboardHeader />
-      </header>
-
-      <main className="flex-grow py-6 px-4 space-y-6">
+    <PageWrapper breadcrumbs={[{ label: "Reports", href: "/dashboard/reports" }, { label: "Vendor Wise Purchase & Payment" }]}>
+      <div className="px-4 space-y-6">
         <div className="flex flex-col md:flex-row justify-between gap-4 bg-white p-4 rounded-md shadow-sm border">
           <div className="flex flex-wrap gap-4 items-end">
             <div className="w-[200px]">
@@ -255,7 +251,7 @@ export default function VendorPurchasePaymentPage() {
             </CardContent>
           </Card>
         </div>
-      </main>
-    </div>
+      </div>
+    </PageWrapper>
   )
 }

@@ -279,15 +279,55 @@ export async function createMoneyReceipt(body: any, companyId: string) {
   }
 }
 
-export async function listMoneyReceipts(params: { page?: number; pageSize?: number; clientId?: string; companyId: string }) {
+export async function listMoneyReceipts(params: { 
+  page?: number; 
+  pageSize?: number; 
+  clientId?: string; 
+  search?: string;
+  startDate?: string;
+  endDate?: string;
+  companyId: string 
+}) {
   await connectMongoose()
   if (!params.companyId) throw new AppError("Company ID is required", 401)
-  const { page = 1, pageSize = 20, clientId, companyId } = params || {}
+  const { 
+    page = 1, 
+    pageSize = 20, 
+    clientId, 
+    search,
+    startDate,
+    endDate,
+    companyId 
+  } = params || {}
+  
   const companyObjectId = new Types.ObjectId(companyId)
   const filter: any = { companyId: companyObjectId }
-  if (clientId && Types.ObjectId.isValid(clientId)) filter.clientId = new Types.ObjectId(clientId)
+  
+  if (clientId && Types.ObjectId.isValid(clientId)) {
+    filter.clientId = new Types.ObjectId(clientId)
+  }
+
+  if (search) {
+    filter.$or = [
+      { voucherNo: { $regex: search, $options: "i" } },
+      { clientName: { $regex: search, $options: "i" } },
+      { manualReceiptNo: { $regex: search, $options: "i" } },
+      { note: { $regex: search, $options: "i" } },
+    ]
+  }
+
+  if (startDate || endDate) {
+    filter.paymentDate = {}
+    if (startDate) filter.paymentDate.$gte = startDate
+    if (endDate) filter.paymentDate.$lte = endDate
+  }
+
   const total = await MoneyReceipt.countDocuments(filter)
-  const docs = await MoneyReceipt.find(filter).sort({ createdAt: -1 }).skip((page - 1) * pageSize).limit(pageSize).lean()
+  const docs = await MoneyReceipt.find(filter)
+    .sort({ paymentDate: -1, createdAt: -1 })
+    .skip((page - 1) * pageSize)
+    .limit(pageSize)
+    .lean()
   const items = docs.map((r: any) => ({
     id: String(r._id),
     receipt_id: Number(String(r._id).slice(-6)),

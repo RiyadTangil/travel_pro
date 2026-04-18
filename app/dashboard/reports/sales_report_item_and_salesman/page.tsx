@@ -4,11 +4,11 @@ import { useState, useMemo, useEffect, useCallback } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { DashboardHeader } from "@/components/dashboard/header"
+import { PageWrapper } from "@/components/shared/page-wrapper"
 import { format } from "date-fns"
 import { Search, Printer, FileSpreadsheet } from "lucide-react"
 import { ClearableSelect } from "@/components/ui/clearable-select"
-import { DateRangePickerWithPresets } from "@/components/ui/date-range-with-presets"
+import { DateRangePickerWithPresets } from "@/components/shared/date-range-with-presets"
 import { DateRange } from "react-day-picker"
 import Link from "next/link"
 import { toast } from "@/components/ui/use-toast"
@@ -119,12 +119,8 @@ export default function ItemSalesmanReportPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white shadow-sm px-4 py-4">
-        <DashboardHeader />
-      </header>
-
-      <main className="flex-grow py-6 px-4 space-y-6">
+    <PageWrapper breadcrumbs={[{ label: "Reports", href: "/dashboard/reports" }, { label: "Item & Salesman Wise Report" }]}>
+      <div className="px-4 space-y-6">
         <div className="flex gap-2">
           <Button variant="outline" className="bg-sky-500 text-white hover:bg-sky-600 border-none" onClick={() => window.print()}>
             <Printer className="w-4 h-4 mr-2" /> Print
@@ -233,7 +229,7 @@ export default function ItemSalesmanReportPage() {
             </div>
           </CardContent>
         </Card>
-      </main>
-    </div>
+      </div>
+    </PageWrapper>
   )
 }

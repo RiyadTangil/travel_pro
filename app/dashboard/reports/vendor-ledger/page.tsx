@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { DashboardHeader } from "@/components/dashboard/header"
+import { PageWrapper } from "@/components/shared/page-wrapper"
 import { format } from "date-fns"
 import { Search } from "lucide-react"
 import { useInvoiceLookups } from "@/hooks/useInvoiceLookups"
@@ -121,14 +121,8 @@ export default function VendorLedgerPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white shadow-sm">
-        <div className="mx-auto px-4 py-4">
-          <DashboardHeader />
-        </div>
-      </header>
-
-      <main className="flex-grow py-6 px-4">
+    <PageWrapper breadcrumbs={[{ label: "Reports", href: "/dashboard/reports" }, { label: "Vendor Ledger" }]}>
+      <div className="px-4 py-6">
         <div className="mb-6 flex flex-col md:flex-row gap-4 items-start md:items-end justify-between">
           <div className="flex flex-col md:flex-row gap-4 w-full">
             
@@ -205,7 +199,7 @@ export default function VendorLedgerPage() {
                           format(dateRange.from, "LLL dd, y")
                         )
                       ) : (
-                        <span>Pick a date</span>
+                        <span>Pick a date range</span>
                       )}
                     </Button>
                   </PopoverTrigger>
@@ -259,11 +253,11 @@ export default function VendorLedgerPage() {
                 <thead className="bg-gray-100 border-b">
                   <tr>
                     <th className="px-4 py-3 text-left font-semibold text-gray-700 w-[50px]">SL.</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 w-[100px]">Trxn Date</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700 w-[100px]">Date</th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-700">Particulars</th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-700">Voucher No.</th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-700">Pax Name</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Ticket No</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Ticket No.</th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-700">PNR</th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-700">Route</th>
                     <th className="px-4 py-3 text-left font-semibold text-gray-700">Pay Type</th>
@@ -340,7 +334,7 @@ export default function VendorLedgerPage() {
             </div>
           </CardContent>
         </Card>
-      </main>
-    </div>
+      </div>
+    </PageWrapper>
   )
 }

@@ -3,15 +3,7 @@
 import { useEffect, useState, useMemo } from "react"
 import axios from "axios"
 import { useSession } from "next-auth/react"
-import { DashboardHeader } from "@/components/dashboard/header"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
+import { PageWrapper } from "@/components/shared/page-wrapper"
 import { Loader2 } from "lucide-react"
 import BalanceStatusTable from "@/components/accounts/BalanceStatusTable"
 import type { AccountItem } from "@/components/accounts/types"
@@ -68,36 +60,7 @@ export default function BalanceStatusPage() {
   const displayTypes = Object.keys(grouped)
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white shadow-sm">
-        <div className="mx-auto px-4 py-4">
-          <DashboardHeader />
-        </div>
-      </header>
-
-      <main className="flex-grow py-6">
-        <div className="mb-4 px-4">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard/accounts">Accounts</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Balance Status</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-
-        <div className="mx-4 mb-6">
-           {/* No add button or filters requested, just the status view */}
-        </div>
-
+    <PageWrapper breadcrumbs={[{ label: "Accounts", href: "/dashboard/accounts" }, { label: "Balance Status" }]}>
         <div className="mx-4">
           {loading ? (
              <div className="flex justify-center py-20">
@@ -127,7 +90,6 @@ export default function BalanceStatusPage() {
             </>
           )}
         </div>
-      </main>
-    </div>
+    </PageWrapper>
   )
 }

@@ -3,23 +3,15 @@
 import { useEffect, useState } from "react"
 import axios from "axios"
 import { useSession } from "next-auth/react"
-import { DashboardHeader } from "@/components/dashboard/header"
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb"
+import { PageWrapper } from "@/components/shared/page-wrapper"
+import { SearchInput } from "@/components/shared/search-input"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Loader2, Plus, ArrowLeft } from "lucide-react"
-import { Input } from "@/components/ui/input"
+import { Loader2, Plus } from "lucide-react"
 import { PaginationWithLinks } from "@/components/ui/pagination-with-links"
 import NonInvoiceIncomeModal from "@/components/accounts/NonInvoiceIncomeModal"
-import { DateRangePickerWithPresets } from "@/components/ui/date-range-with-presets"
+import { DateRangePickerWithPresets } from "@/components/shared/date-range-with-presets"
 import { DateRange } from "react-day-picker"
 import {
   AlertDialog,
@@ -132,32 +124,7 @@ export default function NonInvoiceIncomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white shadow-sm">
-        <div className="mx-auto px-4 py-4">
-          <DashboardHeader />
-        </div>
-      </header>
-
-      <main className="flex-grow py-6">
-        <div className="mb-4 px-4">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard/accounts">Accounts</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Non Invoice Income</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-
+    <PageWrapper breadcrumbs={[{ label: "Accounts", href: "/dashboard/accounts" }, { label: "Non-Invoice Income" }]}>
         <div className="mx-4 mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
            <Button onClick={handleAdd} className="bg-sky-500 hover:bg-sky-600">
              <Plus className="w-4 h-4 mr-2" /> Add Non-Invoice Income
@@ -169,10 +136,11 @@ export default function NonInvoiceIncomePage() {
                  onDateChange={setDateRange}
                  className="bg-white"
                />
-               <Input 
+               <SearchInput 
                  placeholder="Search Here..." 
                  value={search}
                  onChange={(e) => setSearch(e.target.value)}
+                 onClear={() => setSearch("")}
                  className="w-64 bg-white"
                />
            </div>
@@ -199,94 +167,93 @@ export default function NonInvoiceIncomePage() {
                   {rows.map((r, idx) => (
                     <TableRow key={r.id} className="hover:bg-gray-50 border-b last:border-0">
                       <TableCell className="font-medium text-gray-600">{(page - 1) * pageSize + idx + 1}</TableCell>
-                      <TableCell className="text-gray-600 whitespace-nowrap">
+                      <TableCell className="text-gray-800 font-medium">
                         {new Date(r.date).toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' })}
                       </TableCell>
-                      <TableCell className="text-gray-600">{r.voucherNo}</TableCell>
+                      <TableCell className="text-gray-600 font-medium">{r.voucherNo}</TableCell>
                       <TableCell className="text-gray-600">{r.companyName}</TableCell>
-                      <TableCell className="text-gray-600">Non-Invoice Income</TableCell>
+                      <TableCell className="text-gray-600">{r.paymentMethod}</TableCell>
                       <TableCell className="text-gray-600">{r.accountName}</TableCell>
-                      <TableCell className="text-gray-800 font-medium">{r.amount.toLocaleString()}</TableCell>
+                      <TableCell className="text-gray-800 font-bold">{r.amount.toLocaleString()}</TableCell>
                       <TableCell className="text-gray-600 max-w-[150px] truncate" title={r.note}>{r.note}</TableCell>
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-2">
-                          <Button size="sm" className="bg-sky-500 hover:bg-sky-600 text-white h-7 px-2">View</Button>
                           <Button 
                             size="sm" 
-                            className="bg-sky-500 hover:bg-sky-600 text-white h-7 px-2"
+                            className="bg-sky-500 hover:bg-sky-600 text-white h-8 px-3"
                             onClick={() => handleEdit(r)}
                           >
                             Edit
                           </Button>
                           <Button
                             size="sm"
-                            className="bg-red-500 hover:bg-red-600 text-white h-7 px-2"
+                            className="bg-red-500 hover:bg-red-600 text-white h-8 px-3"
                             onClick={() => setConfirmDeleteId(r.id)}
-                            disabled={deletingId === r.id}
                           >
-                            {deletingId === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Delete"}
+                            Delete
                           </Button>
                         </div>
                       </TableCell>
                     </TableRow>
                   ))}
-                  {rows.length === 0 && (
+                  {rows.length === 0 && !loading && (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8 text-gray-500">
-                        {loading ? <Loader2 className="h-6 w-6 animate-spin mx-auto" /> : "No records found"}
+                      <TableCell colSpan={9} className="text-center py-10 text-gray-500">
+                        No records found.
                       </TableCell>
                     </TableRow>
                   )}
                 </TableBody>
               </Table>
             </div>
-
-            <PaginationWithLinks 
-              totalCount={total}
-              pageSize={pageSize}
-              page={page}
-              setPage={setPage}
-            />
+            
+            {total > pageSize && (
+              <div className="mt-4">
+                <PaginationWithLinks
+                  page={page}
+                  pageSize={pageSize}
+                  totalCount={total}
+                  onPageChange={setPage}
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
-      </main>
 
-      <NonInvoiceIncomeModal 
-        open={openModal}
-        onOpenChange={setOpenModal}
-        mode={modalMode}
-        initialValues={editingRow ? {
-            nonInvoiceCompanyId: editingRow.nonInvoiceCompanyId,
-            paymentMethod: editingRow.paymentMethod,
-            accountId: editingRow.accountId,
-            amount: String(editingRow.amount),
-            date: editingRow.date,
-            note: editingRow.note,
-            nonInvoiceCompanyName: editingRow.companyName,
-            accountName: editingRow.accountName
-        } : undefined}
-        onSubmit={handleModalSubmit}
-      />
+        {openModal && (
+          <NonInvoiceIncomeModal
+            open={openModal}
+            onOpenChange={setOpenModal}
+            mode={modalMode}
+            initialValues={editingRow}
+            onSubmit={handleModalSubmit}
+          />
+        )}
 
-      <AlertDialog open={!!confirmDeleteId} onOpenChange={(v) => { if (!v) setConfirmDeleteId(null) }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Record</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this record? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-red-500 hover:bg-red-600"
-              onClick={handleDelete}
-            >
-              Confirm Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+        <AlertDialog open={!!confirmDeleteId} onOpenChange={(o) => !o && setConfirmDeleteId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the record.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={!!deletingId}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-red-500 hover:bg-red-600 text-white"
+                onClick={(e) => {
+                  e.preventDefault()
+                  handleDelete()
+                }}
+                disabled={!!deletingId}
+              >
+                {deletingId ? <Loader2 className="w-4 h-4 animate-spin" /> : "Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+    </PageWrapper>
   )
+}
 }

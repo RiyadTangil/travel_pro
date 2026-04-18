@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { DashboardHeader } from "@/components/dashboard/header"
+import { PageWrapper } from "@/components/shared/page-wrapper"
 import { format } from "date-fns"
 import { Search } from "lucide-react"
 import { useInvoiceLookups } from "@/hooks/useInvoiceLookups"
@@ -117,14 +117,8 @@ export default function ClientLedgerPage({ clientId }: { clientId: string }) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white shadow-sm">
-        <div className="mx-auto px-4 py-4">
-          <DashboardHeader />
-        </div>
-      </header>
-
-      <main className="flex-grow py-6 px-4">
+    <PageWrapper breadcrumbs={[{ label: "Reports", href: "/dashboard/reports" }, { label: "Client Ledger" }]}>
+      <div className="px-4">
         <div className="mb-6 flex flex-col md:flex-row gap-4 items-start md:items-end justify-between">
           <div className="flex flex-col md:flex-row gap-4 w-full">
             
@@ -267,7 +261,7 @@ export default function ClientLedgerPage({ clientId }: { clientId: string }) {
             </div>
           </CardContent>
         </Card>
-      </main>
-    </div>
+      </div>
+    </PageWrapper>
   )
 }

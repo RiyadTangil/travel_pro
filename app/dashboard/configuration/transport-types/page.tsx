@@ -12,6 +12,8 @@ async function fetchTransportTypes(): Promise<TransportTypeRow[]> {
   return data.items || []
 }
 
+import { PageWrapper } from "@/components/shared/page-wrapper"
+
 export default function TransportTypesPage() {
   const [items, setItems] = useState<TransportTypeRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -64,21 +66,23 @@ export default function TransportTypesPage() {
   }
 
   return (
-    <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Transport Types</h2>
-        <Button className="bg-sky-500 hover:bg-sky-600" onClick={handleAdd}>
-          + Add New Transport Type
-        </Button>
-      </div>
-      {loading ? (
-        <div className="flex items-center gap-2"><InlineLoader /> Loading list…</div>
-      ) : (
-        <TransportTypeTable items={items} onEdit={onEdit} onDelete={onDelete} editingId={editingId} deletingId={deletingId} />
-      )}
+    <PageWrapper breadcrumbs={[{ label: "Configuration" }, { label: "Transport Types" }]}>
+      <div className="p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold">Transport Types</h2>
+          <Button className="bg-sky-500 hover:bg-sky-600" onClick={handleAdd}>
+            + Add New Transport Type
+          </Button>
+        </div>
+        {loading ? (
+          <div className="flex items-center gap-2"><InlineLoader /> Loading list…</div>
+        ) : (
+          <TransportTypeTable items={items} onEdit={onEdit} onDelete={onDelete} editingId={editingId} deletingId={deletingId} />
+        )}
 
-      <TransportTypeModal open={modalOpen} onOpenChange={setModalOpen} initialItem={editing ? { id: editing.id, name: editing.name, active: editing.active } : null} onSubmit={handleSubmit} submitting={submitting} />
-    </div>
+        <TransportTypeModal open={modalOpen} onOpenChange={setModalOpen} initialItem={editing ? { id: editing.id, name: editing.name, active: editing.active } : null} onSubmit={handleSubmit} submitting={submitting} />
+      </div>
+    </PageWrapper>
   )
 }
 

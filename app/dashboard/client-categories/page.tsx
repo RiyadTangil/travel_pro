@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/button"
 import ClientCategoryTable, { ClientCategoryItem } from "@/components/clients/client-category-table"
 import { ClientCategoryModal } from "@/components/clients/client-category-modal"
 
+import { PageWrapper } from "@/components/shared/page-wrapper"
+
 export default function ClientCategoriesPage() {
   const { data: session } = useSession()
   const [items, setItems] = useState<ClientCategoryItem[]>([])
@@ -65,31 +67,7 @@ export default function ClientCategoriesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Header (same as dashboard) */}
-      <header className="bg-white shadow-sm">
-        <div className="mx-auto px-4 py-4">
-          <DashboardHeader />
-        </div>
-      </header>
-
-      <main className="flex-grow   py-6">
-        {/* Breadcrumb */}
-        <div className="mb-4">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Client Categories</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-
-        {/* Table card */}
+    <PageWrapper breadcrumbs={[{ label: "Client Categories" }]}>
         <Card className="mx-auto max-w-6xl">
           <CardHeader className="grid grid-cols-2 items-center">
             <CardTitle className="text-base">Client Category</CardTitle>
@@ -110,7 +88,6 @@ export default function ClientCategoriesPage() {
             />
           </CardContent>
         </Card>
-      </main>
 
       <ClientCategoryModal
         isOpen={isModalOpen}
@@ -142,6 +119,6 @@ export default function ClientCategoriesPage() {
         submitLabel={editingItem ? "Save" : "Submit"}
         loading={loading}
       />
-    </div>
+    </PageWrapper>
   )
 }

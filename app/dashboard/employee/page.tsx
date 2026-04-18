@@ -28,6 +28,8 @@ type Employee = {
   active: boolean
 }
 
+import { PageWrapper } from "@/components/shared/page-wrapper"
+
 export default function EmployeePage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<"add" | "view" | "edit">("add")
@@ -75,39 +77,16 @@ export default function EmployeePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Top Header */}
-      <header className="bg-white shadow-sm">
-        <div className="mx-auto px-4 py-4">
-          <DashboardHeader />
-        </div>
-      </header>
-
-      <main className="flex-grow px-4 py-6">
-        {/* Breadcrumb */}
-        <div className="mb-4">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Employee</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-
+    <PageWrapper breadcrumbs={[{ label: "Employee" }]}>
         {/* Toolbar with Add button on the left */}
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3 mx-4">
           <Button onClick={() => { setModalMode("add"); setCurrentItem(null); setModalOpen(true) }} className="bg-blue-600 hover:bg-blue-700">
             + Add New Employee
           </Button>
         </div>
 
         {/* Table */}
-        <Card>
+        <Card className="mx-4">
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <Table>
@@ -168,7 +147,6 @@ export default function EmployeePage() {
             }
           }}
         />
-      </main>
-    </div>
+    </PageWrapper>
   )
 }

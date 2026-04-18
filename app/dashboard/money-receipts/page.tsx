@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { DateRange } from "react-day-picker"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
@@ -11,6 +12,7 @@ import ReceiptListTable from "@/components/money-receipts/ReceiptListTable"
 import ReceiptFormModal from "@/components/money-receipts/ReceiptFormModal"
 import type { MoneyReceipt } from "@/components/money-receipts/types"
 import { useInvoiceLookups } from "@/hooks/useInvoiceLookups"
+import { PageWrapper } from "@/components/shared/page-wrapper"
 
 export default function MoneyReceiptsPage() {
   const { data: session } = useSession()
@@ -21,8 +23,7 @@ export default function MoneyReceiptsPage() {
   const [editing, setEditing] = useState<{ id: string; defaults: Partial<MoneyReceipt> } | null>(null)
   const [loadingRowId, setLoadingRowId] = useState<string | null>(null)
   const [search, setSearch] = useState("")
-  const [startDate, setStartDate] = useState<string | undefined>(undefined)
-  const [endDate, setEndDate] = useState<string | undefined>(undefined)
+  const [dateRange, setDateRange] = useState<DateRange | undefined>()
 
   const { lookups } = useInvoiceLookups()
   const clientsPreloaded = useMemo(() => (
@@ -45,11 +46,13 @@ export default function MoneyReceiptsPage() {
         ? [r.clientName, r.voucherNo, r.accountName, r.paymentMethod].some(v => v.toLowerCase().includes(search.toLowerCase()))
         : true
       const date = new Date(r.paymentDate).toISOString().slice(0, 10)
-      const inStart = startDate ? date >= startDate : true
-      const inEnd = endDate ? date <= endDate : true
+      const fromDate = dateRange?.from?.toISOString().slice(0, 10)
+      const toDate = dateRange?.to?.toISOString().slice(0, 10)
+      const inStart = fromDate ? date >= fromDate : true
+      const inEnd = toDate ? date <= toDate : true
       return matchesSearch && inStart && inEnd
     })
-  }, [rows, search, startDate, endDate])
+  }, [rows, search, dateRange])
 
   const handleCreateOrEdit = (receipt: MoneyReceipt) => {
     if (editing?.id) {
@@ -98,10 +101,15 @@ export default function MoneyReceiptsPage() {
     }
   }
 
-  const loadReceipts = async () => {
+  const loadReceipts = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/money-receipts?page=1&pageSize=50`, {
+      const params = new URLSearchParams({ page: "1", pageSize: "50" })
+      if (search) params.append("search", search)
+      if (dateRange?.from) params.append("startDate", dateRange.from.toISOString().slice(0, 10))
+      if (dateRange?.to) params.append("endDate", dateRange.to.toISOString().slice(0, 10))
+
+      const res = await fetch(`/api/money-receipts?${params.toString()}`, {
         headers: { "x-company-id": session?.user?.companyId ?? "" },
       })
       const json = await res.json()
@@ -134,95 +142,43 @@ export default function MoneyReceiptsPage() {
     } finally {
       setLoading(false)
     }
-  }
-  
+  }, [session?.user?.companyId, search, dateRange])
+
   useEffect(() => {
-    const load = async () => {
-      setLoading(true)
-      try {
-        const res = await fetch(`/api/money-receipts?page=1&pageSize=50`, {
-          headers: { "x-company-id": session?.user?.companyId ?? "" },
-        })
-        const json = await res.json()
-        const items = Array.isArray(json?.items) ? json.items : (Array.isArray(json?.data?.items) ? json.data.items : [])
-        const mapped: MoneyReceipt[] = items.map((it: any) => ({
-          id: String(it.id || it._id || crypto.randomUUID()),
-          paymentDate: String(it.receipt_payment_date || new Date().toISOString()),
-          voucherNo: String(it.receipt_vouchar_no || ""),
-          clientId: String(it.client_id || ""),
-          clientName: String(it.client_name || "Unknown"),
-          invoiceId: it.invoice_id ? String(it.invoice_id) : undefined,
-          invoiceType: String(it.receipt_payment_to || "OVERALL") === "INVOICE" ? "INVOICE" : "OVERALL",
-          paymentTo: String(it.receipt_payment_to || "overall").toLowerCase(),
-          paymentMethod: String(it.acctype_name || ""),
-          accountId: String(it.receipt_account_id || ""),
-          accountName: String(it.account_name || ""),
-          manualReceiptNo: it.receipt_money_receipt_no || undefined,
-          amount: Number(it.receipt_total_amount || 0),
-          discount: 0,
-          paidAmount: Number(it.receipt_total_amount || 0),
-          presentDue: undefined,
-          note: String(it.receipt_note || ""),
-          docOneName: it.receipt_scan_copy || undefined,
-          docTwoName: it.receipt_scan_copy2 || undefined,
-          showBalance: true,
-        }))
-        setRows(mapped)
-      } catch (e) {
-        console.error(e)
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-  }, [session?.user?.companyId])
+    loadReceipts()
+  }, [loadReceipts])
 
   return (
-    <div className="space-y-6">
-      {/* Breadcrumb */}
-      <Breadcrumb>
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>Money Receipts</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
+    <PageWrapper breadcrumbs={[{ label: "Money Receipts" }]}>
+      <div className="space-y-4 px-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <Button onClick={() => setOpen(true)} >
+            <Plus className="h-4 w-4 mr-2" />
+            Create Money Receipt
+          </Button>
+          <FilterBar
+            dateRange={dateRange}
+            search={search}
+            onDateRangeChange={setDateRange}
+            onSearchChange={setSearch}
+            onRefresh={() => { setSearch(""); setDateRange(undefined); loadReceipts() }}
+          />
+        </div>
 
-      {/* Header actions */}
-      <div className="flex items-center justify-between">
-        <Button onClick={() => setOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" /> Add Money Receipt
-        </Button>
-        <FilterBar
-          startDate={startDate}
-          endDate={endDate}
-          search={search}
-          onStartDateChange={setStartDate}
-          onEndDateChange={setEndDate}
-          onSearchChange={setSearch}
-          onRefresh={() => { setSearch(""); setStartDate(undefined); setEndDate(undefined); loadReceipts() }}
+        {/* Table */}
+        <ReceiptListTable rows={filteredRows} onView={onView} onEdit={onEdit} onDelete={onDelete} loading={loading} loadingRowId={loadingRowId} />
+
+        {/* Form Modal */}
+        <ReceiptFormModal
+          open={open}
+          onOpenChange={(o) => { setOpen(o); if (!o) setEditing(null) }}
+          onSubmit={handleCreateOrEdit}
+          clientsPreloaded={clientsPreloaded}
+          accountsPreloaded={accountsPreloaded}
+          mode={editing?.id ? "edit" : "create"}
+          defaults={editing?.defaults}
         />
       </div>
-
-      {/* Table */}
-      <ReceiptListTable rows={filteredRows} onView={onView} onEdit={onEdit} onDelete={onDelete} loading={loading} loadingRowId={loadingRowId} />
-
-      {/* Form Modal */}
-      <ReceiptFormModal
-        open={open}
-        onOpenChange={(o) => { setOpen(o); if (!o) setEditing(null) }}
-        onSubmit={handleCreateOrEdit}
-        clientsPreloaded={clientsPreloaded}
-        accountsPreloaded={accountsPreloaded}
-        paymentTos={paymentTos}
-        defaults={editing?.defaults}
-        mode={editing ? "edit" : "create"}
-        editId={editing?.id}
-      />
-    </div>
+    </PageWrapper>
   )
 }
