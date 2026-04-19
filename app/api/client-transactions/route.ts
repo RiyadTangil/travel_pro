@@ -17,7 +17,9 @@ export async function GET(request: NextRequest) {
     const dateFrom = searchParams.get("dateFrom") || undefined
     const dateTo = searchParams.get("dateTo") || undefined
     const openingBalance = parseNumber(searchParams.get("openingBalance"), 0)
-
+//  const filter: any = {
+//       transactionType: { $ne: "bill_adjustment" }
+//     }
     const filter: any = {}
     if (clientIdRaw && Types.ObjectId.isValid(clientIdRaw)) filter.clientId = new Types.ObjectId(clientIdRaw)
     if (accountIdRaw && Types.ObjectId.isValid(accountIdRaw)) filter.paymentTypeId = new Types.ObjectId(accountIdRaw)

@@ -47,6 +47,7 @@ export function Sidebar() {
     "Expense": pathname.startsWith("/dashboard/expenses"),
     "Vendors": pathname.startsWith("/dashboard/vendors"),
     "Accounts": pathname.startsWith("/dashboard/accounts"),
+    "Bill Adjustment": pathname.startsWith("/dashboard/bill-adjustment"),
     "Reports": pathname.startsWith("/dashboard/reports"),
     "Ledgers": pathname.includes("/reports/client-ledger") || pathname.includes("/reports/vendor-ledger") || pathname.includes("/reports/combined-ledgers") || pathname.includes("/reports/agent-ledger"),
     "Total Due/Advance": pathname.includes("/reports/total-due-advance"),
@@ -156,6 +157,10 @@ export function Sidebar() {
       title: "Accounts",
       icon: <CreditCard className="h-5 w-5" />,
       children: [
+        {
+      title: "Bill Adjustment",
+      href: "/dashboard/bill-adjustment",
+    },
         {
           title: "Accounts List",
           href: "/dashboard/accounts",

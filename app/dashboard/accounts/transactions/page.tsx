@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react"
 import { PageWrapper } from "@/components/shared/page-wrapper"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Table, Tag } from "antd"
 import { Loader2, Printer, ArrowLeft } from "lucide-react"
 import { DateRangePickerWithPresets } from "@/components/shared/date-range-with-presets"
 import {
@@ -19,8 +19,6 @@ import {
 import { DateRange } from "react-day-picker"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
-
-import { PaginationWithLinks } from "@/components/ui/pagination-with-links"
 
 type TransactionRow = {
   id: string
@@ -105,6 +103,74 @@ export default function TransactionHistoryPage() {
     window.print()
   }
 
+  const columns = [
+    {
+      title: "SL.",
+      key: "sl",
+      width: 60,
+      render: (_: any, __: any, index: number) => (page - 1) * pageSize + index + 1,
+    },
+    {
+      title: "Date",
+      dataIndex: "date",
+      key: "date",
+      render: (date: string) => new Date(date).toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' }),
+    },
+    {
+      title: "Voucher No.",
+      dataIndex: "voucherNo",
+      key: "voucherNo",
+    },
+    {
+      title: "Account Name",
+      dataIndex: "accountName",
+      key: "accountName",
+    },
+    {
+      title: "Particulars",
+      dataIndex: "particulars",
+      key: "particulars",
+    },
+    {
+      title: "Tr.Type",
+      dataIndex: "trType",
+      key: "trType",
+      render: (type: string) => (
+        <Tag color={type === "DEBIT" ? "red" : "green"} className="font-bold">
+          {type}
+        </Tag>
+      ),
+    },
+    {
+      title: "Debit",
+      dataIndex: "debit",
+      key: "debit",
+      align: "right" as const,
+      render: (val: number) => val > 0 ? val.toLocaleString() : "-",
+    },
+    {
+      title: "Credit",
+      dataIndex: "credit",
+      key: "credit",
+      align: "right" as const,
+      render: (val: number) => val > 0 ? val.toLocaleString() : "-",
+    },
+    {
+      title: "Total Last Balance",
+      dataIndex: "totalLastBalance",
+      key: "totalLastBalance",
+      align: "right" as const,
+      render: (val: number) => <span className="font-bold">{val?.toLocaleString()}</span>,
+    },
+    {
+      title: "Note",
+      dataIndex: "note",
+      key: "note",
+      ellipsis: true,
+      render: (text: string) => <span title={text}>{text}</span>,
+    },
+  ]
+
   return (
     <PageWrapper breadcrumbs={[{ label: "Accounts", href: "/dashboard/accounts" }, { label: "Transaction History" }]}>
         <div className="mx-4 mb-4 flex justify-between items-center print:hidden">
@@ -140,79 +206,26 @@ export default function TransactionHistoryPage() {
 
         <Card className="mx-4 border-none shadow-none bg-transparent print:mx-0">
           <CardContent className="p-0">
-            <div className="bg-white rounded-md border shadow-sm print:border-none print:shadow-none">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-gray-100 hover:bg-gray-100">
-                    <TableHead className="w-12 font-bold text-gray-900">SL.</TableHead>
-                    <TableHead className="font-bold text-gray-900">Date</TableHead>
-                    <TableHead className="font-bold text-gray-900">Voucher No.</TableHead>
-                    <TableHead className="font-bold text-gray-900">Account Name</TableHead>
-                    <TableHead className="font-bold text-gray-900">Particulars</TableHead>
-                    <TableHead className="font-bold text-gray-900">Tr.Type</TableHead>
-                    <TableHead className="font-bold text-gray-900 text-right">Debit</TableHead>
-                    <TableHead className="font-bold text-gray-900 text-right">Credit</TableHead>
-                    <TableHead className="font-bold text-gray-900 text-right">Total Last Balance</TableHead>
-                    <TableHead className="font-bold text-gray-900">Note</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((r, idx) => (
-                    <TableRow key={r.id}>
-                      <TableCell className="font-medium text-gray-600">{(page - 1) * pageSize + idx + 1}</TableCell>
-                      <TableCell className="text-gray-600 whitespace-nowrap">
-                        {new Date(r.date).toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' })}
-                      </TableCell>
-                      <TableCell className="text-gray-600">{r.voucherNo}</TableCell>
-                      <TableCell className="text-gray-600">{r.accountName}</TableCell>
-                      <TableCell className="text-gray-600">{r.particulars}</TableCell>
-                      <TableCell className="text-gray-600">
-                        <span className={cn(
-                          "px-2 py-0.5 rounded-full text-[10px] font-bold",
-                          r.trType === "DEBIT" ? "bg-red-100 text-red-600" : "bg-green-100 text-green-600"
-                        )}>
-                          {r.trType}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right text-gray-600">
-                        {r.debit > 0 ? r.debit.toLocaleString() : "-"}
-                      </TableCell>
-                      <TableCell className="text-right text-gray-600">
-                        {r.credit > 0 ? r.credit.toLocaleString() : "-"}
-                      </TableCell>
-                      <TableCell className="text-right font-bold text-gray-800">
-                        {r.totalLastBalance.toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-gray-600 max-w-[150px] truncate" title={r.note}>{r.note}</TableCell>
-                    </TableRow>
-                  ))}
-                  {rows.length === 0 && !loading && (
-                    <TableRow>
-                      <TableCell colSpan={10} className="text-center py-10 text-gray-500">
-                        No transactions found.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {rows.length === 0 && loading && (                    <TableRow>
-                      <TableCell colSpan={10} className="text-center py-10">
-                        <Loader2 className="h-6 w-6 animate-spin mx-auto text-gray-400" />
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+            <div className="bg-white rounded-md border shadow-sm print:border-none print:shadow-none overflow-hidden">
+              <Table
+                columns={columns}
+                dataSource={rows}
+                rowKey="id"
+                loading={loading}
+                pagination={{
+                  current: page,
+                  pageSize: pageSize,
+                  total: total,
+                  onChange: (p, ps) => {
+                    setPage(p)
+                    setPageSize(ps)
+                  },
+                  showSizeChanger: true,
+                  showTotal: (total) => `Total ${total} items`,
+                }}
+                className="border-none"
+              />
             </div>
-            
-            {!loading && total > pageSize && (
-              <div className="mt-4 print:hidden">
-                <PaginationWithLinks
-                  page={page}
-                  pageSize={pageSize}
-                  totalCount={total}
-                  onPageChange={setPage}
-                />
-              </div>
-            )}
           </CardContent>
         </Card>
     </PageWrapper>

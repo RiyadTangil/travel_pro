@@ -5,6 +5,7 @@ const ClientTransactionSchema = new Schema({
   voucherNo: { type: String, required: true, index: true }, // MR-xxx / EX-xxx
   clientId: { type: Types.ObjectId, ref: "Client", index: true, required: false },
   vendorId: { type: Types.ObjectId, ref: "Vendor", index: true, required: false },
+  invoiceId: { type: Types.ObjectId, ref: "Invoice", index: true },
   clientName: { type: String },
   companyId: { type: Types.ObjectId, ref: "Company", index: true, required: true },
   invoiceType: { type: String }, // matches dropdown values
@@ -13,8 +14,7 @@ const ClientTransactionSchema = new Schema({
   payType: { type: String }, // e.g. CASH / BANK / MOBILE
   amount: { type: Number, required: true },
   direction: { type: String, enum: ["receiv", "payout", "invoice"], required: true },
-  transactionType: { type: String, enum: ["invoice", "money_receipt", "return", "opening_balance"], default: "money_receipt" },
-  invoiceId: { type: Types.ObjectId, ref: "Invoice", index: true },
+  transactionType: { type: String, enum: ["invoice", "money_receipt", "return", "opening_balance", "bill_adjustment"], default: "money_receipt" },
   lastTotalAmount: { type: Number, default: 0 },
   note: { type: String },
   createdAt: { type: String },
