@@ -33,6 +33,47 @@ type TransactionRow = {
   note: string
 }
 
+type ClientTransactionApiItem = {
+  _id: string
+  date: string
+  voucherNo: string
+  accountName: string
+  direction: string
+  amount: number
+  lastTotalAmount: number | null
+  note: string
+  transactionType?: string
+  invoiceType?: string
+}
+
+function toTransactionRow(t: ClientTransactionApiItem): TransactionRow {
+  const isReceive = String(t.direction) === "receiv"
+  const isPayout = String(t.direction) === "payout"
+  const trType: "DEBIT" | "CREDIT" = isReceive ? "CREDIT" : "DEBIT"
+  const amount = Number(t.amount) || 0
+  const voucher = String(t.voucherNo || "")
+  const particular =
+    voucher.startsWith("MR")
+      ? "Money receipt"
+      : voucher.startsWith("EX")
+        ? "Vendor Payment"
+        : t.invoiceType === "OPENING_BALANCE"
+          ? "Opening Balance"
+          : "Transaction"
+  return {
+    id: t._id,
+    date: t.date,
+    voucherNo: voucher,
+    accountName: t.accountName || "",
+    particulars: t.note || particular,
+    trType,
+    debit: isPayout ? amount : 0,
+    credit: isReceive ? amount : 0,
+    totalLastBalance: t.lastTotalAmount != null ? Number(t.lastTotalAmount) : 0,
+    note: t.note || "",
+  }
+}
+
 export default function TransactionHistoryPage() {
   const { data: session } = useSession()
   const [rows, setRows] = useState<TransactionRow[]>([])
@@ -85,10 +126,10 @@ export default function TransactionHistoryPage() {
       
       const res = await client.get(`/api/client-transactions?${params.toString()}`)
       const data = res.data
-      const items = data?.items || []
+      const items = (data?.items || []) as ClientTransactionApiItem[]
       const pag = data?.pagination || {}
-      
-      setRows(items)
+
+      setRows(items.map(toTransactionRow))
       setTotal(Number(pag?.total || 0))
     } catch (e) {
       console.error(e)

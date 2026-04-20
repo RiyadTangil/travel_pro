@@ -97,10 +97,10 @@ async function getNextVoucherNo(companyId?: string) {
     { new: true, upsert: true }
   )
   const seq = counter.seq.toString().padStart(4, "0")
-  return `VP-${new Date().getFullYear()}-${seq}`
+  return `VP-${seq}`
 }
 
-async function updateVendorBalance(vendorId: string | Types.ObjectId, amountChange: number, session: any) {
+export async function updateVendorBalance(vendorId: string | Types.ObjectId, amountChange: number, session: any) {
   const vendor = await Vendor.findById(vendorId).session(session)
   if (vendor) {
     let currentNet = 0

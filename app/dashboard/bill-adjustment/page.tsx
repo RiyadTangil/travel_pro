@@ -178,7 +178,7 @@ export default function BillAdjustmentPage() {
             className="w-64"
             options={[
               { label: "Accounts", value: "Account" },
-              { label: "Clients", value: "Client" },
+              { label: "Clients", value: "Client" },  
               { label: "Vendors", value: "Vendor" },
               { label: "Combined", value: "Combined" },
               { label: "All", value: "all" },

@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server"
+import { Types } from "mongoose"
+import mongoose from "mongoose"
 import clientPromise from "@/lib/mongodb"
+import connectMongoose from "@/lib/mongoose"
+import { createVendorOpeningBillAdjustment } from "@/services/billAdjustmentService"
 
 // Vendors collection: vendors
 
@@ -72,20 +76,34 @@ export async function POST(request: Request) {
     const db = client.db("manage_agency")
     const collection = db.collection("vendors")
 
+    const pb =
+      body.presentBalance && typeof body.presentBalance === "object"
+        ? body.presentBalance
+        : { type: "due", amount: 0 }
+    const fromPresentAmt = Math.abs(Number((pb as any).amount ?? 0))
+    const fromOpeningField = Math.abs(Number(body.openingBalance ?? 0))
+    // UI sends opening on openingBalance + openingBalanceType; presentBalance may be { type, amount: 0 }
+    const openingAmt = fromPresentAmt !== 0 ? fromPresentAmt : fromOpeningField
+    const rawOpeningType = body.openingBalanceType ?? (pb as any).type ?? "due"
+    const openingTypeNorm = String(rawOpeningType).toLowerCase() === "advance" ? "advance" : "due"
+
     const doc = {
       name: String(body.name).trim(),
       email: body.email || "",
       mobilePrefix: body.mobilePrefix || "",
       mobile: body.mobile || "",
       registrationDate: body.registrationDate ? new Date(body.registrationDate) : new Date(),
-      openingBalanceType: body.openingBalanceType || undefined,
+      openingBalanceType: body.openingBalanceType || rawOpeningType || undefined,
       openingBalance: Number(body.openingBalance || 0),
       fixedAdvance: Number(body.fixedAdvance || 0),
       address: body.address || "",
       creditLimit: Number(body.creditLimit || 0),
       active: body.active !== false,
       products: Array.isArray(body.products) ? body.products : [],
-      presentBalance: body.presentBalance || { type: "due", amount: 0 },
+      presentBalance:
+        openingAmt > 0
+          ? { type: openingTypeNorm, amount: 0 }
+          : (body.presentBalance || { type: "due", amount: 0 }),
       fixedBalance: Number(body.fixedBalance || 0),
       companyId: body.companyId || null,
       createdBy: body.createdBy || undefined,
@@ -94,6 +112,33 @@ export async function POST(request: Request) {
     }
 
     const result = await collection.insertOne(doc)
+
+    const openingDateStr = (doc.registrationDate instanceof Date ? doc.registrationDate : new Date())
+      .toISOString()
+      .slice(0, 10)
+
+    if (openingAmt > 0 && result.insertedId && doc.companyId) {
+      await connectMongoose()
+      const sess = await mongoose.startSession()
+      sess.startTransaction()
+      try {
+        await createVendorOpeningBillAdjustment(sess, {
+          vendorId: new Types.ObjectId(String(result.insertedId)),
+          companyId: String(doc.companyId),
+          vendorName: doc.name,
+          presentBalance: { type: openingTypeNorm, amount: openingAmt },
+          date: openingDateStr,
+        })
+        await sess.commitTransaction()
+      } catch (e) {
+        await sess.abortTransaction()
+        await collection.deleteOne({ _id: result.insertedId })
+        throw e
+      } finally {
+        sess.endSession()
+      }
+    }
+
     return NextResponse.json({ id: String(result.insertedId) })
   } catch (error) {
     console.error("Vendors POST error:", error)

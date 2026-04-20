@@ -13,6 +13,8 @@ const BillAdjustmentSchema = new Schema({
   amount: { type: Number, required: true },
   note: { type: String },
   companyId: { type: Types.ObjectId, ref: "Company", required: true },
+  /** user = manual UI; opening_balance = created when client/vendor is first saved with opening balance */
+  source: { type: String, enum: ["user", "opening_balance"], default: "user" },
   createdAt: { type: String },
   updatedAt: { type: String },
 }, { collection: "bill_adjustments" })

@@ -2,7 +2,9 @@ import connectMongoose from "@/lib/mongoose"
 import { AppError } from "@/errors/AppError"
 import { Account } from "@/models/account"
 import { Types } from "mongoose"
+import mongoose from "mongoose"
 import { AccountType as AccountTypeModel } from "@/models/account-type"
+import { createAccountOpeningBillAdjustment } from "@/services/billAdjustmentService"
 
 type ListParams = { q?: string; page?: number; pageSize?: number }
 
@@ -55,11 +57,20 @@ type CreatePayload = {
   lastBalance?: number
 }
 
+function accountLedgerName(payload: CreatePayload): string {
+  const bank = payload.bankName?.trim()
+  return bank ? `${payload.name} (${bank})` : payload.name
+}
+
 export async function createAccount(payload: CreatePayload, companyId?: string) {
   await connectMongoose()
   if (!payload?.name || !payload?.type) throw new AppError('Name and type are required', 400)
   if (!companyId || !Types.ObjectId.isValid(String(companyId))) throw new AppError('Company ID is required', 400)
   const now = new Date().toISOString()
+  const openingLastBalance =
+    typeof payload.lastBalance === "number" ? payload.lastBalance : Number(payload.lastBalance || 0)
+  const hasOpening = Math.abs(openingLastBalance) > 1e-9
+
   const doc: any = {
     name: payload.name,
     type: payload.type,
@@ -68,7 +79,7 @@ export async function createAccount(payload: CreatePayload, companyId?: string) 
     routingNo: payload.routingNo || undefined,
     cardNo: payload.cardNo || undefined,
     branch: payload.branch || undefined,
-    lastBalance: typeof payload.lastBalance === 'number' ? payload.lastBalance : Number(payload.lastBalance || 0),
+    lastBalance: hasOpening ? 0 : openingLastBalance,
     hasTrxn: false,
     companyId: new Types.ObjectId(String(companyId)),
     createdAt: now,
@@ -81,8 +92,29 @@ export async function createAccount(payload: CreatePayload, companyId?: string) 
       doc.type = at?.name || "Cash"
     }
   }
-  const res = await Account.create(doc)
-  return { id: String(res._id) }
+
+  const session = await mongoose.startSession()
+  session.startTransaction()
+  try {
+    const [res] = await Account.create([doc], { session })
+    if (!res) throw new AppError("Account create failed", 500)
+    if (hasOpening) {
+      await createAccountOpeningBillAdjustment(session, {
+        accountId: res._id as Types.ObjectId,
+        companyId: String(companyId),
+        accountLabel: accountLedgerName(payload),
+        openingLastBalance,
+        date: now.slice(0, 10),
+      })
+    }
+    await session.commitTransaction()
+    return { id: String(res._id) }
+  } catch (e) {
+    await session.abortTransaction()
+    throw e
+  } finally {
+    session.endSession()
+  }
 }
 
 export async function getAllAccounts(companyId?: string) {

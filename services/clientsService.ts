@@ -1,6 +1,8 @@
 import { isValidObjectId, Types } from "mongoose"
+import mongoose from "mongoose"
 import connectMongoose from "@/lib/mongoose"
 import { Client } from "@/models/client"
+import { createClientOpeningBillAdjustment } from "@/services/billAdjustmentService"
 
 export async function listClients(params: { page?: number; limit?: number; search?: string; categoryId?: string; userId?: string; status?: string; companyId?: string }) {
   await connectMongoose()
@@ -55,10 +57,14 @@ export async function createClient(body: any) {
       ? Math.abs(openingBalanceAmountNum)
       : 0
 
+  const hasOpening =
+    (openingBalanceType === "Due" || openingBalanceType === "Advance") &&
+    Math.abs(openingBalanceAmountNum) > 0
+
   const creditLimitNum = typeof body.creditLimit === "string"
     ? parseFloat(body.creditLimit || "0") || 0
     : Number(body.creditLimit) || 0
-  console.log("body => ",body)
+  console.log("body => ", body)
   const doc: any = {
     uniqueId: nextUniqueId,
     name: body.name,
@@ -74,18 +80,41 @@ export async function createClient(body: any) {
     openingBalanceType: openingBalanceType,
     openingBalanceAmount: openingBalanceAmountNum,
     creditLimit: creditLimitNum,
-    presentBalance: typeof body.presentBalance === "number" ? body.presentBalance : computedPresentBalance,
+    presentBalance: hasOpening
+      ? 0
+      : (typeof body.presentBalance === "number" ? body.presentBalance : computedPresentBalance),
     walkingCustomer: body.walkingCustomer || "No",
     companyId: isValidObjectId(body.companyId) ? new Types.ObjectId(body.companyId) : body.companyId,
     active: true,
     createdAt: now,
     updatedAt: now,
   }
-  console.log("doc => ",doc)
+  console.log("doc => ", doc)
 
-  const created = await Client.create(doc)
-  const createdLean = created.toObject()
-  return { client: { ...createdLean, id: String(createdLean._id) } }
+  const session = await mongoose.startSession()
+  session.startTransaction()
+  try {
+    const [created] = await Client.create([doc], { session })
+    if (!created) throw new Error("Client create failed")
+    if (hasOpening) {
+      await createClientOpeningBillAdjustment(session, {
+        clientId: created._id as Types.ObjectId,
+        companyId: String(created.companyId),
+        clientName: created.name,
+        openingBalanceType,
+        openingBalanceAmount: openingBalanceAmountNum,
+        date: now.slice(0, 10),
+      })
+    }
+    await session.commitTransaction()
+    const createdLean = created.toObject()
+    return { client: { ...createdLean, id: String(createdLean._id) } }
+  } catch (e) {
+    await session.abortTransaction()
+    throw e
+  } finally {
+    session.endSession()
+  }
 }
 
 export async function getClientById(id: string) {

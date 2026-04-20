@@ -15,6 +15,8 @@ const ClientTransactionSchema = new Schema({
   amount: { type: Number, required: true },
   direction: { type: String, enum: ["receiv", "payout", "invoice"], required: true },
   transactionType: { type: String, enum: ["invoice", "money_receipt", "return", "opening_balance", "bill_adjustment"], default: "money_receipt" },
+  /** When false, row is hidden from account transaction history list (bill adjustments, system opening rows, etc.) */
+  isMonetoryTranseciton: { type: Boolean, default: true },
   lastTotalAmount: { type: Number, default: 0 },
   note: { type: String },
   createdAt: { type: String },
