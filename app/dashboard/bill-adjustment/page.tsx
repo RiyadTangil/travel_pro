@@ -64,7 +64,7 @@ export default function BillAdjustmentPage() {
       await axios.delete(`/api/bill-adjustment/${id}`, {
         headers: { "x-company-id": session?.user?.companyId }
       })
-      load()
+      await load()
     } catch (e) {
       console.error(e)
     }

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createBillAdjustment, getBillAdjustments } from "@/services/billAdjustmentService"
 import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
+import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getServerSession(authOptions as any)
     const companyId = session?.user?.companyId || req.headers.get("x-company-id")
     if (!companyId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getServerSession(authOptions as any)
     const companyId = session?.user?.companyId || req.headers.get("x-company-id")
     if (!companyId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 

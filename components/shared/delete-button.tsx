@@ -35,10 +35,13 @@ export function DeleteButton({
   size = "sm"
 }: DeleteButtonProps) {
   const [open, setOpen] = useState(false)
+  const [internalLoading, setInternalLoading] = useState(false)
+  const busy = isLoading || internalLoading
 
   const handleConfirm = () => {
-    onDelete()
     setOpen(false)
+    setInternalLoading(true)
+    Promise.resolve(onDelete()).finally(() => setInternalLoading(false))
   }
 
   return (
@@ -47,10 +50,10 @@ export function DeleteButton({
         variant={variant === "destructive" ? "destructive" : "outline"}
         size={size}
         onClick={() => setOpen(true)}
-        disabled={isLoading}
+        disabled={busy}
         className={className}
       >
-        {isLoading ? (
+        {busy ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             {loadingText}
@@ -71,7 +74,7 @@ export function DeleteButton({
         confirmText={confirmText}
         cancelText={cancelText}
         onConfirm={handleConfirm}
-        isLoading={isLoading}
+        isLoading={busy}
         loadingText={loadingText}
         variant={variant}
       />

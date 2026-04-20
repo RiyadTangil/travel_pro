@@ -62,6 +62,10 @@ export default function ClientSelect({ value, onChange, onRequestAdd, placeholde
           setItems(list)
         }
       } catch (e) {
+        const aborted =
+          (e instanceof DOMException && e.name === "AbortError") ||
+          (e instanceof Error && e.name === "AbortError")
+        if (aborted) return
         if (process.env.NODE_ENV !== "production") console.error("ClientSelect load error", e)
       } finally {
         setLoading(false)
@@ -120,7 +124,7 @@ export default function ClientSelect({ value, onChange, onRequestAdd, placeholde
         </Button>
       </PopoverTrigger>
       <PopoverContent className="p-0 w-[360px]" align="start">
-        <Command>
+        <Command shouldFilter={false}>
           <div className="px-2 pt-2">
             <Button size="sm" variant="secondary" className="w-full justify-start gap-2" onClick={() => { if (!disabled) onRequestAdd?.(); }} disabled={disabled}>
               <Plus className="h-4 w-4" />
