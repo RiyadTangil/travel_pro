@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { useForm, useFieldArray } from "react-hook-form"
+import { useForm, useFieldArray, Controller } from "react-hook-form"
+import { cn } from "@/lib/utils"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -359,12 +360,23 @@ export default function ExpenseModal({ open, onOpenChange, mode, initialValues, 
                <div className="space-y-4">
                   <div className="space-y-2">
                     <Label>{requiredMark("Payment Method:", true)}</Label>
-                    <ClearableSelect
-                      value={watch("paymentMethod")}
-                      onChange={(v) => setValue("paymentMethod", v)}
-                      options={paymentMethodOptions.map(m => ({ label: m, value: m }))}
-                      placeholder="Select Payment Method"
+                    <Controller
+                      name="paymentMethod"
+                      control={control}
+                      rules={{ required: "Payment method is required" }}
+                      render={({ field }) => (
+                        <ClearableSelect
+                          value={field.value}
+                          onChange={field.onChange}
+                          options={paymentMethodOptions.map((m) => ({ label: m, value: m }))}
+                          placeholder="Select Payment Method"
+                          error={!!errors.paymentMethod}
+                        />
+                      )}
                     />
+                    {errors.paymentMethod && (
+                      <p className="text-xs text-red-500 font-medium">{errors.paymentMethod.message}</p>
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -374,10 +386,21 @@ export default function ExpenseModal({ open, onOpenChange, mode, initialValues, 
 
                   <div className="space-y-2">
                     <Label>{requiredMark("Date:", true)}</Label>
-                    <DateInput 
-                      value={watch("date") ? new Date(watch("date")) : undefined}
-                      onChange={(d) => setValue("date", d ? d.toISOString().slice(0, 10) : "")}
+                    <Controller
+                      name="date"
+                      control={control}
+                      rules={{ required: "Date is required" }}
+                      render={({ field }) => (
+                        <DateInput
+                          value={field.value ? new Date(field.value) : undefined}
+                          onChange={(d) => field.onChange(d ? d.toISOString().slice(0, 10) : "")}
+                          className={cn(errors.date && "border-red-500")}
+                        />
+                      )}
                     />
+                    {errors.date && (
+                      <p className="text-xs text-red-500 font-medium">{errors.date.message}</p>
+                    )}
                   </div>
                   
                   <div className="space-y-2">

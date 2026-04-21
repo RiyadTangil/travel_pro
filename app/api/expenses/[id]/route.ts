@@ -16,15 +16,16 @@ const UpdateExpenseSchema = z.object({
   note: z.string().optional(),
 })
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const body = await request.json()
     const companyId = request.headers.get('x-company-id') || undefined
+    const { id } = await params
 
     // Validate with Zod
     const validated = UpdateExpenseSchema.parse(body)
 
-    const result = await updateExpense(params.id, validated, companyId)
+    const result = await updateExpense(id, validated, companyId)
     return NextResponse.json(result)
   } catch (err: any) {
     if (err instanceof z.ZodError) {
@@ -36,10 +37,11 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const companyId = request.headers.get('x-company-id') || undefined
-    const result = await deleteExpense(params.id, companyId)
+    const { id } = await params
+    const result = await deleteExpense(id, companyId)
     return NextResponse.json(result)
   } catch (err: any) {
     const msg = err?.message || "Internal server error"

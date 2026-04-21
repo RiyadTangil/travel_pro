@@ -7,9 +7,14 @@ import { Loader2 } from "lucide-react"
 
 export type TableRowActionsProps = {
   className?: string
+  /** When false, the View button is not rendered (e.g. expense heads). Default true. */
   showView?: boolean
   onView?: () => void
   onEdit?: () => void
+  /** Disables the Edit control (e.g. while another row is saving). */
+  editDisabled?: boolean
+  /** Shows a spinner on Edit (e.g. while PUT is in flight for this row). */
+  editLoading?: boolean
   onDelete?: () => void | Promise<void>
   deleteTitle?: string
   deleteDescription?: string
@@ -26,6 +31,8 @@ export function TableRowActions({
   showView = true,
   onView,
   onEdit,
+  editDisabled = false,
+  editLoading = false,
   onDelete,
   deleteTitle = "Confirm delete",
   deleteDescription = "Are you sure you want to delete this record? This cannot be undone.",
@@ -52,8 +59,21 @@ export function TableRowActions({
           </Button>
         )}
         {onEdit && (
-          <Button type="button" size="sm" className="bg-sky-500 hover:bg-sky-600 text-white h-8 px-3" onClick={onEdit}>
-            Edit
+          <Button
+            type="button"
+            size="sm"
+            className="bg-sky-500 hover:bg-sky-600 text-white h-8 px-3"
+            onClick={onEdit}
+            disabled={editDisabled || editLoading}
+          >
+            {editLoading ? (
+              <>
+                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              "Edit"
+            )}
           </Button>
         )}
         {onDelete && (

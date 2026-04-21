@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Loader2 } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 type FormValues = {
   name: string
@@ -21,32 +22,30 @@ type Props = {
 }
 
 export default function ExpenseHeadModal({ open, onOpenChange, mode, initialValues, onSubmit }: Props) {
-  const { register, handleSubmit, reset, setError, watch, formState: { errors, isSubmitting } } = useForm<FormValues>({
-    defaultValues: {
-      name: "",
-      ...initialValues,
-    },
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<FormValues>({
+    defaultValues: { name: "" },
   })
 
   useEffect(() => {
     if (open) {
-      reset({ name: initialValues?.name || "" })
+      reset({ name: initialValues?.name?.trim() || "" })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, initialValues])
+  }, [open, initialValues, reset])
 
   const onSubmitInternal = async (vals: FormValues) => {
-    if (!vals.name || !vals.name.trim()) {
-      setError("name", { type: "required", message: "Head Name is required" })
-      return
-    }
     const ok = await Promise.resolve(onSubmit({ name: vals.name.trim() }))
     if (ok) onOpenChange(false)
   }
 
   const requiredMark = (label: string, required?: boolean) => (
     <span>
-      {required && <span className="text-red-500 mr-1">*</span>}{label}
+      {required && <span className="text-red-500 mr-1">*</span>}
+      {label}
     </span>
   )
 
@@ -59,13 +58,27 @@ export default function ExpenseHeadModal({ open, onOpenChange, mode, initialValu
         <form onSubmit={handleSubmit(onSubmitInternal)}>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>{requiredMark("Head Name:", true)}</Label>
-              <Input placeholder="Enter Head Name" {...register("name", { required: true })} />
-              {errors.name && <div className="text-red-500 text-xs">Head Name is required</div>}
+              <Label htmlFor="expense-head-name">{requiredMark("Head Name:", true)}</Label>
+              <Input
+                id="expense-head-name"
+                placeholder="Enter Head Name"
+                className={cn(errors.name && "border-red-500 ring-1 ring-red-500")}
+                {...register("name", { required: "Head name is required" })}
+              />
+              {errors.name && (
+                <p className="text-xs text-red-500 font-medium">{errors.name.message}</p>
+              )}
             </div>
             <div className="flex justify-start">
               <Button type="submit" className="bg-sky-500 hover:bg-sky-600 min-w-[120px]" disabled={isSubmitting}>
-                {isSubmitting ? (<span className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Submitting...</span>) : "Submit"}
+                {isSubmitting ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Submitting...
+                  </span>
+                ) : (
+                  "Submit"
+                )}
               </Button>
             </div>
           </div>

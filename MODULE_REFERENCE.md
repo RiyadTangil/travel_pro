@@ -168,4 +168,48 @@ User picks **Main Bank** and April 2026 → paged debits/credits with running **
 
 ---
 
+## 8. Expense heads (categories)
+
+**Total operations: 4**
+
+| # | Operation | Trigger | Collections / notes |
+|---|-----------|---------|---------------------|
+| **1** | **List** | `GET /api/expense-heads?page&pageSize&search` + `x-company-id` | `expense_heads` (company-scoped filter in service) |
+| **2** | **Create** | `POST /api/expense-heads` `{ name }` | Insert **`expense_heads`** (Zod + service validation) |
+| **3** | **Update** | `PUT /api/expense-heads/[id]` | Update name |
+| **4** | **Delete** | `DELETE /api/expense-heads/[id]` | Remove head if allowed by service rules |
+
+### Example
+
+Company adds heads **“Fuel”**, **“Office”** → rows in **`expense_heads`**; expense entry forms load these via `GET` with `pageSize=100`.
+
+**Code:** `controllers/expenseHeadController.ts`, `services/expenseHeadService.ts`, `app/api/expense-heads/*`, UI `app/dashboard/expenses/head/page.tsx`, `components/expenses/ExpenseHeadModal.tsx`.
+
+**UI:** `FilterToolbar` (search + refresh + Add), Ant `Table`, **`TableRowActions`** with **`showView={false}`** (no View button), optional **`editLoading` / `editDisabled`** while saving; delete uses built-in confirm dialog.
+
+---
+
+## 9. Expenses (history / vouchers)
+
+**Total operations: 4** (voucher prefix **`EX-####`**; counter key **`voucher_ex`**).
+
+| # | Operation | Trigger | Collections / notes |
+|---|-----------|---------|---------------------|
+| **1** | **List** | `GET /api/expenses?page&pageSize&search&dateFrom&dateTo` + `x-company-id` | **`expenses`** (text search on voucher, account name, note, item head names) |
+| **2** | **Create** | `POST /api/expenses` (Zod: date, accountId, paymentMethod, ≥1 item with positive amounts) | **`expenses`**, **`accounts.lastBalance`**, **`client_transactions`** (payout), **`counters`** |
+| **3** | **Update** | `PUT /api/expenses/[id]` | Same shape as create; service reverses old ledger/account effects and re-applies |
+| **4** | **Delete** | `DELETE /api/expenses/[id]` | Reverses balances and removes ledger rows for voucher |
+
+### Example
+
+User posts **EX-0001** with two lines (Fuel 500, Office 300) from **Bank A** → one **`expenses`** document, **A** balance reduced by **800**, **`client_transactions`** debit row with running balance.
+
+**Code:** `services/expenseService.ts`, `app/api/expenses/*`, UI `app/dashboard/expenses/history/page.tsx`, `components/expenses/ExpenseModal.tsx`.
+
+**UI:** `FilterToolbar` (date range, debounced search, refresh, Add), Ant `Table`, **`TableRowActions`** (View placeholder, Edit with row loading, Delete). **`ExpenseModal`:** `Controller` for **payment method** and **date** with red borders + messages; line items still validated before submit.
+
+**Feedback:** `listExpenses` currently sets each row’s **`paymentMethod`** from **`accountId.type`** while create/update persist a separate **`paymentMethod`** field—if edits should round-trip the same value as the form, align list mapping with the stored field.
+
+---
+
 <!-- Next module: copy the pattern (## N. Name, table, example, code paths). -->
