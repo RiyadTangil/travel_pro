@@ -65,24 +65,24 @@ export default function AccountModal({ open, onOpenChange, initialItem, onSubmit
 
   const isValid = useMemo(() => {
     if (!name.trim()) return false
-    if (!lastBalance.trim()) return false
     if (!typeOptions.find(t => t.name === type)) return false
     if (type === "Bank") return !!(accountNo && bankName && branch)
     if (type === "Mobile banking") return !!accountNo
     if (type === "Credit Card") return !!(cardNo)
     return true
-  }, [type, name, lastBalance, accountNo, bankName, branch, cardNo, typeOptions])
+  }, [type, name, accountNo, bankName, branch, cardNo, typeOptions])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!isValid) return
     const selectedType = typeOptions.find(t => t.name === type)
+    const parsedBalance = parseFloat(String(lastBalance).trim() || "0")
     const payload: AccountItem = {
       id: initialItem?.id || String(Date.now()),
       type,
       accountTypeId: selectedType?.id,
       name: name.trim(),
-      lastBalance: Number(lastBalance || 0),
+      lastBalance: Number.isFinite(parsedBalance) ? parsedBalance : 0,
       accountNo: accountNo || undefined,
       bankName: bankName || undefined,
       branch: branch || undefined,
@@ -164,8 +164,8 @@ export default function AccountModal({ open, onOpenChange, initialItem, onSubmit
           )}
 
           <div className="space-y-2">
-            <Label>Current Last Balance</Label>
-            <Input placeholder="Current Last Balance" value={lastBalance} onChange={(e) => setLastBalance(e.target.value)} />
+            <Label>Current Last Balance <span className="text-muted-foreground font-normal">(optional)</span></Label>
+            <Input placeholder="0" type="number" step="0.01" value={lastBalance} onChange={(e) => setLastBalance(e.target.value)} />
           </div>
 
           <Button type="submit" className="bg-sky-500 hover:bg-sky-600" disabled={!isValid || submitting}>

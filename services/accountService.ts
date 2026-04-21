@@ -11,7 +11,7 @@ type ListParams = { q?: string; page?: number; pageSize?: number }
 export async function listAccounts(params: ListParams, companyId?: string) {
   await connectMongoose()
   const { q = "", page = 1, pageSize = 50 } = params || {}
-  const filter: any = { }
+  const filter: any = { deleted: { $ne: true } }
   if (companyId && Types.ObjectId.isValid(String(companyId))) {
     filter.companyId = new Types.ObjectId(String(companyId))
   }
@@ -119,7 +119,7 @@ export async function createAccount(payload: CreatePayload, companyId?: string) 
 
 export async function getAllAccounts(companyId?: string) {
   await connectMongoose()
-  const filter: any = {}
+  const filter: any = { deleted: { $ne: true } }
   if (companyId && Types.ObjectId.isValid(String(companyId))) {
     filter.companyId = new Types.ObjectId(String(companyId))
   }

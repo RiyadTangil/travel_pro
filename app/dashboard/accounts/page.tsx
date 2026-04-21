@@ -1,52 +1,85 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
+import { useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { RefreshCcw, Plus } from "lucide-react"
-import AccountTable from "@/components/accounts/account-table"
+import { Card, CardContent } from "@/components/ui/card"
+import { Plus } from "lucide-react"
 import AccountModal from "@/components/accounts/account-modal"
 import type { AccountItem } from "@/components/accounts/types"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { InlineLoader } from "@/components/ui/loader"
-
-const initialData: AccountItem[] = []
+import { PageWrapper } from "@/components/shared/page-wrapper"
+import FilterToolbar from "@/components/shared/filter-toolbar"
+import { Table } from "antd"
 
 export default function AccountsPage() {
-  const [items, setItems] = useState<AccountItem[]>(initialData)
+  const { data: session } = useSession()
+  const [items, setItems] = useState<AccountItem[]>([])
   const [search, setSearch] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<AccountItem | null>(null)
   const [deleting, setDeleting] = useState<AccountItem | null>(null)
   const [loadingRowId, setLoadingRowId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [loadingList, setLoadingList] = useState(false)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+  const [total, setTotal] = useState(0)
 
-  const handleAddClick = () => { setEditing(null); setOpen(true) }
-  const handleEdit = (item: AccountItem) => { setEditing(item); setOpen(true) }
-  const handleDelete = (item: AccountItem) => {
-    if (item.hasTrxn) return // protected by backend too; UX: do nothing
-    setDeleting(item)
-  }
+  const companyId = session?.user?.companyId ?? ""
 
-  const loadItems = async () => {
+  const loadItems = useCallback(async () => {
     setLoadingList(true)
     try {
-      const res = await fetch(`/api/accounts?q=${encodeURIComponent(search)}`)
+      const params = new URLSearchParams()
+      params.set("q", debouncedSearch)
+      params.set("page", String(page))
+      params.set("pageSize", String(pageSize))
+      const res = await fetch(`/api/accounts?${params.toString()}`, {
+        headers: { "x-company-id": companyId },
+      })
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error || "Failed to load accounts")
       setItems(data.items || [])
+      setTotal(Number(data.total ?? 0))
     } catch (e) {
       console.error(e)
     } finally {
       setLoadingList(false)
     }
-  }
+  }, [debouncedSearch, page, pageSize, companyId])
 
   useEffect(() => {
-    const t = setTimeout(loadItems, 250)
+    const t = setTimeout(() => {
+      const next = search.trim()
+      setDebouncedSearch((prev) => {
+        if (next !== prev) setPage(1)
+        return next
+      })
+    }, 250)
     return () => clearTimeout(t)
   }, [search])
+
+  useEffect(() => {
+    if (session) loadItems()
+  }, [loadItems, session])
+
+  const handleAddClick = () => {
+    setEditing(null)
+    setOpen(true)
+  }
+
+  const handleEdit = (item: AccountItem) => {
+    setEditing(item)
+    setOpen(true)
+  }
+
+  const handleDelete = (item: AccountItem) => {
+    if (item.hasTrxn) return
+    setDeleting(item)
+  }
 
   const onSubmit = async (payload: AccountItem) => {
     setSubmitting(true)
@@ -54,7 +87,10 @@ export default function AccountsPage() {
       if (editing) {
         const res = await fetch(`/api/accounts/${editing.id}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-company-id": companyId,
+          },
           body: JSON.stringify({
             name: payload.name,
             type: payload.type,
@@ -69,11 +105,13 @@ export default function AccountsPage() {
         })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data?.error || "Update failed")
-        setItems((prev) => prev.map((p) => (p.id === editing.id ? { ...p, ...payload } : p)))
       } else {
         const res = await fetch(`/api/accounts`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-company-id": companyId,
+          },
           body: JSON.stringify({
             name: payload.name,
             type: payload.type,
@@ -88,9 +126,8 @@ export default function AccountsPage() {
         })
         const data = await res.json()
         if (!res.ok) throw new Error(data?.error || "Create failed")
-        const id = data?.id || String(Date.now())
-        setItems((prev) => [{ ...payload, id, hasTrxn: false }, ...prev])
       }
+      await loadItems()
     } catch (e) {
       console.error(e)
     } finally {
@@ -104,10 +141,13 @@ export default function AccountsPage() {
     if (!deleting) return
     setLoadingRowId(deleting.id)
     try {
-      const res = await fetch(`/api/accounts/${deleting.id}`, { method: "DELETE" })
+      const res = await fetch(`/api/accounts/${deleting.id}`, {
+        method: "DELETE",
+        headers: { "x-company-id": companyId },
+      })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data?.error || "Delete failed")
-      setItems((prev) => prev.filter((p) => p.id !== deleting.id))
+      await loadItems()
     } catch (e) {
       console.error(e)
     } finally {
@@ -116,32 +156,123 @@ export default function AccountsPage() {
     }
   }
 
-  return (
-    <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <CardTitle className="text-lg">Accounts</CardTitle>
-          <Button variant="ghost" size="icon" aria-label="Refresh" onClick={loadItems} disabled={loadingList}>
-            {loadingList ? <InlineLoader /> : <RefreshCcw className="h-4 w-4" />}
+  const columns = [
+    {
+      title: "SL.",
+      key: "sl",
+      width: 60,
+      render: (_: unknown, __: AccountItem, index: number) => (page - 1) * pageSize + index + 1,
+    },
+    { title: "Name", dataIndex: "name", key: "name" },
+    { title: "Account Type", dataIndex: "type", key: "type" },
+    { title: "Account No", dataIndex: "accountNo", key: "accountNo", render: (v: string) => v || "—" },
+    { title: "Bank Name", dataIndex: "bankName", key: "bankName", render: (v: string) => v || "—" },
+    { title: "Routing No.", dataIndex: "routingNo", key: "routingNo", render: (v: string) => v || "—" },
+    { title: "Card No", dataIndex: "cardNo", key: "cardNo", render: (v: string) => v || "—" },
+    { title: "Branch", dataIndex: "branch", key: "branch", render: (v: string) => v || "—" },
+    {
+      title: "Last Balance",
+      dataIndex: "lastBalance",
+      key: "lastBalance",
+      align: "right" as const,
+      render: (v: number) => <span className="text-green-600 font-medium">{Number(v || 0).toLocaleString()}</span>,
+    },
+    {
+      title: "Action",
+      key: "action",
+      width: 280,
+      render: (_: unknown, r: AccountItem) => (
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" className="bg-blue-500 hover:bg-blue-600" onClick={() => handleEdit(r)} disabled={loadingRowId === r.id}>
+            {loadingRowId === r.id ? (
+              <span className="flex items-center gap-1">
+                <InlineLoader /> Edit
+              </span>
+            ) : (
+              "Edit"
+            )}
+          </Button>
+          <Button size="sm" variant="outline">
+            Statement
+          </Button>
+          <Button
+            size="sm"
+            variant={r.hasTrxn ? "secondary" : "destructive"}
+            onClick={() => handleDelete(r)}
+            disabled={!!r.hasTrxn || loadingRowId === r.id}
+            title={r.hasTrxn ? "Cannot delete: transactions exist" : "Delete"}
+          >
+            {loadingRowId === r.id ? (
+              <span className="flex items-center gap-1">
+                <InlineLoader /> Delete
+              </span>
+            ) : (
+              "Delete"
+            )}
           </Button>
         </div>
-        <Button className="bg-sky-500 hover:bg-sky-600" onClick={handleAddClick}><Plus className="h-4 w-4 mr-2" /> Add Account</Button>
-      </div>
+      ),
+    },
+  ]
 
-      <Card>
-        <CardContent className="pt-4">
-          <AccountTable
-            items={items}
+  return (
+    <PageWrapper breadcrumbs={[{ label: "Accounts" }]}>
+      <div className="mx-4 mb-4 space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+
+          <FilterToolbar
+            showSearch
             search={search}
             onSearchChange={setSearch}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            loadingRowId={loadingRowId}
-          />
-        </CardContent>
-      </Card>
+            searchPlaceholder="Search accounts..."
+            showRefresh
+            onRefresh={loadItems}
+            className="flex-1"
+          >
+            <Button className="bg-sky-500 hover:bg-sky-600 shrink-0" onClick={handleAddClick}>
+              <Plus className="h-4 w-4 mr-2" /> Add Account
+            </Button>
+          </FilterToolbar>
 
-      <AccountModal open={open} onOpenChange={(v) => { setOpen(v); if (!v) setEditing(null) }} initialItem={editing} onSubmit={onSubmit} submitting={submitting} />
+        </div>
+
+        <Card className="border-none shadow-none bg-transparent">
+          <CardContent className="p-0">
+            <div className="bg-white rounded-md border shadow-sm overflow-hidden">
+              <Table<AccountItem>
+                columns={columns}
+                dataSource={items}
+                rowKey="id"
+                loading={loadingList}
+                pagination={{
+                  current: page,
+                  pageSize,
+                  total,
+                  showSizeChanger: true,
+                  onChange: (p, ps) => {
+                    setPage(p)
+                    setPageSize(ps)
+                  },
+                  showTotal: (t) => `Total ${t} items`,
+                }}
+                className="border-none"
+                scroll={{ x: 1100 }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <AccountModal
+        open={open}
+        onOpenChange={(v) => {
+          setOpen(v)
+          if (!v) setEditing(null)
+        }}
+        initialItem={editing}
+        onSubmit={onSubmit}
+        submitting={submitting}
+      />
 
       <AlertDialog open={!!deleting} onOpenChange={(v) => !v && setDeleting(null)}>
         <AlertDialogContent>
@@ -152,11 +283,17 @@ export default function AccountsPage() {
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setDeleting(null)}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">
-              {loadingRowId === deleting?.id ? (<span className="flex items-center gap-2"><InlineLoader /> Deleting...</span>) : "Delete"}
+              {loadingRowId === deleting?.id ? (
+                <span className="flex items-center gap-2">
+                  <InlineLoader /> Deleting...
+                </span>
+              ) : (
+                "Delete"
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </PageWrapper>
   )
 }

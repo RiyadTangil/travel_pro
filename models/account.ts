@@ -16,9 +16,9 @@ const AccountSchema = new Schema({
   updatedAt: { type: String },
 }, { collection: "accounts" })
 
-// Middleware to automatically update hasTrxn when lastBalance changes
+// Mark hasTrxn only when lastBalance changes on an already-persisted document (not initial insert).
 AccountSchema.pre("save", async function(this: any) {
-  if (this.isModified("lastBalance")) {
+  if (!this.isNew && this.isModified("lastBalance")) {
     this.hasTrxn = true
   }
 })
