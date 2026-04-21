@@ -7,12 +7,12 @@ import { useRouter } from "next/navigation"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
-import FilterBar from "@/components/money-receipts/FilterBar"
 import ReceiptListTable from "@/components/money-receipts/ReceiptListTable"
 import ReceiptFormModal from "@/components/money-receipts/ReceiptFormModal"
 import type { MoneyReceipt } from "@/components/money-receipts/types"
 import { useInvoiceLookups } from "@/hooks/useInvoiceLookups"
 import { PageWrapper } from "@/components/shared/page-wrapper"
+import FilterToolbar from "@/components/shared/filter-toolbar"
 
 export default function MoneyReceiptsPage() {
   const { data: session } = useSession()
@@ -152,17 +152,24 @@ export default function MoneyReceiptsPage() {
     <PageWrapper breadcrumbs={[{ label: "Money Receipts" }]}>
       <div className="space-y-4 px-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <Button onClick={() => setOpen(true)} >
-            <Plus className="h-4 w-4 mr-2" />
-            Create Money Receipt
-          </Button>
-          <FilterBar
+          
+          <FilterToolbar
+            showDateRange
             dateRange={dateRange}
-            search={search}
             onDateRangeChange={setDateRange}
+            showSearch
+            search={search}
             onSearchChange={setSearch}
-            onRefresh={() => { setSearch(""); setDateRange(undefined); loadReceipts() }}
-          />
+            searchPlaceholder="Search receipts..."
+            showRefresh
+            onRefresh={loadReceipts}
+          >
+            <Button onClick={() => setOpen(true)} >
+              <Plus className="h-4 w-4 mr-2" />
+              Create Money Receipt
+            </Button>
+          </FilterToolbar>
+      
         </div>
 
         {/* Table */}

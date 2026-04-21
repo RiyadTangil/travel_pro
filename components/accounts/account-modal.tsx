@@ -34,16 +34,16 @@ export default function AccountModal({ open, onOpenChange, initialItem, onSubmit
   useEffect(() => {
     if (!open) return
     const ctrl = new AbortController()
-    ;(async () => {
-      try {
-        const res = await fetch(`/api/account-types`, { signal: ctrl.signal })
-        const data = await res.json()
-        const items = Array.isArray(data?.items) ? data.items : []
-        setTypeOptions(items)
-      } catch {
-        setTypeOptions([])
-      }
-    })()
+      ; (async () => {
+        try {
+          const res = await fetch(`/api/account-types`, { signal: ctrl.signal })
+          const data = await res.json()
+          const items = Array.isArray(data?.items) ? data.items : []
+          setTypeOptions(items)
+        } catch {
+          setTypeOptions([])
+        }
+      })()
     return () => ctrl.abort()
   }, [open])
 
@@ -158,16 +158,17 @@ export default function AccountModal({ open, onOpenChange, initialItem, onSubmit
               </div>
               <div className="space-y-2">
                 <Label>Card Expiry Date</Label>
-                <DateInput value={cardExpiry ? new Date(cardExpiry) : undefined} onChange={(d) => setCardExpiry(d ? d.toISOString().slice(0,10) : "")} />
+                <DateInput value={cardExpiry ? new Date(cardExpiry) : undefined} onChange={(d) => setCardExpiry(d ? d.toISOString().slice(0, 10) : "")} />
               </div>
             </>
           )}
+          {initialItem ? <></> :
+            <div className="space-y-2">
+              <Label>Current Last Balance <span className="text-muted-foreground font-normal">(optional)</span></Label>
+              <Input placeholder="0" type="number" step="0.01" value={lastBalance} onChange={(e) => setLastBalance(e.target.value)} />
+            </div>
 
-          <div className="space-y-2">
-            <Label>Current Last Balance <span className="text-muted-foreground font-normal">(optional)</span></Label>
-            <Input placeholder="0" type="number" step="0.01" value={lastBalance} onChange={(e) => setLastBalance(e.target.value)} />
-          </div>
-
+          }
           <Button type="submit" className="bg-sky-500 hover:bg-sky-600" disabled={!isValid || submitting}>
             {submitting ? (
               <span className="flex items-center gap-2"><InlineLoader /> {initialItem ? "Saving" : "Creating account"}</span>

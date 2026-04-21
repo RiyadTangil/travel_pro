@@ -6,7 +6,8 @@ import { ConfirmationDialog } from "./confirmation-dialog"
 import { Loader2, Trash2 } from "lucide-react"
 
 interface DeleteButtonProps {
-  onDelete: () => void
+  onDelete: () => void | Promise<void>
+  disabled?: boolean
   isLoading?: boolean
   loadingText?: string
   title?: string
@@ -22,6 +23,7 @@ interface DeleteButtonProps {
 
 export function DeleteButton({
   onDelete,
+  disabled = false,
   isLoading = false,
   loadingText = "Deleting...",
   title = "Confirm Delete",
@@ -39,6 +41,7 @@ export function DeleteButton({
   const busy = isLoading || internalLoading
 
   const handleConfirm = () => {
+    if (disabled) return
     setOpen(false)
     setInternalLoading(true)
     Promise.resolve(onDelete()).finally(() => setInternalLoading(false))
@@ -49,8 +52,8 @@ export function DeleteButton({
       <Button
         variant={variant === "destructive" ? "destructive" : "outline"}
         size={size}
-        onClick={() => setOpen(true)}
-        disabled={busy}
+        onClick={() => !disabled && !busy && setOpen(true)}
+        disabled={disabled || busy}
         className={className}
       >
         {busy ? (

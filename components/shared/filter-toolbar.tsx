@@ -1,6 +1,5 @@
 "use client"
 
-import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { RotateCcw } from "lucide-react"
 import { SearchInput } from "@/components/shared/search-input"

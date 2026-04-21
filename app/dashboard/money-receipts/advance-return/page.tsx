@@ -1,15 +1,15 @@
 "use client"
 
-import { useMemo, useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useSession } from "next-auth/react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Table, Tag } from "antd"
 import AdvanceReturnModal from "@/components/money-receipts/AdvanceReturnModal"
-import FilterBar from "@/components/money-receipts/FilterBar"
+import FilterToolbar from "@/components/shared/filter-toolbar"
 import { PageWrapper } from "@/components/shared/page-wrapper"
 import { DateRange } from "react-day-picker"
-import { Loader2, Plus } from "lucide-react"
+import { Plus } from "lucide-react"
 import { DeleteButton } from "@/components/shared/delete-button"
 
 type AdvanceReturnRow = {
@@ -33,24 +33,12 @@ export default function AdvanceReturnPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>()
-  const [search, setSearch] = useState<string>("")
+  const [search, setSearch] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
 
   const [openAdd, setOpenAdd] = useState(false)
   const [openEdit, setOpenEdit] = useState(false)
   const [editingRow, setEditingRow] = useState<AdvanceReturnRow | null>(null)
-
-  const filtered = useMemo(() => {
-    return rows.filter((r) => {
-      const dOk = (() => {
-        if (dateRange?.from && new Date(r.returnDate) < dateRange.from) return false
-        if (dateRange?.to && new Date(r.returnDate) > dateRange.to) return false
-        return true
-      })()
-      const q = search.trim().toLowerCase()
-      const sOk = !q || [r.voucherNo, r.clientName, r.paymentType, r.paymentDetails].some((v) => v.toLowerCase().includes(q))
-      return dOk && sOk
-    })
-  }, [rows, dateRange, search])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -58,7 +46,7 @@ export default function AdvanceReturnPage() {
       const params = new URLSearchParams()
       params.set("page", String(page))
       params.set("pageSize", String(pageSize))
-      if (search) params.set("search", search)
+      if (debouncedSearch) params.set("search", debouncedSearch)
       if (dateRange?.from) params.set("dateFrom", dateRange.from.toISOString().slice(0, 10))
       if (dateRange?.to) params.set("dateTo", dateRange.to.toISOString().slice(0, 10))
       const res = await fetch(`/api/advance-returns?${params.toString()}`, { headers: { "x-company-id": session?.user?.companyId ?? "" } })
@@ -67,22 +55,36 @@ export default function AdvanceReturnPage() {
       const pag = data?.pagination || data?.data?.pagination || {}
       setRows(items)
       setTotal(Number(pag?.total || 0))
-      setPage(Number(pag?.page || page))
-      setPageSize(Number(pag?.pageSize || pageSize))
-    } catch { } finally { setLoading(false) }
-  }, [session?.user?.companyId, page, pageSize, search, dateRange])
+    } catch {
+    } finally {
+      setLoading(false)
+    }
+  }, [session?.user?.companyId, page, pageSize, debouncedSearch, dateRange])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const next = search.trim()
+      setDebouncedSearch((prev) => {
+        if (next !== prev) setPage(1)
+        return next
+      })
+    }, 250)
+    return () => clearTimeout(t)
+  }, [search])
 
-  const handleRefresh = () => { load() }
+  useEffect(() => {
+    load()
+  }, [load])
 
   const handleDelete = async (id: string) => {
     setDeletingId(id)
     try {
       await fetch(`/api/advance-returns/${id}`, { method: "DELETE", headers: { "x-company-id": session?.user?.companyId ?? "" } })
-      load()
-    } catch { }
-    setDeletingId(null)
+      await load()
+    } catch {
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   const columns = [
@@ -90,7 +92,7 @@ export default function AdvanceReturnPage() {
       title: "SL.",
       key: "sl",
       width: 60,
-      render: (_: any, __: any, index: number) => index + 1,
+      render: (_: unknown, __: AdvanceReturnRow, index: number) => (page - 1) * pageSize + index + 1,
     },
     {
       title: "Return Date",
@@ -121,14 +123,19 @@ export default function AdvanceReturnPage() {
       title: "Action",
       key: "action",
       width: 220,
-      render: (_: any, r: AdvanceReturnRow) => (
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" size="sm" className="bg-sky-500 hover:bg-sky-600 text-white hover:text-white">View</Button>
+      render: (_: unknown, r: AdvanceReturnRow) => (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="secondary" size="sm" className="bg-slate-100 hover:bg-slate-200 h-8 px-3">
+            View
+          </Button>
           <Button
             variant="default"
             size="sm"
-            className="bg-sky-500 hover:bg-sky-600"
-            onClick={() => { setEditingRow(r); setOpenEdit(true) }}
+            className="bg-sky-500 hover:bg-sky-600 h-8 px-3"
+            onClick={() => {
+              setEditingRow(r)
+              setOpenEdit(true)
+            }}
           >
             Edit
           </Button>
@@ -137,6 +144,7 @@ export default function AdvanceReturnPage() {
             isLoading={deletingId === r.id}
             title="Delete Advance Return"
             description={`Are you sure you want to delete advance return ${r.voucherNo}?`}
+            size="sm"
           />
         </div>
       ),
@@ -145,66 +153,88 @@ export default function AdvanceReturnPage() {
 
   return (
     <PageWrapper breadcrumbs={[{ label: "Money Receipt" }, { label: "Advance Return" }]}>
-      <div className="flex items-center justify-between px-2 mb-4">
-        <div>
-          <Button onClick={() => setOpenAdd(true)} className="bg-sky-500 hover:bg-sky-600">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Advance Return
-          </Button>
+      <div className="mx-4 mb-4 space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <FilterToolbar
+            showDateRange
+            dateRange={dateRange}
+            onDateRangeChange={setDateRange}
+            showSearch
+            search={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Search voucher, client..."
+            showRefresh
+            onRefresh={load}
+            className="flex-1"
+          >
+            <Button className="bg-sky-500 hover:bg-sky-600 shrink-0" onClick={() => setOpenAdd(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Advance Return
+            </Button>
+          </FilterToolbar>
         </div>
-        <FilterBar
-          dateRange={dateRange}
-          search={search}
-          onDateRangeChange={setDateRange}
-          onSearchChange={setSearch}
-          onRefresh={handleRefresh}
-        />
+
+        <Card className="border-none shadow-none bg-transparent">
+          <CardContent className="p-0">
+            <div className="bg-white rounded-md border shadow-sm overflow-hidden">
+              <Table<AdvanceReturnRow>
+                columns={columns}
+                dataSource={rows}
+                rowKey="id"
+                loading={loading}
+                pagination={{
+                  current: page,
+                  pageSize,
+                  total,
+                  onChange: (p, ps) => {
+                    setPage(p)
+                    setPageSize(ps)
+                  },
+                  showSizeChanger: true,
+                  showTotal: (t) => `Total ${t} items`,
+                }}
+                className="border-none"
+              />
+            </div>
+          </CardContent>
+        </Card>
       </div>
-      <Card className="mx-2">
-        <CardContent className="p-0">
-          <Table
-            columns={columns}
-            dataSource={filtered}
-            rowKey="id"
-            loading={loading}
-            pagination={{
-              current: page,
-              pageSize: pageSize,
-              total: total,
-              onChange: (p, ps) => {
-                setPage(p)
-                setPageSize(ps)
-              },
-              showSizeChanger: true,
-              showTotal: (total) => `Total ${total} items`,
-            }}
-            className="border-none"
-          />
-        </CardContent>
-      </Card>
 
       <AdvanceReturnModal
         open={openAdd}
         mode="add"
         onOpenChange={setOpenAdd}
-        onSubmit={async () => { load(); return true }}
+        onSubmit={async () => {
+          await load()
+          return true
+        }}
       />
 
       <AdvanceReturnModal
         open={openEdit}
         mode="edit"
-        onOpenChange={(v) => { if (!v) setEditingRow(null); setOpenEdit(v) }}
-        initialValues={editingRow ? {
-          clientId: "", // Need to find from somewhere or modal handles it
-          clientName: editingRow.clientName,
-          paymentMethod: editingRow.paymentType,
-          accountId: "",
-          accountName: editingRow.paymentDetails,
-          advanceAmount: String(editingRow.advanceAmount),
-          returnDate: editingRow.returnDate,
-          returnNote: editingRow.returnNote || "",
-        } : undefined}
-        onSubmit={async () => { load(); return true }}
+        onOpenChange={(v) => {
+          if (!v) setEditingRow(null)
+          setOpenEdit(v)
+        }}
+        initialValues={
+          editingRow
+            ? {
+                clientId: "",
+                clientName: editingRow.clientName,
+                paymentMethod: editingRow.paymentType,
+                accountId: "",
+                accountName: editingRow.paymentDetails,
+                advanceAmount: String(editingRow.advanceAmount),
+                returnDate: editingRow.returnDate,
+                returnNote: editingRow.returnNote || "",
+              }
+            : undefined
+        }
+        onSubmit={async () => {
+          await load()
+          return true
+        }}
       />
     </PageWrapper>
   )

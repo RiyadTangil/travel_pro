@@ -62,6 +62,32 @@ Assume company **C** and dates in **2026-04**.
 
 **Feedback:** Prefer routing all account writes through **Mongoose** (`accountService` + `Account` model) so `hasTrxn` and any future hooks stay consistent with **`PUT /api/accounts/[id]`** (currently raw Mongo `updateOne`).
 
+**UI delete:** Row delete uses shared **`DeleteButton`** (confirm dialog + `isLoading` while `DELETE` runs). Accounts with **`hasTrxn: true`** stay disabled.
+
 ---
 
-<!-- Next module: copy the pattern (## 3. Name, table, example, code paths). -->
+## 3. Non-invoice income
+
+**Total operations: 4** (voucher prefix **`NII-####`** from counter key **`voucher_nii`** on `counters`).
+
+| # | Operation | Trigger | Collections / notes |
+|---|-----------|---------|---------------------|
+| **1** | **List** | `GET /api/non-invoice-incomes?page&pageSize&search&dateFrom&dateTo` + `x-company-id` | `non_invoice_incomes` (read, paginated, text search on voucher, company name, note, account name) |
+| **2** | **Create** | `POST /api/non-invoice-incomes` | `non_invoice_incomes`, **`accounts.lastBalance`** += amount, **`client_transactions`** (+1, `invoiceType: NON_INVOICE_INCOME`, `direction: receiv`), **`counters`** seq |
+| **3** | **Update** | `PUT /api/non-invoice-incomes/[id]` | Transaction: revert old account delta + delete old `client_transactions` by `voucherNo`; re-apply new company/account/amount/date; recreate `client_transactions`; update row |
+| **4** | **Delete** | `DELETE /api/non-invoice-incomes/[id]` | **`accounts.lastBalance`** -= amount, delete matching `client_transactions` by `voucherNo`, delete income row |
+
+### Example
+
+1. User adds income **5,000** to **Bank A** for non-invoice company **NIC-1** → new **`non_invoice_incomes`** row with **`NII-0001`**, **`accounts.A.lastBalance`** +5,000, **`client_transactions`** ledger row with that voucher and running **`lastTotalAmount`**.  
+2. **List** with date range and search “NII” returns matching rows for the company header.  
+3. **Edit** changes amount to **3,000** → old 5,000 reversed on **A**, new +3,000 applied, ledger row replaced (same `voucherNo`).  
+4. **Delete** removes the row, reverses **3,000** on **A**, removes the ledger row.
+
+**Code:** `app/api/non-invoice-incomes/route.ts`, `app/api/non-invoice-incomes/[id]/route.ts`, models `non-invoice-income`, UI `app/dashboard/accounts/non-invoice-income/page.tsx`, modal `components/accounts/NonInvoiceIncomeModal.tsx`.
+
+**UI:** Ant Design `Table`, `FilterToolbar` (date range, debounced search, refresh), `TableRowActions` (View placeholder, Edit, Delete with confirm + row loading).
+
+---
+
+<!-- Next module: copy the pattern (## N. Name, table, example, code paths). -->

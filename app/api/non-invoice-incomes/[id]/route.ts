@@ -7,12 +7,12 @@ import { Account } from "@/models/account"
 import { ClientTransaction } from "@/models/client-transaction"
 import { NonInvoiceCompany } from "@/models/non-invoice-company"
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await connectMongoose()
     const body = await request.json()
     const companyId = request.headers.get("x-company-id")
-    const { id } = params
+    const { id } = await params
 
     if (!companyId) return NextResponse.json({ error: "Company ID required" }, { status: 400 })
 
@@ -91,11 +91,11 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await connectMongoose()
     const companyId = request.headers.get("x-company-id")
-    const { id } = params
+    const { id } = await params
 
     if (!companyId) return NextResponse.json({ error: "Company ID required" }, { status: 400 })
 

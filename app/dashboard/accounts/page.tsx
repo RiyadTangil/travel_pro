@@ -7,10 +7,10 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Plus } from "lucide-react"
 import AccountModal from "@/components/accounts/account-modal"
 import type { AccountItem } from "@/components/accounts/types"
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { InlineLoader } from "@/components/ui/loader"
 import { PageWrapper } from "@/components/shared/page-wrapper"
 import FilterToolbar from "@/components/shared/filter-toolbar"
+import { DeleteButton } from "@/components/shared/delete-button"
 import { Table } from "antd"
 
 export default function AccountsPage() {
@@ -20,7 +20,6 @@ export default function AccountsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<AccountItem | null>(null)
-  const [deleting, setDeleting] = useState<AccountItem | null>(null)
   const [loadingRowId, setLoadingRowId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [loadingList, setLoadingList] = useState(false)
@@ -74,11 +73,6 @@ export default function AccountsPage() {
   const handleEdit = (item: AccountItem) => {
     setEditing(item)
     setOpen(true)
-  }
-
-  const handleDelete = (item: AccountItem) => {
-    if (item.hasTrxn) return
-    setDeleting(item)
   }
 
   const onSubmit = async (payload: AccountItem) => {
@@ -137,11 +131,11 @@ export default function AccountsPage() {
     }
   }
 
-  const confirmDelete = async () => {
-    if (!deleting) return
-    setLoadingRowId(deleting.id)
+  const deleteAccount = async (item: AccountItem) => {
+    if (item.hasTrxn) return
+    setLoadingRowId(item.id)
     try {
-      const res = await fetch(`/api/accounts/${deleting.id}`, {
+      const res = await fetch(`/api/accounts/${item.id}`, {
         method: "DELETE",
         headers: { "x-company-id": companyId },
       })
@@ -152,7 +146,6 @@ export default function AccountsPage() {
       console.error(e)
     } finally {
       setLoadingRowId(null)
-      setDeleting(null)
     }
   }
 
@@ -195,21 +188,15 @@ export default function AccountsPage() {
           <Button size="sm" variant="outline">
             Statement
           </Button>
-          <Button
+          <DeleteButton
+            onDelete={() => deleteAccount(r)}
+            disabled={!!r.hasTrxn}
+            isLoading={loadingRowId === r.id}
+            title="Delete Account"
+            description={`Are you sure you want to delete ${r.name}?`}
+            className={r.hasTrxn ? "opacity-60" : ""}
             size="sm"
-            variant={r.hasTrxn ? "secondary" : "destructive"}
-            onClick={() => handleDelete(r)}
-            disabled={!!r.hasTrxn || loadingRowId === r.id}
-            title={r.hasTrxn ? "Cannot delete: transactions exist" : "Delete"}
-          >
-            {loadingRowId === r.id ? (
-              <span className="flex items-center gap-1">
-                <InlineLoader /> Delete
-              </span>
-            ) : (
-              "Delete"
-            )}
-          </Button>
+          />
         </div>
       ),
     },
@@ -274,26 +261,6 @@ export default function AccountsPage() {
         submitting={submitting}
       />
 
-      <AlertDialog open={!!deleting} onOpenChange={(v) => !v && setDeleting(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Account</AlertDialogTitle>
-          </AlertDialogHeader>
-          <p className="text-sm text-muted-foreground">Are you sure you want to delete {deleting?.name}?</p>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setDeleting(null)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">
-              {loadingRowId === deleting?.id ? (
-                <span className="flex items-center gap-2">
-                  <InlineLoader /> Deleting...
-                </span>
-              ) : (
-                "Delete"
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </PageWrapper>
   )
 }
