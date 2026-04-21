@@ -22,6 +22,8 @@ export type FilterToolbarProps = {
   /** Refresh */
   showRefresh?: boolean
   onRefresh?: () => void
+  /** Extra controls in the filter row (e.g. account select), between search and refresh */
+  filterExtras?: React.ReactNode
 }
 
 export default function FilterToolbar({
@@ -36,11 +38,13 @@ export default function FilterToolbar({
   onDateRangeChange,
   showRefresh = true,
   onRefresh,
+  filterExtras,
 }: FilterToolbarProps) {
   const hasAny =
     (showDateRange && onDateRangeChange) ||
     (showSearch && onSearchChange) ||
-    (showRefresh && onRefresh)
+    (showRefresh && onRefresh) ||
+    !!filterExtras
 
   if (!hasAny) return null
 
@@ -70,6 +74,8 @@ export default function FilterToolbar({
             className="max-w-sm"
           />
         )}
+
+        {filterExtras}
 
         {showRefresh && onRefresh && (
           <Button type="button" variant="outline" size="icon" onClick={onRefresh} title="Refresh">

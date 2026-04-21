@@ -12,6 +12,7 @@ import { DateInput } from "@/components/ui/date-input"
 import { Loader2 } from "lucide-react"
 import axios from "axios"
 import { useSession } from "next-auth/react"
+import { cn } from "@/lib/utils"
 
 type AccountOption = {
   id: string
@@ -32,7 +33,7 @@ type Props = {
   open: boolean
   onOpenChange: (v: boolean) => void
   mode: "add" | "edit"
-  initialValues?: Partial<FormValues> & { 
+  initialValues?: Partial<FormValues> & {
     transferFromName?: string
     transferToName?: string
   }
@@ -60,9 +61,7 @@ export default function BalanceTransferModal({ open, onOpenChange, mode, initial
   const amount = watch("amount")
   const transferCharge = watch("transferCharge")
 
-  const selectedFromAccount = useMemo(() => 
-    accounts.find(a => a.id === transferFromId), 
-  [accounts, transferFromId])
+  const selectedFromAccount = useMemo(() => accounts.find((a) => a.id === transferFromId), [accounts, transferFromId])
 
   const totalAmount = useMemo(() => {
     const amt = Number(amount) || 0
@@ -70,10 +69,14 @@ export default function BalanceTransferModal({ open, onOpenChange, mode, initial
     return amt + chg
   }, [amount, transferCharge])
 
-  const client = useMemo(() => axios.create({
-    baseURL: "",
-    headers: { "x-company-id": session?.user?.companyId ?? "" },
-  }), [session])
+  const client = useMemo(
+    () =>
+      axios.create({
+        baseURL: "",
+        headers: { "x-company-id": session?.user?.companyId ?? "" },
+      }),
+    [session]
+  )
 
   useEffect(() => {
     if (open) {
@@ -82,8 +85,8 @@ export default function BalanceTransferModal({ open, onOpenChange, mode, initial
           transferFromId: initialValues.transferFromId || "",
           transferToId: initialValues.transferToId || "",
           amount: initialValues.amount || "",
-          transferCharge: initialValues.transferCharge || "",
-          date: initialValues.date || new Date().toISOString().slice(0, 10),
+          transferCharge: initialValues.transferCharge ?? "",
+          date: (initialValues.date && String(initialValues.date).slice(0, 10)) || new Date().toISOString().slice(0, 10),
           note: initialValues.note || "",
         })
       } else {
@@ -106,11 +109,13 @@ export default function BalanceTransferModal({ open, onOpenChange, mode, initial
       try {
         const res = await client.get("/api/accounts?page=1&pageSize=100")
         const items = res.data?.items || []
-        setAccounts(items.map((i: any) => ({
-          id: String(i.id || i._id),
-          name: i.bankName ? `${i.name} (${i.bankName})` : String(i.name || ""),
-          lastBalance: Number(i.lastBalance || 0),
-        })))
+        setAccounts(
+          items.map((i: any) => ({
+            id: String(i.id || i._id),
+            name: i.bankName ? `${i.name} (${i.bankName})` : String(i.name || ""),
+            lastBalance: Number(i.lastBalance || 0),
+          }))
+        )
       } catch (e) {
         console.error(e)
       } finally {
@@ -136,14 +141,16 @@ export default function BalanceTransferModal({ open, onOpenChange, mode, initial
         <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-4 py-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Transfer From <span className="text-red-500">*</span></Label>
+              <Label>
+                Transfer From <span className="text-red-500">*</span>
+              </Label>
               <Controller
                 control={control}
                 name="transferFromId"
-                rules={{ required: "Required" }}
+                rules={{ required: "Transfer from account is required" }}
                 render={({ field }) => (
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <SelectTrigger>
+                  <Select onValueChange={field.onChange} value={field.value} disabled={loadingAccounts}>
+                    <SelectTrigger className={cn(errors.transferFromId && "border-red-500 ring-1 ring-red-500")}>
                       <SelectValue placeholder="Select Transfer From Account" />
                     </SelectTrigger>
                     <SelectContent>
@@ -156,14 +163,18 @@ export default function BalanceTransferModal({ open, onOpenChange, mode, initial
                   </Select>
                 )}
               />
-              {errors.transferFromId && <span className="text-sm text-red-500">{errors.transferFromId.message}</span>}
+              {errors.transferFromId && (
+                <p className="text-xs text-red-500 font-medium">{errors.transferFromId.message}</p>
+              )}
             </div>
-            
+
             <div className="space-y-2">
-              <Label>Balance <span className="text-red-500">*</span></Label>
-              <Input 
-                readOnly 
-                value={selectedFromAccount ? selectedFromAccount.lastBalance : "Account Last Balance"} 
+              <Label>
+                Balance <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                readOnly
+                value={selectedFromAccount != null ? String(selectedFromAccount.lastBalance.toLocaleString()) : "—"}
                 className="bg-gray-100"
               />
             </div>
@@ -171,75 +182,85 @@ export default function BalanceTransferModal({ open, onOpenChange, mode, initial
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Transfer To <span className="text-red-500">*</span></Label>
+              <Label>
+                Transfer To <span className="text-red-500">*</span>
+              </Label>
               <Controller
                 control={control}
                 name="transferToId"
-                rules={{ required: "Required" }}
+                rules={{ required: "Transfer to account is required" }}
                 render={({ field }) => (
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <SelectTrigger>
+                  <Select onValueChange={field.onChange} value={field.value} disabled={loadingAccounts}>
+                    <SelectTrigger className={cn(errors.transferToId && "border-red-500 ring-1 ring-red-500")}>
                       <SelectValue placeholder="Select Transfer To Account" />
                     </SelectTrigger>
                     <SelectContent>
-                      {accounts.filter(a => a.id !== transferFromId).map((acc) => (
-                        <SelectItem key={acc.id} value={acc.id}>
-                          {acc.name}
-                        </SelectItem>
-                      ))}
+                      {accounts
+                        .filter((a) => a.id !== transferFromId)
+                        .map((acc) => (
+                          <SelectItem key={acc.id} value={acc.id}>
+                            {acc.name}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                 )}
               />
-              {errors.transferToId && <span className="text-sm text-red-500">{errors.transferToId.message}</span>}
+              {errors.transferToId && <p className="text-xs text-red-500 font-medium">{errors.transferToId.message}</p>}
             </div>
 
             <div className="space-y-2">
-              <Label>Amount: <span className="text-red-500">*</span></Label>
-              <Input 
-                type="number" 
-                placeholder="Please Enter your Amount"
-                {...register("amount", { required: "Required", min: 0.01 })} 
+              <Label>
+                Amount <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                type="number"
+                step="0.01"
+                placeholder="Enter amount"
+                className={cn(errors.amount && "border-red-500 ring-1 ring-red-500")}
+                {...register("amount", {
+                  required: "Amount is required",
+                  validate: (v) => Number(v) > 0 || "Amount must be greater than zero",
+                })}
               />
-              {errors.amount && <span className="text-sm text-red-500">{errors.amount.message}</span>}
+              {errors.amount && <p className="text-xs text-red-500 font-medium">{errors.amount.message}</p>}
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Transfer Charge:</Label>
-              <Input 
-                type="number" 
-                placeholder="Enter your transfer charge"
-                {...register("transferCharge")} 
-              />
+              <Label>Transfer Charge</Label>
+              <Input type="number" step="0.01" placeholder="Optional" {...register("transferCharge")} />
             </div>
 
             <div className="space-y-2">
-              <Label>Total Amount:</Label>
-              <Input 
-                readOnly 
-                value={totalAmount || ""} 
-                className="bg-gray-100"
-              />
+              <Label>Total Amount</Label>
+              <Input readOnly value={totalAmount ? String(totalAmount) : ""} className="bg-gray-100" />
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label>Date: <span className="text-red-500">*</span></Label>
-            <DateInput 
-              value={watch("date")} 
-              onChange={(d) => setValue("date", d)} 
+            <Label>
+              Date <span className="text-red-500">*</span>
+            </Label>
+            <Controller
+              name="date"
+              control={control}
+              rules={{ required: "Date is required" }}
+              render={({ field }) => (
+                <DateInput
+                  value={field.value ? new Date(field.value) : undefined}
+                  onChange={(d) => field.onChange(d ? d.toISOString().slice(0, 10) : "")}
+                  className={cn(errors.date && "border-red-500 ring-1 ring-red-500")}
+                />
+              )}
             />
-            {errors.date && <span className="text-sm text-red-500">{errors.date.message}</span>}
+            {errors.date && <p className="text-xs text-red-500 font-medium">{errors.date.message}</p>}
           </div>
 
           <div className="space-y-2">
-            <Label>Note:</Label>
-            <Textarea 
-              placeholder="Enter your message" 
-              {...register("note")} 
-            />
+            <Label>Note</Label>
+            <Textarea placeholder="Optional note" {...register("note")} />
           </div>
 
           <div className="flex justify-start">
