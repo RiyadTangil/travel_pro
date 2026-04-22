@@ -26,26 +26,26 @@ function daysRemaining(doe?: string): string {
 
 function mapApiToPassport(p: any): Passport {
   return {
-    id:          String(p.id || p._id),
+    id: String(p.id || p._id),
     createdDate: p.createdAt
       ? new Date(p.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
       : "—",
-    passportNo:   p.passportNo   || "",
-    paxType:      p.paxType      || "",
-    name:         p.name         || "",
-    mobile:       p.mobile       || "",
-    email:        p.email        || "",
-    nid:          p.nid          || "",
-    clientId:     p.clientId     || "",
-    dob:          p.dob          || "",
-    doi:          p.dateOfIssue  || "",
-    doe:          p.dateOfExpire || "",
-    remaining:    daysRemaining(p.dateOfExpire),
-    note:         p.note         || "",
-    status:       (p.status as Passport["status"]) || "PENDING",
-    scanCopyUrl:  p.scanCopyUrl  || "",
+    passportNo: p.passportNo || "",
+    paxType: p.paxType || "",
+    name: p.name || "",
+    mobile: p.mobile || "",
+    email: p.email || "",
+    nid: p.nid || "",
+    clientId: p.clientId || "",
+    dob: p.dob || "",
+    doi: p.dateOfIssue || "",
+    doe: p.dateOfExpire || "",
+    remaining: daysRemaining(p.dateOfExpire),
+    note: p.note || "",
+    status: (p.status as Passport["status"]) || "PENDING",
+    scanCopyUrl: p.scanCopyUrl || "",
     othersDocUrl: p.othersDocUrl || "",
-    imageUrl:     p.imageUrl     || "",
+    imageUrl: p.imageUrl || "",
   }
 }
 
@@ -60,44 +60,44 @@ export default function PassportPage() {
   const { data: session } = useSession()
   const companyId = session?.user?.companyId ?? ""
 
-  const [passports, setPassports]   = useState<Passport[]>([])
-  const [loading, setLoading]       = useState(false)
-  const [loadingId, setLoadingId]   = useState<string | null>(null)
-  const [total, setTotal]           = useState(0)
-  const [page, setPage]             = useState(1)
-  const [pageSize, setPageSize]     = useState(DEFAULT_PAGE_SIZE)
+  const [passports, setPassports] = useState<Passport[]>([])
+  const [loading, setLoading] = useState(false)
+  const [loadingId, setLoadingId] = useState<string | null>(null)
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
 
   // Filters
-  const [search, setSearch]         = useState("")
-  const [dateRange, setDateRange]   = useState<DateRange | undefined>()
-  const [status, setStatus]         = useState("All")
-  const [clientId, setClientId]     = useState("")
+  const [search, setSearch] = useState("")
+  const [dateRange, setDateRange] = useState<DateRange | undefined>()
+  const [status, setStatus] = useState("All")
+  const [clientId, setClientId] = useState("")
 
   // Client options for the filter dropdown
   const [clientOptions, setClientOptions] = useState<Option[]>([])
 
   // Modal
-  const [openModal, setOpenModal]   = useState(false)
-  const [editing, setEditing]       = useState<Passport | null>(null)
+  const [openModal, setOpenModal] = useState(false)
+  const [editing, setEditing] = useState<Passport | null>(null)
 
   // ---------------------------------------------------------------------------
   // Load client list for filter dropdown
   // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!companyId) return
-    ;(async () => {
-      try {
-        const res  = await fetch(`/api/clients-manager?page=1&limit=200`, {
-          headers: { "x-company-id": companyId },
-        })
-        const data = await res.json()
-        const options: Option[] = (data.clients || []).map((c: any) => ({
-          value: String(c.id),
-          label: c.name || c.id,
-        }))
-        setClientOptions(options)
-      } catch { /* non-critical */ }
-    })()
+      ; (async () => {
+        try {
+          const res = await fetch(`/api/clients-manager?page=1&limit=200`, {
+            headers: { "x-company-id": companyId },
+          })
+          const data = await res.json()
+          const options: Option[] = (data.clients || []).map((c: any) => ({
+            value: String(c.id),
+            label: c.name || c.id,
+          }))
+          setClientOptions(options)
+        } catch { /* non-critical */ }
+      })()
   }, [companyId])
 
   // ---------------------------------------------------------------------------
@@ -107,16 +107,16 @@ export default function PassportPage() {
     setLoading(true)
     try {
       const params: Record<string, string> = {
-        page:  String(pg),
+        page: String(pg),
         limit: String(ps),
         search,
       }
-      if (status !== "All") params.status   = status
-      if (clientId)          params.clientId = clientId
-      if (dateRange?.from)   params.startDate = dateRange.from.toISOString().slice(0, 10)
-      if (dateRange?.to)     params.endDate   = dateRange.to.toISOString().slice(0, 10)
+      if (status !== "All") params.status = status
+      if (clientId) params.clientId = clientId
+      if (dateRange?.from) params.startDate = dateRange.from.toISOString().slice(0, 10)
+      if (dateRange?.to) params.endDate = dateRange.to.toISOString().slice(0, 10)
 
-      const res  = await fetch(`/api/passports?${new URLSearchParams(params)}`, {
+      const res = await fetch(`/api/passports?${new URLSearchParams(params)}`, {
         headers: companyId ? { "x-company-id": companyId } : {},
       })
       const data = await res.json()
@@ -150,10 +150,10 @@ export default function PassportPage() {
     const isEdit = !!editing
     try {
       if (isEdit) {
-        const res  = await fetch(`/api/passports/${editing!.id}`, {
-          method:  "PUT",
+        const res = await fetch(`/api/passports/${editing!.id}`, {
+          method: "PUT",
           headers: { "Content-Type": "application/json", ...(companyId ? { "x-company-id": companyId } : {}) },
-          body:    JSON.stringify(payload),
+          body: JSON.stringify(payload),
         })
         const json = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(json?.error || "Failed to update passport")
@@ -161,12 +161,12 @@ export default function PassportPage() {
       } else {
         // POST accepts an array
         const items = Array.isArray(payload) ? payload : [payload]
-        const res   = await fetch("/api/passports", {
-          method:  "POST",
+        const res = await fetch("/api/passports", {
+          method: "POST",
           headers: { "Content-Type": "application/json", ...(companyId ? { "x-company-id": companyId } : {}) },
-          body:    JSON.stringify(items),
+          body: JSON.stringify(items),
         })
-        const json  = await res.json().catch(() => ({}))
+        const json = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(json?.error || "Failed to create passport")
         toast.success(items.length > 1 ? `${items.length} passports created` : "Passport created")
       }
@@ -193,7 +193,7 @@ export default function PassportPage() {
     setLoadingId(p.id)
     try {
       const res = await fetch(`/api/passports/${p.id}`, {
-        method:  "DELETE",
+        method: "DELETE",
         headers: companyId ? { "x-company-id": companyId } : {},
       })
       if (!res.ok) {
@@ -218,9 +218,9 @@ export default function PassportPage() {
     setLoadingId(p.id)
     try {
       const res = await fetch(`/api/passports/${p.id}`, {
-        method:  "PUT",
+        method: "PUT",
         headers: { "Content-Type": "application/json", ...(companyId ? { "x-company-id": companyId } : {}) },
-        body:    JSON.stringify({ status: nextMap[p.status] }),
+        body: JSON.stringify({ status: nextMap[p.status] }),
       })
       if (!res.ok) { toast.error("Failed to update status"); return }
       toast.success("Status updated")
@@ -250,27 +250,27 @@ export default function PassportPage() {
           onRefresh={() => fetchPassports(1, pageSize)}
           // Client select: right side, BEFORE date range
           filterExtrasBefore={
-            <ClearableSelect
-              options={clientOptions}
-              value={clientId}
-              onChange={(v) => { setClientId(v); setPage(1) }}
-              placeholder="Filter by Client"
-              className="w-52"
-            />
+            <div className="flex items-center gap-2">
+              <ClearableSelect
+                options={clientOptions}
+                value={clientId}
+                onChange={(v) => { setClientId(v); setPage(1) }}
+                placeholder="Filter by Client"
+                className="w-52"
+              />
+              <Select value={status} onValueChange={(v) => { setStatus(v); setPage(1) }}>
+                <SelectTrigger className="w-36">
+                  <SelectValue placeholder="All Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUS_OPTIONS.map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           }
-          // Status select: right side, AFTER search (before refresh)
-          filterExtras={
-            <Select value={status} onValueChange={(v) => { setStatus(v); setPage(1) }}>
-              <SelectTrigger className="w-36">
-                <SelectValue placeholder="All Status" />
-              </SelectTrigger>
-              <SelectContent>
-                {STATUS_OPTIONS.map((s) => (
-                  <SelectItem key={s} value={s}>{s}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          }
+
         >
           {/* Left side: action buttons */}
           <div className="flex items-center gap-2 shrink-0">
@@ -295,7 +295,7 @@ export default function PassportPage() {
                 loadingId={loadingId}
                 total={total}
                 page={page}
-                
+
                 pageSize={pageSize}
                 onPageChange={handlePageChange}
                 onEdit={handleEdit}
@@ -314,18 +314,18 @@ export default function PassportPage() {
         initialValues={
           editing
             ? {
-                clientId:     editing.clientId || "",
-                passportNo:   editing.passportNo,
-                paxType:      editing.paxType,
-                name:         editing.name,
-                mobile:       editing.mobile,
-                email:        editing.email,
-                nid:          editing.nid,
-                dob:          editing.dob,
-                dateOfIssue:  editing.doi,
-                dateOfExpire: editing.doe,
-                note:         editing.note,
-              }
+              clientId: editing.clientId || "",
+              passportNo: editing.passportNo,
+              paxType: editing.paxType,
+              name: editing.name,
+              mobile: editing.mobile,
+              email: editing.email,
+              nid: editing.nid,
+              dob: editing.dob,
+              dateOfIssue: editing.doi,
+              dateOfExpire: editing.doe,
+              note: editing.note,
+            }
             : undefined
         }
         onSubmit={handleModalSubmit}
