@@ -158,9 +158,9 @@ export function Sidebar() {
       icon: <CreditCard className="h-5 w-5" />,
       children: [
         {
-      title: "Bill Adjustment",
-      href: "/dashboard/bill-adjustment",
-    },
+          title: "Bill Adjustment",
+          href: "/dashboard/bill-adjustment",
+        },
         {
           title: "Accounts List",
           href: "/dashboard/accounts",
@@ -215,17 +215,17 @@ export function Sidebar() {
           title: "Companies",
           href: "/dashboard/configuration/companies",
         },
+        {
+          title: "Employee",
+          icon: <Users className="h-5 w-5" />,
+          href: "/dashboard/employee",
+        },
       ],
     },
     {
       title: "Passport",
       icon: <FileText className="h-5 w-5" />,
       href: "/dashboard/passport",
-    },
-    {
-      title: "Employee",
-      icon: <Users className="h-5 w-5" />,
-      href: "/dashboard/employee",
     },
     {
       title: "Reports",
@@ -379,19 +379,19 @@ export function Sidebar() {
 
                 const isParentActive = hasChildren
                   ? ((item as any).children as Array<any>).some((child) => {
-                      if (child.children && Array.isArray(child.children)) {
-                         return child.children.some((sub: any) => pathname === sub.href || pathname.startsWith(sub.href + "?"))
-                      }
-                      if (!child.href) return false
-                      const u = new URL(child.href, "http://localhost")
-                      const base = u.pathname
-                      if (pathname !== base) return false
-                      const qs = u.searchParams
-                      for (const [k, v] of qs.entries()) {
-                        if (searchParams.get(k) !== v) return false
-                      }
-                      return true
-                    })
+                    if (child.children && Array.isArray(child.children)) {
+                      return child.children.some((sub: any) => pathname === sub.href || pathname.startsWith(sub.href + "?"))
+                    }
+                    if (!child.href) return false
+                    const u = new URL(child.href, "http://localhost")
+                    const base = u.pathname
+                    if (pathname !== base) return false
+                    const qs = u.searchParams
+                    for (const [k, v] of qs.entries()) {
+                      if (searchParams.get(k) !== v) return false
+                    }
+                    return true
+                  })
                   : isActive((item as any).href)
 
                 if (!hasChildren) {
@@ -451,49 +451,49 @@ export function Sidebar() {
                         <div className="mt-1 space-y-1 pl-3">
                           {((item as any).children as Array<any>).map((child) => {
                             if (child.children && Array.isArray(child.children)) {
-                               const isOpen = !!openMap[child.title]
-                               return (
-                                  <Collapsible
-                                     key={child.title}
-                                     open={isOpen}
-                                     onOpenChange={(v) => setOpenMap((m) => ({ ...m, [child.title]: v }))}
-                                     className="pl-2"
-                                  >
-                                     <CollapsibleTrigger asChild>
-                                        <button
-                                           type="button"
-                                           className={cn(
-                                              "w-full flex items-center gap-3 px-3 py-2 rounded-md transition-all text-gray-600 hover:bg-gray-100",
-                                           )}
-                                        >
-                                           <span>{child.title}</span>
-                                           <div className="ml-auto">
-                                              {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                                           </div>
-                                        </button>
-                                     </CollapsibleTrigger>
-                                     <CollapsibleContent>
-                                         <div className="mt-1 space-y-1 pl-3">
-                                            {child.children.map((subChild: any) => {
-                                               const active = pathname === subChild.href || pathname.startsWith(subChild.href + "?")
-                                               return (
-                                                  <Link
-                                                     key={subChild.href}
-                                                     href={subChild.href}
-                                                     className={cn(
-                                                        "flex items-center gap-3 px-3 py-2 rounded-md transition-all text-sm",
-                                                        active ? "bg-primary/10 text-primary font-medium" : "text-gray-600 hover:bg-gray-100",
-                                                     )}
-                                                     onClick={() => setMobileOpen(false)}
-                                                  >
-                                                     <span>{subChild.title}</span>
-                                                  </Link>
-                                               )
-                                            })}
-                                         </div>
-                                     </CollapsibleContent>
-                                  </Collapsible>
-                               )
+                              const isOpen = !!openMap[child.title]
+                              return (
+                                <Collapsible
+                                  key={child.title}
+                                  open={isOpen}
+                                  onOpenChange={(v) => setOpenMap((m) => ({ ...m, [child.title]: v }))}
+                                  className="pl-2"
+                                >
+                                  <CollapsibleTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className={cn(
+                                        "w-full flex items-center gap-3 px-3 py-2 rounded-md transition-all text-gray-600 hover:bg-gray-100",
+                                      )}
+                                    >
+                                      <span>{child.title}</span>
+                                      <div className="ml-auto">
+                                        {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                                      </div>
+                                    </button>
+                                  </CollapsibleTrigger>
+                                  <CollapsibleContent>
+                                    <div className="mt-1 space-y-1 pl-3">
+                                      {child.children.map((subChild: any) => {
+                                        const active = pathname === subChild.href || pathname.startsWith(subChild.href + "?")
+                                        return (
+                                          <Link
+                                            key={subChild.href}
+                                            href={subChild.href}
+                                            className={cn(
+                                              "flex items-center gap-3 px-3 py-2 rounded-md transition-all text-sm",
+                                              active ? "bg-primary/10 text-primary font-medium" : "text-gray-600 hover:bg-gray-100",
+                                            )}
+                                            onClick={() => setMobileOpen(false)}
+                                          >
+                                            <span>{subChild.title}</span>
+                                          </Link>
+                                        )
+                                      })}
+                                    </div>
+                                  </CollapsibleContent>
+                                </Collapsible>
+                              )
                             }
 
                             const u = new URL(child.href, "http://localhost")

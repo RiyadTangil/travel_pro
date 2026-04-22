@@ -35,6 +35,18 @@ type AllocationRow = {
   invoiceAmount: number
 }
 
+/** Matches the Row type exported from VendorPaymentAllocateModal */
+type AllocationSubmitRow = {
+  invoiceId: string
+  invoiceNo: string
+  salesDate: string
+  totalCost: number
+  paid: number
+  due: number
+  amount: number
+  paymentDate: string
+}
+
 type VendorPaymentDetail = {
   id: string
   voucherNo: string
@@ -351,7 +363,7 @@ export default function VendorPaymentViewPage() {
     },
   ]
 
-  const handleOnSubmit = async (rows: any[]) => {
+  const handleOnSubmit = async (rows: AllocationSubmitRow[]) => {
     const payload = rows.map((r) => ({
       invoiceId: r.invoiceId,
       amount: r.amount,

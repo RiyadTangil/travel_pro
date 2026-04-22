@@ -22,7 +22,9 @@ export type FilterToolbarProps = {
   /** Refresh */
   showRefresh?: boolean
   onRefresh?: () => void
-  /** Extra controls in the filter row (e.g. account select), between search and refresh */
+  /** Extra controls rendered BEFORE the date range (right side) */
+  filterExtrasBefore?: React.ReactNode
+  /** Extra controls rendered AFTER the search (right side, before refresh) */
   filterExtras?: React.ReactNode
 }
 
@@ -38,25 +40,28 @@ export default function FilterToolbar({
   onDateRangeChange,
   showRefresh = true,
   onRefresh,
+  filterExtrasBefore,
   filterExtras,
 }: FilterToolbarProps) {
   const hasAny =
     (showDateRange && onDateRangeChange) ||
     (showSearch && onSearchChange) ||
     (showRefresh && onRefresh) ||
-    !!filterExtras
+    !!filterExtras ||
+    !!filterExtrasBefore
 
   if (!hasAny) return null
 
   return (
-    <div className="flex justify-between items-center w-full  bg-white p-3 rounded-md border shadow-sm">
+    <div className="flex min-w-0 max-w-full flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-md border shadow-sm">
       {children}
       <div
         className={cn(
-          "flex flex-wrap items-center justify-end gap-3",
+          "flex min-w-0 flex-wrap items-center justify-end gap-3",
           className
         )}
       >
+        {filterExtrasBefore}
 
         {showDateRange && onDateRangeChange && (
           <DateRangePickerWithPresets

@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Download, Plus, Search, X } from "lucide-react"
 
-import { ClearableSelect } from "@/components/ui/clearable-select"
+import { ClearableSelect } from "@/components/shared/clearable-select"
 
 type Category = { id: string; name: string }
 type User = { id: string; name: string }

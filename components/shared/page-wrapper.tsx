@@ -24,7 +24,7 @@ export function PageWrapper({ children, breadcrumbs }: PageWrapperProps) {
         </div>
       </header>
 
-      <main className="flex-grow py-6">
+      <main className="min-w-0 flex-grow py-6">
         <div className="mb-4 px-4">
           <Breadcrumb>
             <BreadcrumbList>

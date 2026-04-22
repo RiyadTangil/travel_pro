@@ -83,8 +83,8 @@ export default function ClientSelect({ value, onChange, onRequestAdd, placeholde
         try {
           const res = await fetch(`/api/clients-manager/${value}`)
           if (!res.ok) return
-          const data = await res.json()
-          const c = data
+          const json = await res.json()
+          const c = json?.data || json
           if (!c || !c.id) return
           const item: ClientItem = { id: c.id, name: c.name, uniqueId: c.uniqueId, email: c.email, phone: c.phone }
           if (isMounted) setItems(prev => {

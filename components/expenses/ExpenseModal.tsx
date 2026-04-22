@@ -13,7 +13,7 @@ import { Upload, X, Trash2, Plus, Loader2 } from "lucide-react"
 import type { AccountType } from "@/components/accounts/types"
 import axios from "axios"
 import { useSession } from "next-auth/react"
-import { ClearableSelect } from "@/components/ui/clearable-select"
+import { ClearableSelect } from "@/components/shared/clearable-select"
 
 type ExpenseItem = {
   headId: string
