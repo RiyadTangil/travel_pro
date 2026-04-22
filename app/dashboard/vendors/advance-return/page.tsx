@@ -1,26 +1,31 @@
 "use client"
 
-import { useMemo, useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useSession } from "next-auth/react"
 import { PageWrapper } from "@/components/shared/page-wrapper"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import FilterBar from "@/components/money-receipts/FilterBar"
+import FilterToolbar from "@/components/shared/filter-toolbar"
 import VendorAdvanceReturnModal from "@/components/vendors/vendor-advance-return-modal"
 import { format } from "date-fns"
-import { Loader2, Plus } from "lucide-react"
+import { Plus } from "lucide-react"
 import { DateRange } from "react-day-picker"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+import { Table, Tag } from "antd"
+import { TableRowActions } from "@/components/shared/table-row-actions"
+import { DeleteButton } from "@/components/shared/delete-button"
+import { toast } from "sonner"
+
+function parseApiError(data: unknown): string {
+  if (
+    data &&
+    typeof data === "object" &&
+    "error" in data &&
+    typeof (data as { error: unknown }).error === "string"
+  ) {
+    return (data as { error: string }).error
+  }
+  return "Request failed"
+}
 
 type VendorAdvanceReturnRow = {
   id: string
@@ -37,33 +42,32 @@ type VendorAdvanceReturnRow = {
 
 export default function VendorAdvanceReturnPage() {
   const { data: session } = useSession()
+  const companyId = session?.user?.companyId ?? ""
   const [rows, setRows] = useState<VendorAdvanceReturnRow[]>([])
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>()
-  const [search, setSearch] = useState<string>("")
+  const [search, setSearch] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
 
   const [openAdd, setOpenAdd] = useState(false)
   const [openEdit, setOpenEdit] = useState(false)
   const [editingRow, setEditingRow] = useState<VendorAdvanceReturnRow | null>(null)
 
-  const filtered = useMemo(() => {
-    return rows.filter((r) => {
-      const dOk = (() => {
-        if (dateRange?.from && new Date(r.returnDate) < dateRange.from) return false
-        if (dateRange?.to && new Date(r.returnDate) > dateRange.to) return false
-        return true
-      })()
-      const q = search.trim().toLowerCase()
-      const sOk = !q || [r.voucherNo, r.vendorName, r.paymentType, r.paymentDetails, r.returnNote || ""].some((v) => v.toLowerCase().includes(q))
-      return dOk && sOk
-    })
-  }, [rows, dateRange, search])
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch((prev) => {
+        const next = search.trim()
+        if (next !== prev) setPage(1)
+        return next
+      })
+    }, 250)
+    return () => clearTimeout(t)
+  }, [search])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -71,10 +75,12 @@ export default function VendorAdvanceReturnPage() {
       const params = new URLSearchParams()
       params.set("page", String(page))
       params.set("pageSize", String(pageSize))
-      if (search) params.set("search", search)
+      if (debouncedSearch) params.set("search", debouncedSearch)
       if (dateRange?.from) params.set("dateFrom", dateRange.from.toISOString().slice(0, 10))
       if (dateRange?.to) params.set("dateTo", dateRange.to.toISOString().slice(0, 10))
-      const res = await fetch(`/api/vendors/advance-return?${params.toString()}`, { headers: { "x-company-id": session?.user?.companyId ?? "" } })
+      const res = await fetch(`/api/vendors/advance-return?${params.toString()}`, {
+        headers: { "x-company-id": companyId },
+      })
       const data = await res.json()
       const items: VendorAdvanceReturnRow[] = Array.isArray(data?.items) ? data.items : []
       const pag = data?.pagination || {}
@@ -82,179 +88,229 @@ export default function VendorAdvanceReturnPage() {
       setTotal(Number(pag?.total || 0))
       setPage(Number(pag?.page || page))
       setPageSize(Number(pag?.pageSize || pageSize))
-    } catch { } finally { setLoading(false) }
-  }, [session?.user?.companyId, page, pageSize, search, dateRange])
+    } catch {
+      toast.error("Failed to load advance returns")
+    } finally {
+      setLoading(false)
+    }
+  }, [companyId, page, pageSize, debouncedSearch, dateRange])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    load()
+  }, [load])
 
-  const handleRefresh = () => { load() }
-
-  const handleDelete = async () => {
-    if (!confirmDeleteId) return
-    setDeletingId(confirmDeleteId)
-    setConfirmDeleteId(null)
+  const handleDelete = async (id: string) => {
+    setDeletingId(id)
     try {
-      const res = await fetch(`/api/vendors/advance-return/${confirmDeleteId}`, { method: "DELETE", headers: { "x-company-id": session?.user?.companyId ?? "" } })
-      await res.json()
+      const res = await fetch(`/api/vendors/advance-return/${id}`, {
+        method: "DELETE",
+        headers: { "x-company-id": companyId },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(typeof data?.error === "string" ? data.error : "Delete failed")
+        return
+      }
+      toast.success("Record deleted")
       load()
-    } catch {}
-    setDeletingId(null)
+    } catch {
+      toast.error("Delete failed")
+    } finally {
+      setDeletingId(null)
+    }
   }
 
+  const columns = [
+    {
+      title: "SL.",
+      key: "sl",
+      width: 56,
+      render: (_: unknown, __: VendorAdvanceReturnRow, index: number) => (page - 1) * pageSize + index + 1,
+    },
+    {
+      title: "Return Date",
+      dataIndex: "returnDate",
+      key: "returnDate",
+      render: (d: string) => (d ? format(new Date(d), "dd-MM-yyyy") : "—"),
+    },
+    {
+      title: "Voucher No",
+      dataIndex: "voucherNo",
+      key: "voucherNo",
+      render: (text: string) => <Tag color="blue">{text}</Tag>,
+    },
+    {
+      title: "Vendor Name",
+      dataIndex: "vendorName",
+      key: "vendorName",
+      render: (text: string) => <span className="text-blue-600 font-medium">{text}</span>,
+    },
+    {
+      title: "Advance Amount",
+      dataIndex: "advanceAmount",
+      key: "advanceAmount",
+      align: "right" as const,
+      render: (n: number) => <span className="font-semibold">{n.toLocaleString()}</span>,
+    },
+    {
+      title: "Return Note",
+      dataIndex: "returnNote",
+      key: "returnNote",
+      ellipsis: true,
+      render: (t: string | undefined) => t || "—",
+    },
+    {
+      title: "Action",
+      key: "action",
+      width: 240,
+      render: (_: unknown, r: VendorAdvanceReturnRow) => (
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <TableRowActions
+            showView={false}
+            onEdit={() => {
+              setEditingRow(r)
+              setOpenEdit(true)
+            }}
+          />
+          <DeleteButton
+            onDelete={() => handleDelete(r.id)}
+            isLoading={deletingId === r.id}
+            title="Delete advance return"
+            description={`Delete voucher ${r.voucherNo}? This cannot be undone.`}
+            size="sm"
+          />
+        </div>
+      ),
+    },
+  ]
+
   return (
-    <PageWrapper breadcrumbs={[{ label: "Advance Return" }]}>
-        <Card className="mx-2">
-          <CardHeader className="space-y-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base font-semibold">Advance Return</CardTitle>
-              <FilterBar
-                dateRange={dateRange}
-                search={search}
-                onDateRangeChange={setDateRange}
-                onSearchChange={setSearch}
-                onRefresh={handleRefresh}
+    <PageWrapper breadcrumbs={[{ label: "Vendor Advance Return" }]}>
+      <div className="mx-4 mb-4 space-y-4">
+        <FilterToolbar
+          showDateRange
+          dateRange={dateRange}
+          onDateRangeChange={setDateRange}
+          showSearch
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search voucher, vendor, note..."
+          showRefresh
+          onRefresh={load}
+          className="flex-1"
+        >
+          <Button className="bg-sky-500 hover:bg-sky-600 shrink-0" onClick={() => setOpenAdd(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Advance Return
+          </Button>
+        </FilterToolbar>
+
+        <Card className="border-none shadow-none bg-transparent">
+          <CardContent className="p-0">
+            <div className="bg-white rounded-md border shadow-sm overflow-hidden">
+              <Table<VendorAdvanceReturnRow>
+                columns={columns}
+                dataSource={rows}
+                rowKey="id"
+                loading={loading}
+                pagination={{
+                  current: page,
+                  pageSize,
+                  total,
+                  onChange: (p, ps) => {
+                    setPage(p)
+                    setPageSize(ps)
+                  },
+                  showSizeChanger: true,
+                  showTotal: (t) => `Total ${t} items`,
+                }}
+                scroll={{ x: 960 }}
+                className="border-none"
               />
             </div>
-            <div>
-              <Button onClick={() => setOpenAdd(true)} className="bg-sky-500 hover:bg-sky-600">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Advance Return
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-gray-100">
-                  <TableHead className="w-12">SL.</TableHead>
-                  <TableHead>Return Date</TableHead>
-                  <TableHead>Voucher No</TableHead>
-                  <TableHead>Vendor Name</TableHead>
-                  <TableHead className="text-right">Advance Amount</TableHead>
-                  <TableHead>Return Note</TableHead>
-                  <TableHead>Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading && rows.length === 0 ? (
-                   <TableRow>
-                     <TableCell colSpan={7} className="text-center py-6 text-gray-500">Loading...</TableCell>
-                   </TableRow>
-                ) : filtered.map((r, idx) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="font-medium">{idx + 1}</TableCell>
-                    <TableCell>{r.returnDate ? format(new Date(r.returnDate), "dd-MM-yyyy") : "-"}</TableCell>
-                    <TableCell className="font-medium">{r.voucherNo}</TableCell>
-                    <TableCell className="text-blue-500 font-medium">{r.vendorName}</TableCell>
-                    <TableCell className="text-right font-semibold">{r.advanceAmount.toLocaleString()}</TableCell>
-                    <TableCell>{r.returnNote || ""}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Button variant="secondary" size="sm" className="bg-sky-500 hover:bg-sky-600 text-white hover:text-white">View</Button>
-                        <Button
-                          variant="default"
-                          size="sm"
-                          className="bg-sky-500 hover:bg-sky-600"
-                          onClick={() => { setEditingRow(r); setOpenEdit(true) }}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => setConfirmDeleteId(r.id)}
-                          disabled={deletingId === r.id}
-                        >
-                          {deletingId === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Delete"}
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {!loading && filtered.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-6 text-gray-500">No data</TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
           </CardContent>
         </Card>
+      </div>
 
       <VendorAdvanceReturnModal
         open={openAdd}
         mode="add"
         onOpenChange={setOpenAdd}
         onSubmit={async (payload) => {
-          try {
-            const body = {
+          const amount = Number(payload.advanceAmount || 0)
+          const res = await fetch("/api/vendors/advance-return", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-company-id": companyId },
+            body: JSON.stringify({
               vendorId: payload.vendorId,
               paymentMethod: payload.paymentMethod,
               accountId: payload.accountId,
-              accountName: payload.accountName,
-              advanceAmount: Number(payload.advanceAmount || 0),
-              amount: Number(payload.advanceAmount || 0),
+              accountName: payload.accountName ?? "",
+              amount,
               returnDate: payload.returnDate,
-              note: payload.returnNote || "",
-            }
-            const res = await fetch(`/api/vendors/advance-return`, { method: "POST", headers: { "Content-Type": "application/json", "x-company-id": session?.user?.companyId ?? "" }, body: JSON.stringify(body) })
-            await res.json()
-            load()
-          } catch {
+              note: payload.returnNote ?? "",
+            }),
+          })
+          const data = await res.json().catch(() => ({}))
+          if (!res.ok) {
+            toast.error(parseApiError(data))
+            return
           }
+          toast.success("Advance return created")
+          setOpenAdd(false)
+          load()
         }}
       />
 
       <VendorAdvanceReturnModal
         open={openEdit}
         mode="edit"
-        onOpenChange={(v) => { if (!v) setEditingRow(null); setOpenEdit(v) }}
-        initialValues={editingRow ? {
-          vendorId: editingRow.vendorId,
-          vendorName: editingRow.vendorName,
-          paymentMethod: editingRow.paymentType,
-          accountId: editingRow.accountId,
-          accountName: editingRow.paymentDetails,
-          advanceAmount: String(editingRow.advanceAmount),
-          returnDate: editingRow.returnDate,
-          returnNote: editingRow.returnNote || "",
-          presentBalance: "0",
-          availableBalance: "",
-        } : undefined}
+        onOpenChange={(v) => {
+          if (!v) setEditingRow(null)
+          setOpenEdit(v)
+        }}
+        initialValues={
+          editingRow
+            ? {
+                vendorId: editingRow.vendorId,
+                vendorName: editingRow.vendorName,
+                paymentMethod: editingRow.paymentType,
+                accountId: editingRow.accountId,
+                accountName: editingRow.paymentDetails,
+                advanceAmount: String(editingRow.advanceAmount),
+                returnDate: editingRow.returnDate,
+                returnNote: editingRow.returnNote || "",
+                presentBalance: "0",
+                availableBalance: "",
+              }
+            : undefined
+        }
         onSubmit={async (payload) => {
           if (!editingRow) return
-          try {
-            const body = {
+          const amount = Number(payload.advanceAmount || 0)
+          const res = await fetch(`/api/vendors/advance-return/${editingRow.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", "x-company-id": companyId },
+            body: JSON.stringify({
               paymentMethod: payload.paymentMethod,
               accountId: payload.accountId,
-              accountName: payload.accountName,
-              advanceAmount: Number(payload.advanceAmount || 0),
-              amount: Number(payload.advanceAmount || 0),
+              accountName: payload.accountName ?? "",
+              amount,
               returnDate: payload.returnDate,
-              note: payload.returnNote || "",
-            }
-            const res = await fetch(`/api/vendors/advance-return/${editingRow.id}`, { method: "PUT", headers: { "Content-Type": "application/json", "x-company-id": session?.user?.companyId ?? "" }, body: JSON.stringify(body) })
-            await res.json()
-            load()
-          } catch {
+              note: payload.returnNote ?? "",
+            }),
+          })
+          const data = await res.json().catch(() => ({}))
+          if (!res.ok) {
+            toast.error(parseApiError(data))
+            return
           }
+          toast.success("Updated")
+          setOpenEdit(false)
+          setEditingRow(null)
+          load()
         }}
       />
-      
-      <AlertDialog open={!!confirmDeleteId} onOpenChange={(o) => !o && setConfirmDeleteId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the record.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </PageWrapper>
   )
 }

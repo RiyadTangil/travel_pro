@@ -21,6 +21,54 @@ function parseNumber(val: any, fallback = 0) {
   return isNaN(n) ? fallback : n
 }
 
+/** Cost attributed to vendor for balance (stored totalCost, else cost × qty). */
+function effectiveVendorLineCost(item: any): number {
+  const tc = parseNumber(item?.totalCost, 0)
+  if (tc > 0) return tc
+  const q = parseNumber(item?.quantity, 1)
+  const cp = parseNumber(item?.costPrice, 0)
+  return q * cp
+}
+
+function normalizeVendorObjectId(raw: any): Types.ObjectId | null {
+  if (raw == null || raw === "") return null
+  const s = String(raw).trim()
+  if (!Types.ObjectId.isValid(s)) return null
+  return new Types.ObjectId(s)
+}
+
+/**
+ * Adjust vendor invoice-cost balance. Positive delta = new cost (sets type due like legacy).
+ * Negative delta = revert; only $inc + updatedAt so type is not overwritten.
+ */
+async function adjustVendorInvoiceCostBalance(
+  vendorId: Types.ObjectId,
+  delta: number,
+  now: string,
+  session: mongoose.ClientSession
+) {
+  if (!delta) return
+  if (delta > 0) {
+    await Vendor.updateOne(
+      { _id: vendorId },
+      { $inc: { "presentBalance.amount": delta }, $set: { "presentBalance.type": "due", updatedAt: now } },
+      { session }
+    )
+  } else {
+    await Vendor.updateOne(
+      { _id: vendorId },
+      { $inc: { "presentBalance.amount": delta }, $set: { updatedAt: now } },
+      { session }
+    )
+  }
+}
+
+function pickVendorIdFromItem(i: any): any {
+  const raw = i.vendor ?? i.billing_comvendor ?? i.vendorId
+  if (raw && typeof raw === "object" && "_id" in raw) return String((raw as any)._id)
+  return raw
+}
+
 function normalizePayload(body: any) {
   const invoiceType = body.invoiceType || "standard"
   const general = body.general || body
@@ -53,7 +101,7 @@ function normalizePayload(body: any) {
       totalSales: parseNumber(i.totalSales ?? i.billing_total_sales ?? i.billing_subtotal ?? 0),
       totalCost: parseNumber(i.totalCost ?? 0),
       profit: parseNumber(i.profit ?? i.billing_profit ?? 0),
-      vendorId: i.vendor || i.billing_comvendor || i.vendorId,
+      vendorId: pickVendorIdFromItem(i),
       // Visa specific fields flattened directly for saving 
       country: i.country,
       visaType: i.visaType,
@@ -79,7 +127,7 @@ function normalizePayload(body: any) {
         totalSales: parseNumber(i.totalSales ?? i.billing_total_sales ?? i.billing_subtotal ?? 0),
         totalCost: parseNumber(i.totalCost ?? 0),
         profit: parseNumber(i.profit ?? i.billing_profit ?? 0),
-        vendorId: i.vendor || i.billing_comvendor || i.vendorId,
+        vendorId: pickVendorIdFromItem(i),
       }
     })
   }
@@ -610,7 +658,7 @@ export async function createNonCommissionInvoice(body: any, companyId: string) {
           invoiceId,
           referenceId: ticketId,
           itemType: "ticket",
-          product: "Non-Commission Ticket",
+          product: "non_commission_ticket",
           paxName: ticketDetails.paxName || "",
           description: `Ticket: ${ticketDetails.ticketNo} | Route: ${ticketDetails.route}`,
           quantity: 1,
@@ -664,11 +712,10 @@ export async function createNonCommissionInvoice(body: any, companyId: string) {
 
         // e. Update Vendor Balance
         if (ticketDetails.vendor && parseNumber(ticketDetails.purchasePrice, 0) > 0) {
-          await Vendor.updateOne(
-            { _id: new Types.ObjectId(ticketDetails.vendor), companyId: companyIdObj },
-            { $inc: { "presentBalance.amount": parseNumber(ticketDetails.purchasePrice, 0) }, $set: { "presentBalance.type": "due" } },
-            { session }
-          )
+          const vOid = normalizeVendorObjectId(ticketDetails.vendor)
+          if (vOid) {
+            await adjustVendorInvoiceCostBalance(vOid, parseNumber(ticketDetails.purchasePrice, 0), now, session)
+          }
         }
       }
 
@@ -886,7 +933,7 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
           invoiceId: invId,
           referenceId: ticketId,
           itemType: "ticket",
-          product: "Non-Commission Ticket",
+          product: "non_commission_ticket",
           paxName: ticketDetails.paxName || "",
           description: `Ticket: ${ticketDetails.ticketNo} | Route: ${ticketDetails.route}`,
           quantity: 1,
@@ -980,16 +1027,17 @@ export async function deleteInvoiceById(id: string, companyId: string) {
       const vendorCostsMap = new Map<string, number>()
       
       for (const item of existingItems) {
-        if (item.vendorId && (item.totalCost || 0) > 0) {
+        const lineCost = effectiveVendorLineCost(item)
+        if (item.vendorId && lineCost > 0) {
           const vId = String(item.vendorId)
-          vendorCostsMap.set(vId, (vendorCostsMap.get(vId) || 0) + Number(item.totalCost || 0))
+          vendorCostsMap.set(vId, (vendorCostsMap.get(vId) || 0) + lineCost)
         }
       }
 
       // 2. Bulk update vendors
       if (vendorCostsMap.size > 0) {
-        const vendorIds = Array.from(vendorCostsMap.keys())
-        const vendors = await Vendor.find({ _id: { $in: vendorIds }, companyId: companyIdObj }).session(session)
+        const vendorIds = Array.from(vendorCostsMap.keys()).filter((id) => Types.ObjectId.isValid(id))
+        const vendors = await Vendor.find({ _id: { $in: vendorIds.map((id) => new Types.ObjectId(id)) } }).session(session)
         
         for (const vendor of vendors) {
           const revertAmount = vendorCostsMap.get(String(vendor._id)) || 0
@@ -1135,14 +1183,12 @@ export async function createInvoice(body: any, companyId: string) {
           createdAt: now, 
           updatedAt: now 
         })), { session })
-        
+
         for (const item of billingItems) {
-          if (item.vendorId && Types.ObjectId.isValid(item.vendorId) && item.totalCost > 0) {
-            await Vendor.updateOne(
-              { _id: new Types.ObjectId(item.vendorId), companyId: companyIdObj },
-              { $inc: { "presentBalance.amount": item.totalCost }, $set: { "presentBalance.type": "due", updatedAt: now } },
-              { session }
-            )
+          const vOid = normalizeVendorObjectId(item.vendorId)
+          const lineCost = effectiveVendorLineCost(item)
+          if (vOid && lineCost > 0) {
+            await adjustVendorInvoiceCostBalance(vOid, lineCost, now, session)
           }
         }
       }
@@ -1257,12 +1303,10 @@ export async function updateInvoiceById(id: string, body: any, companyId: string
       // 2. Revert Old Vendor Balances
       const oldItems = await InvoiceItem.find({ invoiceId: id, companyId: companyIdObj }).session(session)
       for (const item of oldItems) {
-        if (item.vendorId && item.totalCost > 0) {
-          await Vendor.updateOne(
-            { _id: item.vendorId, companyId: companyIdObj },
-            { $inc: { "presentBalance.amount": -item.totalCost }, $set: { updatedAt: now } },
-            { session }
-          )
+        const vOid = item.vendorId ? normalizeVendorObjectId(item.vendorId) : null
+        const lineCost = effectiveVendorLineCost(item)
+        if (vOid && lineCost > 0) {
+          await adjustVendorInvoiceCostBalance(vOid, -lineCost, now, session)
         }
       }
 
@@ -1286,14 +1330,12 @@ export async function updateInvoiceById(id: string, body: any, companyId: string
           createdAt: now, 
           updatedAt: now 
         })), { session })
-        
+
         for (const item of billingItems) {
-          if (item.vendorId && Types.ObjectId.isValid(item.vendorId) && item.totalCost > 0) {
-            await Vendor.updateOne(
-              { _id: new Types.ObjectId(item.vendorId), companyId: companyIdObj },
-              { $inc: { "presentBalance.amount": item.totalCost }, $set: { "presentBalance.type": "due", updatedAt: now } },
-              { session }
-            )
+          const vOid = normalizeVendorObjectId(item.vendorId)
+          const lineCost = effectiveVendorLineCost(item)
+          if (vOid && lineCost > 0) {
+            await adjustVendorInvoiceCostBalance(vOid, lineCost, now, session)
           }
         }
       }

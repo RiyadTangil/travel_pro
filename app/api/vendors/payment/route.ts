@@ -26,6 +26,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result)
   } catch (error: any) {
     console.error("Create Vendor Payment Error:", error)
-    return NextResponse.json({ error: error.message || "Failed to create payment" }, { status: error.statusCode || 500 })
+    return NextResponse.json({ error: error.message || "Failed to create payment" }, { status: error.status ?? 500 })
   }
 }

@@ -37,6 +37,7 @@ export default function PaymentModal({ open, onOpenChange, onSubmit, accountsPre
     defaultValues: {
       paymentTo: "overall",
       invoiceId: "",
+      ticketVendorId: "",
       invoiceVendors: [] as any[],
       vendorId: "",
       presentBalance: 0,
@@ -55,7 +56,7 @@ export default function PaymentModal({ open, onOpenChange, onSubmit, accountsPre
     }
   })
 
-  const { register, handleSubmit, setValue, watch, reset } = methods
+  const { register, handleSubmit, setValue, watch, reset, getValues } = methods
   const isEdit = !!initialData
 
   useEffect(() => {
@@ -65,6 +66,7 @@ export default function PaymentModal({ open, onOpenChange, onSubmit, accountsPre
         reset({
           paymentTo: initialData.paymentTo || "overall",
           invoiceId: initialData.invoiceId || "",
+          ticketVendorId: initialData.ticketVendorId || "",
           invoiceVendors: initialData.invoiceVendors || [],
           vendorId: initialData.vendorId || "",
           presentBalance: 0, // Will be fetched
@@ -86,6 +88,7 @@ export default function PaymentModal({ open, onOpenChange, onSubmit, accountsPre
         reset({
           paymentTo: "overall",
           invoiceId: "",
+          ticketVendorId: "",
           invoiceVendors: [],
           vendorId: "",
           presentBalance: 0,
@@ -230,18 +233,53 @@ export default function PaymentModal({ open, onOpenChange, onSubmit, accountsPre
     setValue("totalAmount", total)
   }, [amount, vendorAit, setValue])
 
-  const [submitting, setSubmitting] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    if (open) setFieldErrors({})
+  }, [open])
 
   const onFormSubmit = async (data: any) => {
+    const errs: Record<string, boolean> = {}
+    const pm = data.paymentMethod || paymentMethod
+    const acc = data.accountId || accountId
+    const pTo = data.paymentTo || paymentTo
+    const vId = data.vendorId || vendorId
+    const total = Number(data.totalAmount) || 0
+
+    if (!pm) errs.paymentMethod = true
+    if (!acc) errs.accountId = true
+    if (total <= 0) errs.amount = true
+
+    if (pTo === "invoice") {
+      const inv = data.invoiceId ?? getValues("invoiceId")
+      const iv = (data.invoiceVendors ?? getValues("invoiceVendors")) || []
+      if (!inv) errs.invoiceId = true
+      const sum = Array.isArray(iv) ? iv.reduce((s: number, row: any) => s + (Number(row?.amount) || 0), 0) : 0
+      if (!Array.isArray(iv) || iv.length === 0 || sum <= 0) errs.invoiceVendors = true
+    } else if (pTo === "ticket") {
+      const tv = data.ticketVendorId ?? getValues("ticketVendorId")
+      const iv = (data.invoiceVendors ?? getValues("invoiceVendors")) || []
+      if (!tv) errs.ticketVendorId = true
+      const sum = Array.isArray(iv) ? iv.reduce((s: number, row: any) => s + (Number(row?.amount) || 0), 0) : 0
+      const linesOk =
+        Array.isArray(iv) &&
+        iv.length > 0 &&
+        iv.every((row: any) => row?.invoiceItemId && String(row.invoiceItemId).length > 0)
+      if (!linesOk || sum <= 0) errs.invoiceVendors = true
+    } else if (!vId) {
+      errs.vendorId = true
+    }
+
+    if (data.referPassport === "yes" && !(data.passportNo || "").trim()) errs.passportNo = true
+
+    setFieldErrors(errs)
+    if (Object.keys(errs).length) return
+
     try {
-      setSubmitting(true)
       await onSubmit(data)
-      // reset() // Let parent handle reset/close if needed or do it here
-      onOpenChange(false)
     } catch (error) {
       console.error(error)
-    } finally {
-      setSubmitting(false)
     }
   }
 
@@ -249,7 +287,7 @@ export default function PaymentModal({ open, onOpenChange, onSubmit, accountsPre
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Add Payment</DialogTitle>
+          <DialogTitle>{isEdit ? "Edit Payment" : "Add Payment"}</DialogTitle>
         </DialogHeader>
 
         <FormProvider {...methods}>
@@ -261,9 +299,20 @@ export default function PaymentModal({ open, onOpenChange, onSubmit, accountsPre
               {/* Payment To */}
               <div className="space-y-2">
                 <Label>Payment To</Label>
-                <Select 
-                  onValueChange={(val) => setValue("paymentTo", val)} 
-                  defaultValue={paymentTo}
+                <Select
+                  onValueChange={(val) => {
+                    setValue("paymentTo", val)
+                    if (val !== "invoice") {
+                      setValue("invoiceId", "")
+                    }
+                    if (val !== "ticket") {
+                      setValue("ticketVendorId", "")
+                    }
+                    if (val !== "invoice" && val !== "ticket") {
+                      setValue("invoiceVendors", [])
+                    }
+                  }}
+                  value={paymentTo}
                   disabled={isEdit}
                 >
                   <SelectTrigger>
@@ -273,32 +322,44 @@ export default function PaymentModal({ open, onOpenChange, onSubmit, accountsPre
                     <SelectItem value="overall">Overall</SelectItem>
                     <SelectItem value="invoice">Specific Invoice</SelectItem>
                     <SelectItem value="advance">Advance Payment</SelectItem>
-                    <SelectItem value="adjust">Adjust With Due</SelectItem>
+                    <SelectItem value="ticket">Specific Ticket</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               {/* Invoice Selection (Only visible when paymentTo is 'invoice') */}
               {paymentTo === "invoice" && (
-                <SpecificInvoicePayment mode="select-only" disabled={isEdit} />
+                <div className={cn(fieldErrors.invoiceId && "rounded-md ring-2 ring-red-500 ring-offset-2 p-1")}>
+                  <SpecificInvoicePayment mode="select-only" disabled={isEdit} variant="invoice" />
+                </div>
+              )}
+              {paymentTo === "ticket" && (
+                <div className={cn(fieldErrors.ticketVendorId && "rounded-md ring-2 ring-red-500 ring-offset-2 p-1")}>
+                  <SpecificInvoicePayment mode="select-only" disabled={isEdit} variant="ticket" />
+                </div>
               )}
             </div>
 
-            {/* Vendor Rows (Only visible when paymentTo is 'invoice') */}
             {paymentTo === "invoice" ? (
-              <div className="md:col-span-2">
-                <SpecificInvoicePayment mode="table-only" />
+              <div className={cn("md:col-span-2", fieldErrors.invoiceVendors && "rounded-md ring-2 ring-red-500 ring-offset-2 p-1")}>
+                <SpecificInvoicePayment mode="table-only" variant="invoice" />
+              </div>
+            ) : paymentTo === "ticket" ? (
+              <div className={cn("md:col-span-2", fieldErrors.invoiceVendors && "rounded-md ring-2 ring-red-500 ring-offset-2 p-1")}>
+                <SpecificInvoicePayment mode="table-only" variant="ticket" />
               </div>
             ) : (
               <>
                 {/* Select Vendor */}
                 <div className="space-y-2">
-                  <Label>Select Vendor</Label>
-                  <VendorSelect 
-                    value={watch("vendorId")}
-                    onChange={(id) => setValue("vendorId", id || "")}
-                    placeholder="Select Vendor"
-                  />
+                  <Label>Select Vendor <span className="text-red-500">*</span></Label>
+                  <div className={cn(fieldErrors.vendorId && "rounded-md ring-2 ring-red-500 ring-offset-2 p-1")}>
+                    <VendorSelect 
+                      value={watch("vendorId")}
+                      onChange={(id) => setValue("vendorId", id || "")}
+                      placeholder="Select Vendor"
+                    />
+                  </div>
                 </div>
 
                 {/* Present Balance */}
@@ -329,18 +390,18 @@ export default function PaymentModal({ open, onOpenChange, onSubmit, accountsPre
 
             {/* Payment Method */}
             <div className="space-y-2">
-              <Label>Payment Method</Label>
-              <Select 
+              <Label>Payment Method <span className="text-red-500">*</span></Label>
+              <Select
+                value={paymentMethod}
                 onValueChange={(val) => {
                   setValue("paymentMethod", val)
-                  setValue("accountId", "") // Reset account when method changes
+                  setValue("accountId", "")
                 }}
                 disabled={isEdit}
-                value={paymentMethod} // Controlled value ensures display updates even if disabled
               >
-                <SelectTrigger>
+                <SelectTrigger className={cn(fieldErrors.paymentMethod && "border-red-500 focus:ring-red-500")}>
                   <SelectValue placeholder="Select Method" />
-                </SelectTrigger>
+                  </SelectTrigger>
                 <SelectContent>
                   {paymentMethodOptions.map((method) => (
                     <SelectItem key={method} value={method}>{method}</SelectItem>
@@ -351,15 +412,15 @@ export default function PaymentModal({ open, onOpenChange, onSubmit, accountsPre
 
             {/* Account */}
             <div className="space-y-2">
-              <Label>Account</Label>
+              <Label>Account <span className="text-red-500">*</span></Label>
               <Select 
                 onValueChange={(val) => setValue("accountId", val)}
                 value={accountId}
                 disabled={!paymentMethod}
               >
-                <SelectTrigger>
+                <SelectTrigger className={cn(fieldErrors.accountId && "border-red-500 focus:ring-red-500")}>
                   <SelectValue placeholder={paymentMethod ? "Select Account" : "Select Method First"} />
-                </SelectTrigger>
+                  </SelectTrigger>
                 <SelectContent>
                   {filteredAccounts.map((acc) => (
                     <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>
@@ -381,13 +442,16 @@ export default function PaymentModal({ open, onOpenChange, onSubmit, accountsPre
 
             {/* Amount */}
             <div className="space-y-2">
-              <Label>Amount</Label>
+              <Label>Amount <span className="text-red-500">*</span></Label>
               <Input 
                 type="number" 
                 placeholder="0.00"
                 {...register("amount")} 
-                readOnly={paymentTo === "invoice"} // Amount is auto-calculated for invoice
-                className={paymentTo === "invoice" ? "bg-muted" : ""}
+                readOnly={paymentTo === "invoice" || paymentTo === "ticket"}
+                className={cn(
+                  paymentTo === "invoice" || paymentTo === "ticket" ? "bg-muted" : "",
+                  fieldErrors.amount && "border-red-500 focus-visible:ring-red-500"
+                )}
               />
             </div>
 
@@ -441,10 +505,11 @@ export default function PaymentModal({ open, onOpenChange, onSubmit, accountsPre
             {/* Conditional Passport Field */}
             {referPassport === "yes" && (
               <div className="space-y-2">
-                <Label>Passport No</Label>
+                <Label>Passport No <span className="text-red-500">*</span></Label>
                 <Input 
                   placeholder="Enter Passport Number"
                   {...register("passportNo")} 
+                  className={cn(fieldErrors.passportNo && "border-red-500 focus-visible:ring-red-500")}
                 />
               </div>
             )}

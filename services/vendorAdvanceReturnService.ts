@@ -53,16 +53,18 @@ export async function createVendorAdvanceReturn(data: any) {
       companyId,
       vendorId,
       returnDate,
-      amount,
       paymentMethod,
       accountId,
       accountName,
-      note
+      note,
     } = data
+
+    const amount = Number(data.amount ?? data.advanceAmount ?? 0)
 
     if (!companyId) throw new AppError("Company ID is required", 400)
     if (!vendorId) throw new AppError("Vendor is required", 400)
     if (!accountId) throw new AppError("Account is required", 400)
+    if (!amount || amount <= 0) throw new AppError("Amount must be greater than zero", 400)
 
     const voucherNo = await getNextVoucherNo()
 
@@ -139,22 +141,29 @@ export async function updateVendorAdvanceReturn(id: string, data: any) {
 
     // Apply New Data
     const merged = { ...existing.toObject(), ...data }
+    const amount = Number(merged.amount ?? merged.advanceAmount ?? 0)
     const {
       companyId,
       vendorId,
       returnDate,
-      amount,
       paymentMethod,
       accountId,
       accountName,
-      note
+      note,
     } = merged
 
-    // Update Doc
-    await VendorAdvanceReturn.findByIdAndUpdate(id, {
-      ...data,
-      updatedAt: new Date().toISOString()
-    }, { session })
+    if (!amount || amount <= 0) throw new AppError("Amount must be greater than zero", 400)
+
+    // Update Doc (persist normalized amount; strict schema ignores advanceAmount)
+    await VendorAdvanceReturn.findByIdAndUpdate(
+      id,
+      {
+        ...data,
+        amount,
+        updatedAt: new Date().toISOString(),
+      },
+      { session }
+    )
 
     // Apply New Impact
     // Vendor: Subtract new amount

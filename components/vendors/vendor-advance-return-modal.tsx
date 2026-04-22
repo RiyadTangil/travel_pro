@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import VendorSelect from "@/components/vendors/vendor-select"
 import type { AccountType } from "@/components/accounts/types"
 import { useInvoiceLookups } from "@/hooks/useInvoiceLookups"
+import { cn } from "@/lib/utils"
 
 type FormValues = {
   vendorId: string
@@ -69,10 +70,14 @@ export default function VendorAdvanceReturnModal({ open, onOpenChange, mode, ini
 
   const [paymentMethodOptions, setPaymentMethodOptions] = useState<AccountType[]>([])
   const [submitting, setSubmitting] = useState(false)
+  const [submitAttempted, setSubmitAttempted] = useState(false)
 
   // Fetch Payment Methods
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      setSubmitAttempted(false)
+      return
+    }
     const ctrl = new AbortController()
       ; (async () => {
         try {
@@ -179,8 +184,26 @@ export default function VendorAdvanceReturnModal({ open, onOpenChange, mode, ini
   }, [watch("accountId"), filteredAccounts])
 
   const onSubmitInternal = async (vals: FormValues) => {
+    setSubmitAttempted(true)
     if (!vals.vendorId) {
       setError("vendorId", { type: "required", message: "Vendor is required" })
+      return
+    }
+    if (!vals.paymentMethod) {
+      setError("paymentMethod", { type: "required", message: "Required" })
+      return
+    }
+    if (!vals.accountId) {
+      setError("accountId", { type: "required", message: "Account is required" })
+      return
+    }
+    if (!vals.returnDate) {
+      setError("returnDate", { type: "required", message: "Date is required" })
+      return
+    }
+    const amt = Number(vals.advanceAmount)
+    if (!vals.advanceAmount || !Number.isFinite(amt) || amt <= 0) {
+      setError("advanceAmount", { type: "required", message: "Enter a valid amount" })
       return
     }
     const acc = filteredAccounts.find(a => a.id === vals.accountId)
@@ -214,34 +237,37 @@ export default function VendorAdvanceReturnModal({ open, onOpenChange, mode, ini
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>{requiredMark("Select vendor:", true)}</Label>
-                  <VendorSelect
-                    value={watch("vendorId")}
-                    preloaded={vendors}
-                    placeholder="Select Vendor"
-                    onChange={(id, selected) => {
-                      setValue("vendorId", id || "", { shouldValidate: true })
-                      setValue("vendorName", selected?.name || "")
-                    }}
-                  />
+                  <div className={cn(submitAttempted && errors.vendorId && "rounded-md ring-2 ring-red-500 ring-offset-2 p-1")}>
+                    <VendorSelect
+                      value={watch("vendorId")}
+                      preloaded={vendors}
+                      placeholder="Select Vendor"
+                      onChange={(id, selected) => {
+                        setValue("vendorId", id || "", { shouldValidate: true })
+                        setValue("vendorName", selected?.name || "")
+                      }}
+                    />
+                  </div>
                   {errors.vendorId && <div className="text-red-500 text-xs">Vendor is required</div>}
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Payment method:</Label>
+                  <Label>{requiredMark("Payment method:", true)}</Label>
                   <Select value={watch("paymentMethod")} onValueChange={(v) => setValue("paymentMethod", v)}>
-                    <SelectTrigger>
+                    <SelectTrigger className={cn(submitAttempted && errors.paymentMethod && "border-red-500 focus:ring-red-500")}>
                       <SelectValue placeholder="Select Payment method" />
                     </SelectTrigger>
                     <SelectContent>
                       {paymentMethodOptions.map((m) => (<SelectItem key={m} value={m}>{m}</SelectItem>))}
                     </SelectContent>
                   </Select>
+                  {errors.paymentMethod && <div className="text-red-500 text-xs">Payment method is required</div>}
                 </div>
 
                 <div className="space-y-2">
                   <Label>{requiredMark("Select account:", true)}</Label>
                   <Select value={watch("accountId")} onValueChange={(v) => setValue("accountId", v, { shouldValidate: true })} disabled={!paymentMethod}>
-                    <SelectTrigger>
+                    <SelectTrigger className={cn(submitAttempted && errors.accountId && "border-red-500 focus:ring-red-500")}>
                       <SelectValue placeholder="Select an account" />
                     </SelectTrigger>
                     <SelectContent>
@@ -256,6 +282,7 @@ export default function VendorAdvanceReturnModal({ open, onOpenChange, mode, ini
                   <DateInput
                     value={watch("returnDate") ? new Date(watch("returnDate")) : undefined}
                     onChange={(d) => setValue("returnDate", d ? d.toISOString().slice(0, 10) : "", { shouldValidate: true })}
+                    className={cn(submitAttempted && errors.returnDate && "border-red-500 ring-red-500")}
                   />
                   {errors.returnDate && <div className="text-red-500 text-xs">Date is required</div>}
                 </div>
@@ -278,8 +305,9 @@ export default function VendorAdvanceReturnModal({ open, onOpenChange, mode, ini
                     type="number" 
                     placeholder="Advance amount" 
                     {...register("advanceAmount", { required: true, min: 0 })} 
+                    className={cn(submitAttempted && errors.advanceAmount && "border-red-500 focus-visible:ring-red-500")}
                   />
-                  {errors.advanceAmount && <div className="text-red-500 text-xs">Amount is required</div>}
+                  {errors.advanceAmount && <div className="text-red-500 text-xs">{errors.advanceAmount.message || "Amount is required"}</div>}
                 </div>
 
                 <div className="space-y-2">

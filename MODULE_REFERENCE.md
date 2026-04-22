@@ -213,3 +213,267 @@ User posts **EX-0001** with two lines (Fuel 500, Office 300) from **Bank A** →
 ---
 
 <!-- Next module: copy the pattern (## N. Name, table, example, code paths). -->
+
+---
+
+## 10. Vendors (list / create / update / delete / status)
+
+**Total operations: 6**
+
+| # | Operation | Trigger | Collections touched |
+|---|-----------|---------|---------------------|
+| **1** | **List** | `GET /api/vendors?page&pageSize&search` + `x-company-id` | `vendors` (read, paginated, text search on name/mobile/email) |
+| **2** | **Create** | `POST /api/vendors` | `vendors` insert; if `openingBalance > 0` → also **bill adjustment opening** (§1 flow 6): `bill_adjustments`, `client_transactions`, `counters` |
+| **3** | **Update** | `PUT /api/vendors/[id]` | `vendors` (raw `updateOne`, native MongoDB driver) |
+| **4** | **Delete** | `DELETE /api/vendors/[id]` | `vendors` hard delete — only allowed when `presentBalance.amount === 0` |
+| **5** | **Toggle status** | `PATCH /api/vendors/[id]` `{ active }` | `vendors.active` field |
+| **6** | **View** | `GET /api/vendors/[id]` | `vendors` (read single document) |
+
+### Vendor `presentBalance` shape
+
+```
+presentBalance: { type: "due" | "advance", amount: number }
+```
+
+- `type: "due"` — company owes money **to** the vendor (vendor performed service, not yet paid).
+- `type: "advance"` — company paid **more** than owed; vendor holds a credit.
+- `amount` is always positive; direction is encoded in `type`.
+
+### Example
+
+1. **Create** vendor "Omor Faruk" with opening due **5,000** → `vendors` row inserted with `presentBalance: { type: "due", amount: 5000 }`; bill-adjustment service also fires: `bill_adjustments` +1 (`opening_balance`), `client_transactions` +1, `counters` +1.
+2. **List** with search "Omor" → `GET /api/vendors?search=Omor` returns matching rows.
+3. **Update** mobile number → `PUT /api/vendors/[id]` patches the `vendors` document.
+4. **Toggle inactive** → `PATCH /api/vendors/[id]` sets `active: false`; row still appears in list but disabled.
+5. **Delete** attempted while balance is due → API returns 403 ("Settle balance first"); once balance is 0 → `vendors` row removed.
+
+**Code:** `app/api/vendors/route.ts`, `app/api/vendors/[id]/route.ts`, `services/vendorService.ts` (if exists) or inline in routes, UI `app/dashboard/vendors/page.tsx`, `components/vendors/vendor-table.tsx`, `components/vendors/vendor-add-modal.tsx`, `components/vendors/vendor-view-modal.tsx`.
+
+**UI:** `FilterToolbar` (search + refresh + Add Vendor), Ant `Table` with name linked to vendor ledger report, `StatusSwitch` per row, **"+ Add Payment"** button visible only when `presentBalance.amount !== 0` (opens `PaymentModal` pre-filled with the vendor — no redirect needed).
+
+---
+
+## 11. Vendor Advance Return
+
+**Total operations: 4** (voucher prefix **`ADVR-####`**; counter key **`vendor_advance_return_voucher`** on `counters`).
+
+**Purpose:** Records the return of a previously given advance from a vendor. The vendor's advance balance decreases and the company's account balance increases.
+
+| # | Operation | Trigger | Collections touched |
+|---|-----------|---------|---------------------|
+| **1** | **List** | `GET /api/vendors/advance-return?page&pageSize&search&dateFrom&dateTo` + `x-company-id` | `vendor_advance_returns` (read, paginated; search on `voucherNo`, `note`) |
+| **2** | **Create** | `POST /api/vendors/advance-return` | `vendor_advance_returns` +1; `vendors.presentBalance` (advance ↓ by amount); `accounts.lastBalance` +amount; `client_transactions` +1 (`VENDOR_ADVANCE_RETURN`, direction `receiv`) |
+| **3** | **Update** | `PUT /api/vendors/advance-return/[id]` | Full reversal then re-apply: reverts old `vendors` + `accounts` + deletes old `client_transactions`; applies new values in same transaction |
+| **4** | **Delete** | `DELETE /api/vendors/advance-return/[id]` | Reverses: `vendors.presentBalance` advance +amount; `accounts.lastBalance` −amount; deletes `client_transactions` row; deletes `vendor_advance_returns` row |
+
+### Balance mechanics
+
+- **Create:** `vendors.presentBalance` advance decreases by `amount` (if advance balance drops below zero, it flips to `due`). `accounts.lastBalance` increases by `amount` (money received into the account).
+- **Delete:** Fully reversed — vendor advance restored, account balance reduced.
+
+### Example
+
+Vendor "Shahadat" has advance balance **10,000**. Company retrieves **3,000** back via bank transfer:
+
+1. **Create** ADVR-0001: `vendor_advance_returns` +1; `vendors.presentBalance` becomes `{ type: "advance", amount: 7000 }`; `accounts["Main Bank"].lastBalance` +3,000; `client_transactions` ledger row `VENDOR_ADVANCE_RETURN`, direction `receiv`.
+2. **Edit** to change amount to **4,000**: old entry reversed (advance back to 10,000, account −3,000, ledger deleted); new entry applied (advance → 6,000, account +4,000, new ledger row).
+3. **Delete** ADVR-0001: `vendors.presentBalance` advance → 10,000 (restored), `accounts["Main Bank"].lastBalance` −4,000, ledger row deleted, `vendor_advance_returns` row deleted.
+
+**Code:** `services/vendorAdvanceReturnService.ts`, `controllers/vendorAdvanceReturnController.ts`, `app/api/vendors/advance-return/*`, `models/vendor-advance-return.ts`, UI `app/dashboard/vendors/advance-return/page.tsx`.
+
+**UI:** `FilterToolbar` (date range, search, refresh, Add), Ant `Table`, inline `AddModal` and `EditModal` (Shadcn Dialog), inline `fetch` calls for API.
+
+---
+
+## 12. Vendor Payment
+
+**Total operations: 6** (voucher prefix **`VP-####`**; counter key **`vendor_payment_voucher`** on `counters`).
+
+**Purpose:** Records a payment made **to** a vendor. Four distinct payment types control which collections are affected and how the payment is linked to invoice items.
+
+| # | Operation | Trigger | Collections touched (always) |
+|---|-----------|---------|------------------------------|
+| **1** | **List** | `GET /api/vendors/payment?page&pageSize&search&startDate&endDate` + `x-company-id` | `vendor_payments` (read, paginated) |
+| **2** | **Create** | `POST /api/vendors/payment` | `vendor_payments`, `vendors.presentBalance`, `accounts.lastBalance`, `client_transactions`; **+ type-specific** (see below) |
+| **3** | **Update** | `PUT /api/vendors/payment/[id]` | Full reversal then re-apply across all same collections |
+| **4** | **Delete** | `DELETE /api/vendors/payment/[id]` | Reverses all balance and ledger effects; for "invoice"/"ticket" also restores `invoice_items.paidAmount` |
+| **5** | **View** | `GET /api/vendors/payment/[id]` | `vendor_payments` (read, populated) |
+| **6** | **Allocate** | `POST /api/vendors/payment/[id]/allocations` | `vendor_payment_allocations`, `invoice_items.paidAmount` (only for "overall"/"advance" type) |
+
+### Payment types
+
+#### Type 1 — Overall (`paymentTo: "overall"`)
+
+A general payment to a vendor not linked to any specific invoice or ticket.
+
+**Collections affected:**
+
+| Collection | Change |
+|-----------|--------|
+| `vendor_payments` | +1 row (`paymentTo: "overall"`) |
+| `vendors` | `presentBalance` reduced by `amount` (due ↓ or advance ↑) |
+| `accounts` | `lastBalance` −`totalAmount` (money out) |
+| `client_transactions` | +1 row (`VENDOR_PAYMENT`, direction `payout`) |
+
+**Allocation (post-payment):** After creating an Overall payment, the user can open the payment view page and click **"Add Invoice"** to allocate the amount to specific vendor invoice items. Each allocation:
+- Creates a `vendor_payment_allocations` row
+- Updates `invoice_items.paidAmount` and `dueAmount` for that vendor's items in the chosen invoice
+
+**Example:**
+
+Company pays **20,000** to vendor "Omor Faruk" (overall, no invoice reference) via "Main Bank":
+- `vendor_payments` +1 (`VP-0001`, `paymentTo: "overall"`, `amount: 20000`)
+- `vendors["Omor Faruk"].presentBalance` due decreases by 20,000 (e.g. 30,000 → 10,000 due)
+- `accounts["Main Bank"].lastBalance` −20,000
+- `client_transactions` +1 (`VENDOR_PAYMENT`, `payout`, `amount: 20000`)
+
+User then allocates 12,000 to Invoice INV-001 and 8,000 to INV-002:
+- `vendor_payment_allocations` +2 rows
+- `invoice_items` for vendor in INV-001: `paidAmount` +12,000
+- `invoice_items` for vendor in INV-002: `paidAmount` +8,000
+
+**Delete VP-0001:** `vendors.presentBalance` due +20,000 (restored), `accounts.lastBalance` +20,000, `client_transactions` row deleted, `vendor_payments` deleted.
+
+---
+
+#### Type 2 — Advance (`paymentTo: "advance"`)
+
+Pre-payment to a vendor before any invoice is raised. Increases vendor's advance balance.
+
+**Collections affected:**
+
+| Collection | Change |
+|-----------|--------|
+| `vendor_payments` | +1 row (`paymentTo: "advance"`) |
+| `vendors` | `presentBalance` shifts toward advance (net += amount) |
+| `accounts` | `lastBalance` −`totalAmount` |
+| `client_transactions` | +1 row (`VENDOR_ADVANCE`, direction `payout`) |
+
+**Allocation (post-payment):** Same as Overall — user can later allocate advance amounts to specific invoice items via the payment view page.
+
+**Example:**
+
+Company pre-pays **15,000** to vendor "Shahadat" (advance) via Cash:
+- `vendor_payments` +1 (`VP-0002`, `paymentTo: "advance"`, `amount: 15000`)
+- `vendors["Shahadat"].presentBalance` → advance increases by 15,000 (e.g. was due 5,000 → now advance 10,000)
+- `accounts["Cash"].lastBalance` −15,000
+- `client_transactions` +1 (`VENDOR_ADVANCE`, `payout`)
+
+**Delete VP-0002:** Advance reversed — `vendors.presentBalance` advance −15,000, `accounts["Cash"].lastBalance` +15,000, ledger row deleted.
+
+---
+
+#### Type 3 — Specific Invoice (`paymentTo: "invoice"`)
+
+Payment tied to a specific invoice. Allows selecting multiple vendor rows within that invoice and setting individual amounts.
+
+**Collections affected:**
+
+| Collection | Change |
+|-----------|--------|
+| `vendor_payments` | +1 row (`paymentTo: "invoice"`, with `invoiceId` and `invoiceVendors[]`) |
+| `vendors` | `presentBalance` reduced by `totalAmount` |
+| `accounts` | `lastBalance` −`totalAmount` |
+| `client_transactions` | +1 row (`VENDOR_PAYMENT`, `payout`) |
+| `invoice_items` | Each selected item: `paidAmount` +allocated amount, `dueAmount` updated |
+
+**`invoiceVendors` array** (stored on the payment):
+
+```
+invoiceVendors: [{ vendorId, invoiceItemId, amount }]
+```
+
+Each entry maps one `invoice_items` row to a payment amount.
+
+**Example:**
+
+Invoice INV-003 has two vendor cost lines:
+- Omor Faruk: totalCost 8,000 | paid 0 | due 8,000
+- Shahadat: totalCost 5,000 | paid 0 | due 5,000
+
+Company pays both in one VP:
+- `vendor_payments` +1 (`VP-0003`, `paymentTo: "invoice"`, `invoiceId: INV-003`, `invoiceVendors: [{Omor, item1, 8000}, {Shahadat, item2, 5000}]`, `totalAmount: 13000`)
+- `vendors["Omor Faruk"].presentBalance` due −8,000
+- `vendors["Shahadat"].presentBalance` due −5,000
+- `accounts["Main Bank"].lastBalance` −13,000
+- `invoice_items[item1].paidAmount` = 8,000; `dueAmount` = 0
+- `invoice_items[item2].paidAmount` = 5,000; `dueAmount` = 0
+- `client_transactions` +1
+
+**Delete VP-0003:** All reversed — `invoice_items.paidAmount` restored to 0, vendor balances restored, account balance +13,000, ledger deleted.
+
+**Update VP-0003:** Service fully reverses old effects (restores `invoice_items`, vendor balance, account, ledger) then applies new values atomically in a Mongoose transaction.
+
+---
+
+#### Type 4 — Specific Ticket (`paymentTo: "ticket"`)
+
+Payment for non-commission ticket cost lines (`invoice_items` with `itemType: "ticket"`, `product: "non_commission_ticket"`). Selection is vendor-first (pick vendor → pick individual ticket lines).
+
+**Collections affected:**
+
+| Collection | Change |
+|-----------|--------|
+| `vendor_payments` | +1 row (`paymentTo: "ticket"`, with `invoiceVendors[]` referencing ticket `invoice_items`) |
+| `vendors` | `presentBalance` reduced by `totalAmount` |
+| `accounts` | `lastBalance` −`totalAmount` |
+| `client_transactions` | +1 row (`VENDOR_PAYMENT`, `payout`) |
+| `invoice_items` | Each selected ticket item: `paidAmount` +allocated amount, `dueAmount` updated |
+
+**Key difference from "invoice":** Selection UI starts with a **vendor selector** (not an invoice selector). Then it loads all non-commission ticket items for that vendor across all invoices, letting the user pick individual ticket lines.
+
+**Example:**
+
+Vendor "Omor Faruk" has two non-commission ticket items across two different invoices:
+- Ticket TKT-001 in INV-005: totalCost 3,000 | paid 0 | due 3,000
+- Ticket TKT-002 in INV-007: totalCost 4,500 | paid 1,000 | due 3,500
+
+Company pays both tickets:
+- `vendor_payments` +1 (`VP-0004`, `paymentTo: "ticket"`, `invoiceVendors: [{item:TKT-001, amount:3000}, {item:TKT-002, amount:3500}]`, `totalAmount: 6500`)
+- `vendors["Omor Faruk"].presentBalance` due −6,500
+- `accounts["Cash"].lastBalance` −6,500
+- `invoice_items[TKT-001].paidAmount` = 3,000; `dueAmount` = 0
+- `invoice_items[TKT-002].paidAmount` = 4,500; `dueAmount` = 0
+- `client_transactions` +1
+
+**Delete VP-0004:** All reversed — `invoice_items.paidAmount` restored, vendor balance +6,500, account +6,500, ledger deleted.
+
+---
+
+### Allocation sub-module (Overall / Advance only)
+
+`vendor_payment_allocations` collection links a payment to one or more invoices post-hoc.
+
+| # | Operation | Trigger | Collections |
+|---|-----------|---------|-------------|
+| **1** | **List** | `GET /api/vendors/payment/[id]/allocations` | `vendor_payment_allocations` + `invoices` (read) |
+| **2** | **Create** | `POST /api/vendors/payment/[id]/allocations` | `vendor_payment_allocations` +rows; `invoice_items.paidAmount` updated per vendor per invoice |
+| **3** | **Delete** | `DELETE /api/vendors/payment/[id]/allocations/[allocId]` | `vendor_payment_allocations` −1; `invoice_items.paidAmount` restored |
+
+Remaining amount = `payment.amount` − sum of all `vendor_payment_allocations.appliedAmount` for that payment.
+
+### Helper API routes
+
+| Route | Purpose |
+|-------|---------|
+| `GET /api/vendors/payment/invoices` | All invoices that have vendor cost items (for "invoice" payment dropdown) |
+| `GET /api/vendors/payment/invoices/[id]/vendors` | Vendor summary rows for a specific invoice (totalCost / paid / due per vendor) |
+| `GET /api/vendors/payment/ticket-vendors` | Vendors that have at least one non-commission ticket item |
+| `GET /api/vendors/payment/ticket-vendors/[id]/lines` | Non-commission ticket lines for a given vendor |
+| `GET /api/vendors/[id]/invoices` | All invoices containing items for a given vendor (used by allocation modal) |
+
+### Code paths
+
+- **Model:** `models/vendor-payment.ts`, `models/vendor-payment-allocation.ts`
+- **Service:** `services/vendorPaymentService.ts`
+- **Controller:** `controllers/vendorPaymentController.ts`
+- **API routes:** `app/api/vendors/payment/*`
+- **UI list:** `app/dashboard/vendors/payment/page.tsx`
+- **UI view:** `app/dashboard/vendors/payment/[id]/page.tsx`
+- **Components:** `components/vendors/payment-modal.tsx`, `components/vendors/specific-invoice-payment.tsx`, `components/vendors/VendorPaymentAllocateModal.tsx`
+
+### UI patterns
+
+- **List page:** `FilterToolbar` (date range, search, refresh, Add Payment), Ant `Table` with `TableRowActions` (View → navigates to detail page, Edit, Delete with confirm).
+- **Add/Edit modal** (`PaymentModal`): RHF `FormProvider`, `DateInput`, `VendorSelect`, `SpecificInvoicePayment` sub-form for invoice/ticket types. Payment type selector drives which sub-form renders.
+- **View page** (`/dashboard/vendors/payment/[id]`): Ant `Tabs` — "Invoice" (placeholder) and "Details". Details tab shows payment header + either line-item table (for "invoice"/"ticket") or allocations table (for "overall"/"advance") with **"Add Invoice"** button that opens `VendorPaymentAllocateModal`.

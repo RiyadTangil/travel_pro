@@ -1,88 +1,144 @@
 "use client"
 
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Button } from "@/components/ui/button"
-import { Switch } from "@/components/ui/switch"
-import { Vendor } from "./types"
+import { Table, Tag } from "antd"
 import Link from "next/link"
-import { ArrowRight } from "lucide-react"
+import { ArrowRight, Loader2 } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { StatusSwitch } from "@/components/shared/status-switch"
+import { TableRowActions } from "@/components/shared/table-row-actions"
+import type { Vendor } from "./types"
 
 type Props = {
   vendors: Vendor[]
+  loading?: boolean
   onView: (v: Vendor) => void
   onEdit: (v: Vendor) => void
   onAddPayment: (v: Vendor) => void
   onDelete: (v: Vendor) => void
-  onToggleStatus: (v: Vendor) => void
-  loadingId?: string
-  loadingAction?: "delete" | "toggleStatus"
+  onToggleStatus: (v: Vendor, active: boolean) => void
+  statusBusyIds?: string[]
+  deleteLoadingId?: string
 }
 
-export function VendorTable({ vendors, onView, onEdit, onAddPayment, onDelete, onToggleStatus, loadingId, loadingAction }: Props) {
+export function VendorTable({
+  vendors,
+  loading,
+  onView,
+  onEdit,
+  onAddPayment,
+  onDelete,
+  onToggleStatus,
+  statusBusyIds = [],
+  deleteLoadingId,
+}: Props) {
+  const columns = [
+    {
+      title: "SL",
+      key: "sl",
+      width: 56,
+      render: (_: unknown, __: Vendor, index: number) => index + 1,
+    },
+    {
+      title: "Name",
+      dataIndex: "name",
+      key: "name",
+      render: (text: string, v: Vendor) => (
+        <Link
+          href={`/dashboard/reports/vendor-ledger?vendorId=${v.id}`}
+          className="font-medium text-gray-900 hover:text-blue-600 hover:underline inline-flex items-center gap-1 group"
+          title="View Vendor Ledger"
+        >
+          {text}
+          <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+        </Link>
+      ),
+    },
+    {
+      title: "Mobile",
+      dataIndex: "mobile",
+      key: "mobile",
+    },
+    {
+      title: "Email",
+      dataIndex: "email",
+      key: "email",
+      render: (email: string | undefined) => email || "—",
+    },
+    {
+      title: "Present Balance",
+      key: "presentBalance",
+      render: (_: unknown, v: Vendor) =>
+        v.presentBalance.type === "due" ? (
+          <span className="text-red-600">Due : {v.presentBalance.amount.toLocaleString()}</span>
+        ) : (
+          <span className={v.presentBalance.type === "advance" ? "text-green-600" : "text-red-600"}>
+            {v.presentBalance.type === "advance" ? "Advance" : "Due"} : {v.presentBalance.amount.toLocaleString()}
+          </span>
+        ),
+    },
+    {
+      title: "Fixed Balance",
+      dataIndex: "fixedBalance",
+      key: "fixedBalance",
+      render: (fb: number | undefined) => (fb != null ? fb : "—"),
+    },
+    {
+      title: "Status",
+      key: "status",
+      width: 140,
+      align: "center" as const,
+      render: (_: unknown, v: Vendor) => (
+        <div className="flex flex-col items-center gap-1">
+          <StatusSwitch
+            checked={!!v.active}
+            onCheckedChange={(val) => onToggleStatus(v, val)}
+            disabled={statusBusyIds.includes(v.id)}
+          />
+          {statusBusyIds.includes(v.id) && <Loader2 className="h-3 w-3 animate-spin text-slate-400" />}
+        </div>
+      ),
+    },
+    {
+      title: "Action",
+      key: "action",
+      width: 350,
+      render: (_: unknown, v: Vendor) => (
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {/*
+           todo : we will use this later
+          {v.presentBalance.amount !== 0 && (
+            <Button type="button" variant="outline" size="sm" className="h-8 px-3" onClick={() => onAddPayment(v)}>
+              + Add Payment
+            </Button>
+          )} */}
+          <TableRowActions
+            onView={() => onView(v)}
+            onEdit={() => onEdit(v)}
+            onDelete={() => onDelete(v)}
+            deleteDisabled={v.presentBalance.amount !== 0}
+            deleteLoading={deleteLoadingId === v.id}
+            deleteTitle="Delete Vendor"
+            deleteDescription={
+              v.presentBalance.amount !== 0
+                ? "Settle this vendor’s balance before deleting."
+                : `Are you sure you want to delete "${v.name}"? This cannot be undone.`
+            }
+          />
+        </div>
+      ),
+    },
+  ]
+
   return (
-    <div className="rounded-md border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-12">SL</TableHead>
-            <TableHead>Name</TableHead>
-            <TableHead>Mobile</TableHead>
-            <TableHead>Email</TableHead>
-            <TableHead>Present Balance</TableHead>
-            <TableHead>Fixed Balance</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Action</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {vendors.map((v, idx) => (
-            <TableRow key={v.id}>
-              <TableCell>{idx + 1}</TableCell>
-              <TableCell>
-                <Link 
-                  href={`/dashboard/reports/vendor-ledger?vendorId=${v.id}`}
-                  className="font-medium text-gray-900 hover:text-blue-600 hover:underline flex items-center gap-1 group"
-                  title="View Vendor Ledger"
-                >
-                  {v.name}
-                  <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
-              </TableCell>
-              <TableCell>{v.mobile}</TableCell>
-              <TableCell>{v.email || ""}</TableCell>
-              <TableCell>
-                {v.presentBalance.type === "due" ? (
-                  <span className="text-red-600">Due : {v.presentBalance.amount.toLocaleString()}</span>
-                ) : (
-                  <span className={v.presentBalance.type === "advance" ? "text-green-600" : "text-red-600"}>
-                    {v.presentBalance.type === "advance" ? "Advance" : "Due"} : {v.presentBalance.amount.toLocaleString()}
-                  </span>
-                )}
-              </TableCell>
-              <TableCell>{v.fixedBalance}</TableCell>
-              <TableCell>
-                <div className="flex items-center gap-2">
-                  <span className={`px-2 py-1 rounded-full text-xs ${v.active ? "bg-green-100 text-green-700" : "bg-gray-200 text-gray-700"}`}>{v.active ? "Active" : "Inactive"}</span>
-                  <Switch checked={v.active} onCheckedChange={() => onToggleStatus(v)} disabled={loadingId === v.id && loadingAction === "toggleStatus"} />
-                </div>
-              </TableCell>
-              <TableCell>
-                <div className="flex items-center gap-2">
-                  {v.presentBalance.amount === 0 ? (
-                    <Button variant="destructive" size="sm" onClick={() => onDelete(v)} disabled={loadingId === v.id && loadingAction === "delete"}>
-                      {loadingId === v.id && loadingAction === "delete" ? "Deleting..." : "Delete"}
-                    </Button>
-                  ) : (
-                    <Button variant="outline" size="sm" onClick={() => onAddPayment(v)}>+ Add Payment</Button>
-                  )}
-                  <Button variant="secondary" size="sm" onClick={() => onView(v)}>View</Button>
-                  <Button variant="outline" size="sm" onClick={() => onEdit(v)}>Edit</Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+    <Table<Vendor>
+      rowKey={(r) => r.id}
+      dataSource={vendors}
+      loading={loading}
+      pagination={false}
+      scroll={{ x: 960 }}
+      columns={columns}
+      className="border-none"
+      locale={{ emptyText: loading ? "Loading…" : "No vendors found" }}
+    />
   )
 }

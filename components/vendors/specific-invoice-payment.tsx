@@ -1,303 +1,475 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { useSession } from "next-auth/react"
 import { useFormContext, useFieldArray, Controller } from "react-hook-form"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command"
 import { Check, ChevronsUpDown, Plus, Minus } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-interface InvoiceItem {
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface InvoiceOption {
   id: string
   invoiceNo: string
 }
 
-interface VendorSummary {
-  vendor: {
-    id: string
-    name: string
-    mobile?: string
-    email?: string
-  }
+interface TicketVendorOption {
+  id: string
+  name: string
+  mobile?: string
+  email?: string
+}
+
+interface PaymentLineSummary {
+  vendor: { id: string; name: string; mobile?: string; email?: string }
   totalCost: number
   paid: number
   due: number
+  vendorId?: string
+  invoiceItemId?: string
+  invoiceId?: string
 }
 
-interface SpecificInvoicePaymentProps {
+interface SpecificPaymentProps {
   mode?: "select-only" | "table-only"
   disabled?: boolean
+  variant?: "invoice" | "ticket"
 }
 
-export default function SpecificInvoicePayment({ mode, disabled }: SpecificInvoicePaymentProps) {
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export default function SpecificInvoicePayment({
+  mode,
+  disabled,
+  variant = "invoice",
+}: SpecificPaymentProps) {
+  const { data: session } = useSession()
+  const companyId = session?.user?.companyId ?? ""
+
   const { control, setValue, watch, getValues } = useFormContext()
-  const { fields, append, remove } = useFieldArray({
-    control,
-    name: "invoiceVendors"
-  })
+  const { fields, append, remove } = useFieldArray({ control, name: "invoiceVendors" })
 
-  const [invoices, setInvoices] = useState<InvoiceItem[]>([])
-  const [openInvoiceSelect, setOpenInvoiceSelect] = useState(false)
-  const [vendorOptions, setVendorOptions] = useState<VendorSummary[]>([])
+  // Remote option lists
+  const [invoiceOptions, setInvoiceOptions] = useState<InvoiceOption[]>([])
+  const [ticketVendorList, setTicketVendorList] = useState<TicketVendorOption[]>([])
+  const [paymentLines, setPaymentLines] = useState<PaymentLineSummary[]>([])
 
-  const selectedInvoice = watch("invoiceId")
+  // Combobox open state
+  const [invoicePopoverOpen, setInvoicePopoverOpen] = useState(false)
+  const [ticketVendorPopoverOpen, setTicketVendorPopoverOpen] = useState(false)
+
+  // Watched form values
+  const selectedInvoiceId = watch("invoiceId")
+  const selectedTicketVendorId = watch("ticketVendorId")
   const invoiceVendors = watch("invoiceVendors")
-  const prevInvoiceIdRef = useRef(selectedInvoice)
 
-  // Fetch unique invoices on mount
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await fetch('/api/vendors/payment/invoices')
-        const data = await res.json()
-        setInvoices(data.items || [])
-      } catch (e) {
-        console.error("Failed to load invoices", e)
-      }
-    }
-    load()
-  }, [])
+  // Refs to detect real user-driven changes (prevent reset on initial edit load)
+  const prevInvoiceIdRef = useRef<string>(selectedInvoiceId)
+  const prevTicketVendorIdRef = useRef<string>(selectedTicketVendorId)
 
-  // Fetch vendors when invoice selected
+  // ---------------------------------------------------------------------------
+  // Data fetching
+  // ---------------------------------------------------------------------------
+
   useEffect(() => {
-    if (!selectedInvoice) {
-      setVendorOptions([])
+    if (variant !== "invoice" || !companyId) return
+    fetch("/api/vendors/payment/invoices", { headers: { "x-company-id": companyId } })
+      .then((r) => r.json())
+      .then((data) => setInvoiceOptions(data.items ?? []))
+      .catch(() => setInvoiceOptions([]))
+  }, [companyId, variant])
+
+  useEffect(() => {
+    if (variant !== "ticket" || !companyId) return
+    fetch("/api/vendors/payment/ticket-vendors", { headers: { "x-company-id": companyId } })
+      .then((r) => r.json())
+      .then((data) => setTicketVendorList(data.items ?? []))
+      .catch(() => setTicketVendorList([]))
+  }, [companyId, variant])
+
+  useEffect(() => {
+    if (variant !== "invoice" || !selectedInvoiceId || !companyId) {
+      if (!selectedInvoiceId) setPaymentLines([])
       return
     }
-    const loadVendors = async () => {
-      try {
-        const res = await fetch(`/api/vendors/payment/invoices/${selectedInvoice}/vendors`)
-        const data = await res.json()
-        setVendorOptions(data.items || [])
-      } catch (e) {
-        console.error("Failed to load vendors", e)
-      }
-    }
-    loadVendors()
-  }, [selectedInvoice])
+    fetch(`/api/vendors/payment/invoices/${selectedInvoiceId}/vendors`, {
+      headers: { "x-company-id": companyId },
+    })
+      .then((r) => r.json())
+      .then((data) => setPaymentLines(data.items ?? []))
+      .catch(() => setPaymentLines([]))
+  }, [selectedInvoiceId, companyId, variant])
 
-  // Reset rows when invoice changes (only if switching to a new valid invoice)
   useEffect(() => {
-    if (selectedInvoice && selectedInvoice !== prevInvoiceIdRef.current) {
-      // Only reset if it's a real change by the user
-      // If prevInvoiceIdRef.current was empty/undefined, it might be first load, 
-      // but if we are in edit mode, we want to keep the data.
-      // However, we don't know if it's edit mode here easily without props.
-      // But if we trust that on mount 'selectedInvoice' is set correctly, 
-      // we should only reset if it DIFFERS from the ref (which tracks the last seen value).
-      
-      // Wait, on first render, ref is initialized to selectedInvoice. 
-      // So selectedInvoice === ref.current. This block won't run. Data preserved!
-      
-      setValue("invoiceVendors", [{ vendorId: "", amount: 0 }])
-      prevInvoiceIdRef.current = selectedInvoice
-    } else if (selectedInvoice && !prevInvoiceIdRef.current) {
-        // First run where ref might be empty if initialized with empty?
-        // If ref initialized with selectedInvoice, this won't hit.
-        prevInvoiceIdRef.current = selectedInvoice
+    if (variant !== "ticket" || !selectedTicketVendorId || !companyId) {
+      if (!selectedTicketVendorId) setPaymentLines([])
+      return
     }
-  }, [selectedInvoice, setValue])
+    fetch(`/api/vendors/payment/ticket-vendors/${selectedTicketVendorId}/lines`, {
+      headers: { "x-company-id": companyId },
+    })
+      .then((r) => r.json())
+      .then((data) => setPaymentLines(data.items ?? []))
+      .catch(() => setPaymentLines([]))
+  }, [selectedTicketVendorId, companyId, variant])
 
-  const getVendorDetails = (vendorId: string) => {
-    return vendorOptions.find(v => v.vendor.id === vendorId)
+  // ---------------------------------------------------------------------------
+  // Reset rows on selection change (only when user actually changes the value,
+  // not on initial load from edit data)
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    if (variant !== "invoice") return
+    if (selectedInvoiceId && selectedInvoiceId !== prevInvoiceIdRef.current) {
+      setValue("invoiceVendors", [{ vendorId: "", amount: 0 }])
+    }
+    prevInvoiceIdRef.current = selectedInvoiceId
+  }, [selectedInvoiceId, setValue, variant])
+
+  useEffect(() => {
+    if (variant !== "ticket") return
+    if (selectedTicketVendorId && selectedTicketVendorId !== prevTicketVendorIdRef.current) {
+      setValue("invoiceVendors", [{ vendorId: selectedTicketVendorId, invoiceItemId: "", amount: 0 }])
+    }
+    prevTicketVendorIdRef.current = selectedTicketVendorId
+  }, [selectedTicketVendorId, setValue, variant])
+
+  // ---------------------------------------------------------------------------
+  // Lookup helpers
+  // ---------------------------------------------------------------------------
+
+  const getLineByVendorId = (vendorId: string): PaymentLineSummary | undefined =>
+    paymentLines.find((l) => l.vendor.id === vendorId)
+
+  const getLineByItemId = (itemId: string): PaymentLineSummary | undefined => {
+    if (!itemId) return undefined
+    return paymentLines.find((l) => l.invoiceItemId === itemId || l.vendor.id === itemId)
   }
+
+  const getLineForRow = (index: number): PaymentLineSummary | undefined => {
+    const row = invoiceVendors?.[index]
+    if (!row) return undefined
+    return variant === "ticket"
+      ? getLineByItemId(row.invoiceItemId)
+      : getLineByVendorId(row.vendorId)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Amount change handler — kept outside JSX for clarity
+  // ---------------------------------------------------------------------------
+
+  const handleAmountChange = (rawValue: string, index: number, line: PaymentLineSummary | undefined) => {
+    const entered = parseFloat(rawValue) || 0
+    const capped = line ? Math.min(entered, line.due) : entered
+
+    const currentRows = (getValues("invoiceVendors") ?? []) as any[]
+    const updatedRows = currentRows.map((r, i) => (i === index ? { ...r, amount: capped } : r))
+    const total = updatedRows.reduce((sum: number, r: any) => sum + (Number(r?.amount) || 0), 0)
+
+    setValue("invoiceVendors", updatedRows, { shouldDirty: true })
+    setValue("amount", total, { shouldDirty: true })
+
+    return capped
+  }
+
+  // ---------------------------------------------------------------------------
+  // Render helpers
+  // ---------------------------------------------------------------------------
+
+  const showSelector = mode === undefined || mode === "select-only"
+  const showTable = mode === undefined || mode === "table-only"
+  const tableVisible =
+    (variant === "invoice" && !!selectedInvoiceId) ||
+    (variant === "ticket" && !!selectedTicketVendorId)
 
   return (
     <div className={cn("space-y-6", mode === "table-only" && "border rounded-md p-4 bg-slate-50")}>
-      {/* Select Invoice */}
-      {(mode === undefined || mode === "select-only") && (
-      <div className="space-y-2">
-        <Label>Select Invoice <span className="text-red-500">*</span></Label>
-        <Popover open={openInvoiceSelect} onOpenChange={setOpenInvoiceSelect}>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              role="combobox"
-              aria-expanded={openInvoiceSelect}
-              className="w-full justify-between"
-              disabled={disabled}
-            >
-              {selectedInvoice
-                ? invoices.find((i) => i.id === selectedInvoice)?.invoiceNo
-                : "Select Invoice"}
-              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-full p-0">
-            <Command>
-              <CommandInput placeholder="Search invoice..." />
-              <CommandList>
-                <CommandEmpty>No invoice found.</CommandEmpty>
-                <CommandGroup>
-                  {invoices.map((invoice) => (
-                    <CommandItem
-                      key={invoice.id}
-                      value={invoice.invoiceNo}
-                      onSelect={(currentValue) => {
-                         // CommandItem uses value for filtering/selection. 
-                         // We need to map back to ID if currentValue is not ID.
-                         // invoices map sets value={invoice.invoiceNo}
-                         const found = invoices.find(i => i.invoiceNo.toLowerCase() === currentValue.toLowerCase())
-                         if (found) {
-                             setValue("invoiceId", found.id)
-                             setOpenInvoiceSelect(false)
-                         }
-                      }}
-                    >
-                      <Check
-                        className={cn(
-                          "mr-2 h-4 w-4",
-                          selectedInvoice === invoice.id ? "opacity-100" : "opacity-0"
-                        )}
-                      />
-                      {invoice.invoiceNo}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-      </div>
+
+      {/* Invoice selector (invoice variant) */}
+      {showSelector && variant === "invoice" && (
+        <div className="space-y-2">
+          <Label>Select Invoice <span className="text-red-500">*</span></Label>
+          <Popover open={invoicePopoverOpen} onOpenChange={setInvoicePopoverOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={invoicePopoverOpen}
+                className="w-full justify-between"
+                disabled={disabled}
+              >
+                {selectedInvoiceId
+                  ? invoiceOptions.find((i) => i.id === selectedInvoiceId)?.invoiceNo ?? "Select Invoice"
+                  : "Select Invoice"}
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-full p-0">
+              <Command>
+                <CommandInput placeholder="Search invoice..." />
+                <CommandList>
+                  <CommandEmpty>No invoice found.</CommandEmpty>
+                  <CommandGroup>
+                    {invoiceOptions.map((invoice) => (
+                      <CommandItem
+                        key={invoice.id}
+                        value={invoice.invoiceNo}
+                        onSelect={(val) => {
+                          const found = invoiceOptions.find(
+                            (i) => i.invoiceNo.toLowerCase() === val.toLowerCase()
+                          )
+                          if (found) {
+                            setValue("invoiceId", found.id)
+                            setInvoicePopoverOpen(false)
+                          }
+                        }}
+                      >
+                        <Check
+                          className={cn(
+                            "mr-2 h-4 w-4",
+                            selectedInvoiceId === invoice.id ? "opacity-100" : "opacity-0"
+                          )}
+                        />
+                        {invoice.invoiceNo}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        </div>
       )}
 
-      {/* Vendor Rows */}
-      {(mode === undefined || mode === "table-only") && selectedInvoice && (
+      {/* Vendor selector (ticket variant) */}
+      {showSelector && variant === "ticket" && (
+        <div className="space-y-2">
+          <Label>Select Vendor <span className="text-red-500">*</span></Label>
+          <Popover open={ticketVendorPopoverOpen} onOpenChange={setTicketVendorPopoverOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={ticketVendorPopoverOpen}
+                className="w-full justify-between"
+                disabled={disabled}
+              >
+                {selectedTicketVendorId
+                  ? ticketVendorList.find((v) => v.id === selectedTicketVendorId)?.name ?? "Select vendor"
+                  : "Select vendor"}
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-full p-0">
+              <Command>
+                <CommandInput placeholder="Search vendor..." />
+                <CommandList>
+                  <CommandEmpty>No vendor found.</CommandEmpty>
+                  <CommandGroup>
+                    {ticketVendorList.map((v) => (
+                      <CommandItem
+                        key={v.id}
+                        value={`${v.name} ${v.id}`}
+                        onSelect={() => {
+                          setValue("ticketVendorId", v.id)
+                          setTicketVendorPopoverOpen(false)
+                        }}
+                      >
+                        <Check
+                          className={cn(
+                            "mr-2 h-4 w-4",
+                            selectedTicketVendorId === v.id ? "opacity-100" : "opacity-0"
+                          )}
+                        />
+                        {v.name}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        </div>
+      )}
+
+      {/* Payment rows table */}
+      {showTable && tableVisible && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <Label className="text-base font-semibold">Select vendors:</Label>
-          </div>
-          
-          <div className="grid grid-cols-12 gap-2 text-sm font-medium text-muted-foreground mb-2">
-            <div className="col-span-3">Vendors</div>
+          <Label className="text-base font-semibold">
+            {variant === "ticket" ? "Select tickets:" : "Select vendors:"}
+          </Label>
+
+          <div className="grid grid-cols-12 gap-2 text-sm font-medium text-muted-foreground">
+            <div className="col-span-3">{variant === "ticket" ? "Tickets" : "Vendors"}</div>
             <div className="col-span-2">Total</div>
             <div className="col-span-2">Paid</div>
             <div className="col-span-2">Due</div>
             <div className="col-span-2">Amount</div>
-            <div className="col-span-1"></div>
+            <div className="col-span-1" />
           </div>
 
           {fields.map((field, index) => {
-            const currentVendorId = invoiceVendors?.[index]?.vendorId
-            const details = getVendorDetails(currentVendorId)
-            
+            const line = getLineForRow(index)
+
             return (
               <div key={field.id} className="grid grid-cols-12 gap-2 items-start">
-                {/* Vendor Select */}
+
+                {/* First column: vendor select (invoice) or ticket line select (ticket) */}
                 <div className="col-span-3">
-                  <Controller
-                    control={control}
-                    name={`invoiceVendors.${index}.vendorId`}
-                    render={({ field }) => (
-                      <Select 
-                        value={field.value} 
-                        onValueChange={field.onChange}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {vendorOptions.map(v => (
-                            <SelectItem key={v.vendor.id} value={v.vendor.id}>
-                              {v.vendor.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
+                  {variant === "invoice" ? (
+                    <Controller
+                      control={control}
+                      name={`invoiceVendors.${index}.vendorId`}
+                      render={({ field: ctrl }) => (
+                        <Select value={ctrl.value} onValueChange={ctrl.onChange}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select vendor..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {paymentLines.map((l) => (
+                              <SelectItem key={l.vendor.id} value={l.vendor.id}>
+                                {l.vendor.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                  ) : (
+                    <Controller
+                      control={control}
+                      name={`invoiceVendors.${index}.invoiceItemId`}
+                      render={({ field: ctrl }) => (
+                        <Select
+                          value={ctrl.value}
+                          onValueChange={(val) => {
+                            ctrl.onChange(val)
+                            // Stamp the real vendorId so the service can update vendor balance
+                            setValue(`invoiceVendors.${index}.vendorId`, selectedTicketVendorId ?? "")
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select ticket..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {paymentLines.map((l) => {
+                              const lineId = l.invoiceItemId ?? l.vendor.id
+                              return (
+                                <SelectItem key={lineId} value={lineId}>
+                                  {l.vendor.name}
+                                </SelectItem>
+                              )
+                            })}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                  )}
                 </div>
 
-                {/* Total */}
+                {/* Read-only summary columns */}
                 <div className="col-span-2">
-                  <Input 
-                    readOnly 
-                    value={details ? details.totalCost : ""} 
-                    className="bg-muted"
-                  />
+                  <Input readOnly value={line?.totalCost ?? ""} className="bg-muted" />
                 </div>
-
-                {/* Paid */}
                 <div className="col-span-2">
-                  <Input 
-                    readOnly 
-                    value={details ? details.paid : ""} 
-                    className="bg-muted"
-                  />
+                  <Input readOnly value={line?.paid ?? ""} className="bg-muted" />
                 </div>
-
-                {/* Due */}
                 <div className="col-span-2">
-                  <Input 
-                    readOnly 
-                    value={details ? details.due : ""} 
-                    className="bg-muted"
-                  />
+                  <Input readOnly value={line?.due ?? ""} className="bg-muted" />
                 </div>
 
-                {/* Amount (Editable) */}
+                {/* Editable amount */}
                 <div className="col-span-2">
                   <Controller
                     control={control}
                     name={`invoiceVendors.${index}.amount`}
-                    render={({ field }) => (
-                      <Input 
+                    rules={{
+                      validate: (value) =>
+                        !line || Number(value) <= line.due ? true : "Exceeds due amount",
+                    }}
+                    render={({ field: ctrl }) => (
+                      <Input
                         type="number"
-                        {...field}
+                        value={ctrl.value}
                         onChange={(e) => {
-                          const val = parseFloat(e.target.value) || 0
-                          const capped = details ? Math.min(val, details.due || 0) : val
-                          field.onChange(capped)
-
-                          const rows = (getValues("invoiceVendors") || []) as any[]
-                          const updatedRows = rows.map((r, i) =>
-                            i === index ? { ...r, amount: capped } : r
-                          )
-                          const total = updatedRows.reduce(
-                            (sum, r) => sum + (Number(r?.amount) || 0),
-                            0
-                          )
-                          setValue("invoiceVendors", updatedRows, { shouldDirty: true })
-                          setValue("amount", total, { shouldDirty: true })
+                          const capped = handleAmountChange(e.target.value, index, line)
+                          ctrl.onChange(capped)
                         }}
-                        max={details ? details.due : undefined}
-                        className={cn(
-                           (field.value > (details?.due || 0)) && "border-red-500 focus-visible:ring-red-500"
-                        )}
+                        onBlur={ctrl.onBlur}
+                        max={line?.due}
                         placeholder="Amount"
+                        className={cn(
+                          Number(ctrl.value) > (line?.due ?? 0) && line !== undefined &&
+                            "border-red-500 focus-visible:ring-red-500"
+                        )}
                       />
                     )}
-                    rules={{
-                        validate: (value) => {
-                            const d = getVendorDetails(currentVendorId)
-                            if (d && value > d.due) return "Exceeds due"
-                            return true
-                        }
-                    }}
                   />
                 </div>
 
-                {/* Actions */}
+                {/* Add / remove row */}
                 <div className="col-span-1 flex justify-center pt-1">
                   {index === fields.length - 1 ? (
-                    <Button type="button" size="icon" className="h-8 w-8 bg-cyan-500 hover:bg-cyan-600" onClick={() => append({ vendorId: "", amount: 0 })}>
+                    <Button
+                      type="button"
+                      size="icon"
+                      className="h-8 w-8 bg-cyan-500 hover:bg-cyan-600"
+                      onClick={() =>
+                        append(
+                          variant === "ticket"
+                            ? { vendorId: selectedTicketVendorId ?? "", invoiceItemId: "", amount: 0 }
+                            : { vendorId: "", amount: 0 }
+                        )
+                      }
+                    >
                       <Plus className="h-4 w-4" />
                     </Button>
                   ) : (
-                    <Button type="button" size="icon" variant="destructive" className="h-8 w-8" onClick={() => remove(index)}>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="destructive"
+                      className="h-8 w-8"
+                      onClick={() => remove(index)}
+                    >
                       <Minus className="h-4 w-4" />
                     </Button>
                   )}
                 </div>
+
               </div>
             )
           })}
         </div>
       )}
+
     </div>
   )
 }

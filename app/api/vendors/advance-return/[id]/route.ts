@@ -9,7 +9,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     const result = await updateVendorAdvanceReturn(id, body)
     return NextResponse.json(result)
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: error.statusCode || 500 })
+    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: error.status ?? 500 })
   }
 }
 
@@ -19,6 +19,6 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     const result = await deleteVendorAdvanceReturn(id)
     return NextResponse.json(result)
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: error.statusCode || 500 })
+    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: error.status ?? 500 })
   }
 }

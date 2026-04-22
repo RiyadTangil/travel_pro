@@ -6,7 +6,7 @@ const VendorPaymentSchema = new Schema({
   companyId: { type: Types.ObjectId, ref: "Company", index: true },
   invoiceId: { type: Types.ObjectId, ref: "Invoice", index: true },
   voucherNo: { type: String, index: true, required: true }, // e.g., VP-xxxx
-  paymentTo: { type: String, enum: ["overall", "advance", "invoice", "adjust"], required: true },
+  paymentTo: { type: String, enum: ["overall", "advance", "invoice", "ticket"], required: true },
   paymentMethod: { type: String }, // e.g., Cash, Bank, Mobile banking, Credit Card
   accountId: { type: Types.ObjectId, ref: "Account" },
   accountName: { type: String },
@@ -20,9 +20,11 @@ const VendorPaymentSchema = new Schema({
   referPassport: { type: String, enum: ["yes", "no"], default: "no" },
   passportNo: { type: String },
   
-  // Specific invoice details (when paymentTo is "invoice")
+  // Specific invoice / specific ticket line allocations
   invoiceVendors: [{
     vendorId: { type: Types.ObjectId, ref: "Vendor" },
+    /** Set when paymentTo is "ticket" (per Non-Commissi  on Ticket line) */
+    invoiceItemId: { type: Types.ObjectId, ref: "InvoiceItem" },
     amount: { type: Number }
   }],
 

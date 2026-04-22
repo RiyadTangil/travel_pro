@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
     const result = await createVendorAdvanceReturn({ ...body, companyId })
     return NextResponse.json(result)
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: error.statusCode || 500 })
+    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: error.status ?? 500 })
   }
 }
 
@@ -28,6 +28,6 @@ export async function GET(req: NextRequest) {
     const result = await listVendorAdvanceReturns(params)
     return NextResponse.json(result)
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: error.statusCode || 500 })
+    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: error.status ?? 500 })
   }
 }

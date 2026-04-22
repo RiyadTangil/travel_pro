@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { PRODUCT_OPTIONS, Vendor } from "./types"
 import { Loader2 } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 type Props = {
   open: boolean
@@ -35,6 +36,29 @@ export function VendorAddModal({ open, onOpenChange, initialData, onSubmit, prod
   const [selectedProducts, setSelectedProducts] = useState<string[]>([])
   const [checkAll, setCheckAll] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [submitAttempted, setSubmitAttempted] = useState(false)
+
+  useEffect(() => {
+    if (!open) {
+      setSubmitAttempted(false)
+      return
+    }
+    if (!initialData) {
+      setName("")
+      setEmail("")
+      setMobilePrefix("BD +88")
+      setMobile("")
+      setDate(undefined)
+      setOpeningBalanceType(undefined)
+      setOpeningBalance(undefined)
+      setFixedAdvance(undefined)
+      setAddress("")
+      setCreditLimit(undefined)
+      setActive(true)
+      setSelectedProducts([])
+      setCheckAll(false)
+    }
+  }, [open, initialData])
 
   useEffect(() => {
     if (initialData) {
@@ -67,10 +91,11 @@ export function VendorAddModal({ open, onOpenChange, initialData, onSubmit, prod
   }
 
   const isValid = useMemo(() => {
-    return name.trim().length > 0 && !!date
-  }, [name, date])
+    return name.trim().length > 0 && !!date && selectedProducts.length > 0
+  }, [name, date, selectedProducts.length])
 
   const handleSave = async () => {
+    setSubmitAttempted(true)
     if (!isValid || submitting) return
     const v: Vendor = {
       id: initialData?.id ?? Math.random().toString(36).slice(2),
@@ -110,7 +135,12 @@ export function VendorAddModal({ open, onOpenChange, initialData, onSubmit, prod
             <Label>
               Name <span className="text-red-600">*</span>
             </Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" />
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Name"
+              className={cn(submitAttempted && !name.trim() && "border-red-500 focus-visible:ring-red-500")}
+            />
           </div>
           <div>
             <Label>Email</Label>
@@ -135,7 +165,12 @@ export function VendorAddModal({ open, onOpenChange, initialData, onSubmit, prod
             <Label>
               Date <span className="text-red-600">*</span>
             </Label>
-            <DateInput value={date} onChange={setDate} placeholder="dd-MM-yyyy" />
+            <DateInput
+              value={date}
+              onChange={setDate}
+              placeholder="dd-MM-yyyy"
+              className={cn(submitAttempted && !date && "border-red-500 ring-red-500")}
+            />
           </div>
           <div>
             <Label>Opening Balance Type:</Label>
@@ -170,7 +205,12 @@ export function VendorAddModal({ open, onOpenChange, initialData, onSubmit, prod
         </div>
 
         {/* Products checklist */}
-        <div className="mt-4">
+        <div
+          className={cn(
+            "mt-4 rounded-md",
+            submitAttempted && selectedProducts.length === 0 && "ring-2 ring-red-500 ring-offset-2 p-2"
+          )}
+        >
           <Label>
             Products <span className="text-red-600">*</span>
           </Label>
@@ -191,7 +231,7 @@ export function VendorAddModal({ open, onOpenChange, initialData, onSubmit, prod
 
         <div className="flex items-center justify-end gap-2 mt-4">
           <Button variant="outline" onClick={() => !submitting && onOpenChange(false)} disabled={submitting}>Cancel</Button>
-          <Button disabled={!isValid || submitting} className="bg-blue-600 hover:bg-blue-700" onClick={handleSave}>
+          <Button disabled={submitting} className="bg-blue-600 hover:bg-blue-700" onClick={handleSave}>
             {submitting ? (
               <span className="flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />

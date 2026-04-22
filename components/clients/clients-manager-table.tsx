@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { InlineLoader } from "@/components/ui/loader"
 import Link from "next/link"
-import { StatusSwitch } from "@/components/ui/status-switch"
+import { StatusSwitch } from "@/components/shared/status-switch"
 import { Loader2 } from "lucide-react"
 
 type Client = {

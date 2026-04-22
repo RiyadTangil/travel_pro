@@ -12,6 +12,9 @@ const InvoiceItemSchema = new Schema({
   totalSales: { type: Number, default: 0 },
   totalCost: { type: Number, default: 0 },
   profit: { type: Number, default: 0 },
+  /** Allocated vendor payments (invoice-specific payments); see vendorPaymentService */
+  paidAmount: { type: Number, default: 0 },
+  dueAmount: { type: Number, default: 0 },
   vendorId: { type: Schema.Types.ObjectId, ref: "Vendor", index: true },
   
   // Visa specific fields (Flattened for performance/simplicity as per payload)

@@ -1,239 +1,205 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState, useCallback, useMemo } from "react"
 import { useSession } from "next-auth/react"
-import { VendorToolbar } from "@/components/vendors/vendor-toolbar"
+import { useRouter } from "next/navigation"
 import { VendorTable } from "@/components/vendors/vendor-table"
 import { VendorAddModal } from "@/components/vendors/vendor-add-modal"
 import { VendorViewModal } from "@/components/vendors/vendor-view-modal"
-import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
+import PaymentModal from "@/components/vendors/payment-modal"
 import type { Vendor } from "@/components/vendors/types"
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
-import { DashboardHeader } from "@/components/dashboard/header"
+import { PageWrapper } from "@/components/shared/page-wrapper"
+import FilterToolbar from "@/components/shared/filter-toolbar"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
-import { Input } from "@/components/ui/input"
+import { toast } from "sonner"
+import { useInvoiceLookups } from "@/hooks/useInvoiceLookups"
 
 export default function VendorsPage() {
   const { data: session } = useSession()
+  const router = useRouter()
   const [vendors, setVendors] = useState<Vendor[]>([])
   const [search, setSearch] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
   const [openAdd, setOpenAdd] = useState(false)
   const [editVendor, setEditVendor] = useState<Vendor | undefined>(undefined)
   const [viewVendor, setViewVendor] = useState<Vendor | undefined>(undefined)
   const [categories, setCategories] = useState<string[]>([])
-  const [loadingId, setLoadingId] = useState<string | undefined>(undefined)
-  const [loadingAction, setLoadingAction] = useState<"delete" | "toggleStatus" | undefined>(undefined)
+  const [deleteLoadingId, setDeleteLoadingId] = useState<string | undefined>(undefined)
   const [tableLoading, setTableLoading] = useState(false)
-  const [confirmOpen, setConfirmOpen] = useState(false)
-  const [confirmTitle, setConfirmTitle] = useState("")
-  const [confirmDescription, setConfirmDescription] = useState("")
-  const [confirmAction, setConfirmAction] = useState<(() => Promise<void>) | undefined>(undefined)
+  const [statusBusyIds, setStatusBusyIds] = useState<string[]>([])
+
+  const companyId = session?.user?.companyId ?? ""
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(search.trim())
+    }, 250)
+    return () => clearTimeout(t)
+  }, [search])
 
   useEffect(() => {
     const loadCategories = async () => {
       try {
         const res = await fetch(`/api/clients/client-categories?page=1&pageSize=100`, {
-          headers: { "x-company-id": session?.user?.companyId ?? "" },
+          headers: { "x-company-id": companyId },
         })
         const data = await res.json()
-        const names = (data?.data || []).map((c: any) => c.name).filter(Boolean)
-        setCategories(names)
+        const names = (data?.data || []).map((c: { name?: string }) => c.name).filter(Boolean)
+        setCategories(names as string[])
       } catch (e) {
         console.error("Failed to load categories", e)
       }
     }
     loadCategories()
-  }, [session?.user?.companyId])
+  }, [companyId])
 
-  useEffect(() => {
-    const controller = new AbortController()
-    const loadVendors = async () => {
-      setTableLoading(true)
-      try {
-        const qs = new URLSearchParams({ page: "1", pageSize: "200", search: search.trim() }).toString()
-        const res = await fetch(`/api/vendors?${qs}`, {
-          headers: { "x-company-id": session?.user?.companyId ?? "" },
-          signal: controller.signal,
-        })
-        const data = await res.json()
-        setVendors(data?.data || [])
-      } catch (e) {
-        if (process.env.NODE_ENV !== "production") console.error("Failed to load vendors", e)
-      } finally {
-        setTableLoading(false)
-      }
-    }
-    loadVendors()
-    return () => controller.abort()
-  }, [session?.user?.companyId, search])
-
-  const filtered = vendors
-
-  const handleSubmit = async (v: Vendor) => {
+  const loadVendors = useCallback(async () => {
+    setTableLoading(true)
     try {
-      const payload = { ...v, companyId: session?.user?.companyId ?? null }
-      if (editVendor?.id) {
-        await fetch(`/api/vendors/${editVendor.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        })
-      } else {
-        await fetch(`/api/vendors`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        })
-      }
-    } finally {
-      setEditVendor(undefined)
-      setOpenAdd(false)
-      // refresh vendors list
-      const res = await fetch(`/api/vendors?page=1&pageSize=200`, {
-        headers: { "x-company-id": session?.user?.companyId ?? "" },
+      const qs = new URLSearchParams({ page: "1", pageSize: "200", search: debouncedSearch }).toString()
+      const res = await fetch(`/api/vendors?${qs}`, {
+        headers: { "x-company-id": companyId },
       })
       const data = await res.json()
       setVendors(data?.data || [])
+    } catch (e) {
+      if (process.env.NODE_ENV !== "production") console.error("Failed to load vendors", e)
+      toast.error("Failed to load vendors")
+    } finally {
+      setTableLoading(false)
+    }
+  }, [companyId, debouncedSearch])
+
+  useEffect(() => {
+    loadVendors()
+  }, [loadVendors])
+
+  const handleSubmit = async (v: Vendor) => {
+    try {
+      const payload = { ...v, companyId: companyId || null }
+      const headers: HeadersInit = { "Content-Type": "application/json", "x-company-id": companyId }
+      const url = editVendor?.id ? `/api/vendors/${editVendor.id}` : `/api/vendors`
+      const method = editVendor?.id ? "PUT" : "POST"
+      const res = await fetch(url, { method, headers, body: JSON.stringify(payload) })
+      const errBody = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(typeof errBody?.error === "string" ? errBody.error : "Failed to save vendor")
+        return
+      }
+      toast.success(editVendor?.id ? "Vendor updated" : "Vendor created")
+      setEditVendor(undefined)
+      setOpenAdd(false)
+      await loadVendors()
+    } catch {
+      toast.error("Failed to save vendor")
     }
   }
 
-  const handleDelete = async (v: Vendor) => {
+  const performDelete = async (v: Vendor) => {
+    setDeleteLoadingId(v.id)
+    try {
+      const res = await fetch(`/api/vendors/${v.id}`, {
+        method: "DELETE",
+        headers: { "x-company-id": companyId },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(typeof data?.error === "string" ? data.error : "Failed to delete vendor")
+        return
+      }
+      toast.success("Vendor deleted")
+      setVendors((prev) => prev.filter((x) => x.id !== v.id))
+    } finally {
+      setDeleteLoadingId(undefined)
+    }
+  }
+
+  const handleDelete = (v: Vendor) => {
     if (v.presentBalance.amount !== 0) {
-      // Show info-only dialog if deletion is not allowed
-      setConfirmTitle("Cannot Delete Vendor")
-      setConfirmDescription("This vendor has a non-zero present balance. Please settle the balance before deleting.")
-      setConfirmAction(undefined)
-      setConfirmOpen(true)
+      toast.error("This vendor has a non-zero balance. Settle it before deleting.")
       return
     }
-    setConfirmTitle("Delete Vendor")
-    setConfirmDescription(`Are you sure you want to delete "${v.name}"? This action cannot be undone.`)
-    setConfirmAction(() => async () => {
-      setLoadingId(v.id)
-      setLoadingAction("delete")
-      try {
-        await fetch(`/api/vendors/${v.id}`, { method: "DELETE" })
-        setVendors((prev) => prev.filter((x) => x.id !== v.id))
-      } finally {
-        setLoadingId(undefined)
-        setLoadingAction(undefined)
-      }
-    })
-    setConfirmOpen(true)
+    return performDelete(v)
   }
 
-  const handleToggleStatus = async (v: Vendor) => {
-    setConfirmTitle("Change Status")
-    setConfirmDescription(`Change status for "${v.name}" to ${v.active ? "Inactive" : "Active"}?`)
-    setConfirmAction(() => async () => {
-      setLoadingId(v.id)
-      setLoadingAction("toggleStatus")
-      try {
-        await fetch(`/api/vendors/${v.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ active: !v.active }),
-        })
-        setVendors((prev) => prev.map((x) => (x.id === v.id ? { ...x, active: !x.active } : x)))
-      } finally {
-        setLoadingId(undefined)
-        setLoadingAction(undefined)
-      }
-    })
-    setConfirmOpen(true)
+  const handleToggleStatus = async (v: Vendor, active: boolean) => {
+    if (!!v.active === active) return
+    try {
+      setStatusBusyIds((prev) => [...prev, v.id])
+      const res = await fetch(`/api/vendors/${v.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-company-id": companyId },
+        body: JSON.stringify({ active }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(typeof data?.error === "string" ? data.error : "Failed to update status")
+      setVendors((prev) => prev.map((x) => (x.id === v.id ? { ...x, active } : x)))
+      toast.success(`Vendor is now ${active ? "Active" : "Inactive"}`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to update status")
+    } finally {
+      setStatusBusyIds((prev) => prev.filter((x) => x !== v.id))
+    }
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white shadow-sm">
-        <div className="mx-auto px-4 py-4">
-          <DashboardHeader />
-        </div>
-      </header>
+    <PageWrapper breadcrumbs={[{ label: "Vendors" }]}>
+      <div className="mx-4 mb-4 space-y-4">
+        <FilterToolbar
+          showSearch
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search by vendor name, mobile, email..."
+          showRefresh
+          onRefresh={loadVendors}
+          className="flex-1"
+        >
+          <Button
+            className="bg-sky-500 hover:bg-sky-600 shrink-0"
+            onClick={() => {
+              setEditVendor(undefined)
+              setOpenAdd(true)
+            }}
+          >
+            <Plus className="w-4 h-4 mr-2" /> Add Vendor
+          </Button>
+        </FilterToolbar>
 
-      <main className="flex-grow py-6">
-        <div className="mb-4 px-4">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Vendors</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
-
-        <div className="mx-4 mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
-           <Button onClick={() => { setEditVendor(undefined); setOpenAdd(true) }} className="bg-sky-500 hover:bg-sky-600">
-             <Plus className="w-4 h-4 mr-2" /> Add Vendor
-           </Button>
-
-           <div className="flex items-center gap-2">
-               <Input 
-                 placeholder="Search by vendor..." 
-                 value={search}
-                 onChange={(e) => setSearch(e.target.value)}
-                 className="w-64 bg-white"
-               />
-           </div>
-        </div>
-
-        <Card className="mx-4 border-none shadow-none bg-transparent">
+        <Card className="border-none shadow-none bg-transparent">
           <CardContent className="p-0">
             <div className="bg-white rounded-md border shadow-sm overflow-hidden">
-              {tableLoading && (
-                <div className="p-4 text-sm text-gray-600 text-center">Loading vendors...</div>
-              )}
               <VendorTable
-                vendors={filtered}
+                vendors={vendors}
+                loading={tableLoading}
                 onView={(v) => setViewVendor(v)}
-                onEdit={(v) => { setEditVendor(v); setOpenAdd(true) }}
-                onAddPayment={() => { /* Hook for real payment flow */ }}
+                onEdit={(v) => {
+                  setEditVendor(v)
+                  setOpenAdd(true)
+                }}
+                onAddPayment={() => router.push("/dashboard/vendors/payment")}
                 onDelete={handleDelete}
                 onToggleStatus={handleToggleStatus}
-                loadingId={loadingId}
-                loadingAction={loadingAction}
+                statusBusyIds={statusBusyIds}
+                deleteLoadingId={deleteLoadingId}
               />
             </div>
           </CardContent>
         </Card>
-      </main>
+      </div>
 
-      <VendorAddModal open={openAdd} onOpenChange={(v) => setOpenAdd(v)} initialData={editVendor} onSubmit={handleSubmit} productOptions={categories} />
+      <VendorAddModal
+        open={openAdd}
+        onOpenChange={(open) => {
+          setOpenAdd(open)
+          if (!open) setEditVendor(undefined)
+        }}
+        initialData={editVendor}
+        onSubmit={handleSubmit}
+        productOptions={categories}
+      />
       <VendorViewModal open={!!viewVendor} onOpenChange={() => setViewVendor(undefined)} vendor={viewVendor} />
-
-      {/* Confirmation dialog */}
-      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{confirmTitle}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {confirmDescription}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            {confirmAction ? (
-              <AlertDialogAction
-                className="bg-red-500 hover:bg-red-600"
-                onClick={async () => {
-                  setConfirmOpen(false)
-                  await confirmAction()
-                }}
-              >
-                Confirm
-              </AlertDialogAction>
-            ) : (
-              <AlertDialogAction onClick={() => setConfirmOpen(false)}>OK</AlertDialogAction>
-            )}
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+    </PageWrapper>
   )
 }
