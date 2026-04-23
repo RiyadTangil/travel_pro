@@ -64,7 +64,6 @@ export async function createClient(body: any) {
   const creditLimitNum = typeof body.creditLimit === "string"
     ? parseFloat(body.creditLimit || "0") || 0
     : Number(body.creditLimit) || 0
-  console.log("body => ", body)
   const doc: any = {
     uniqueId: nextUniqueId,
     name: body.name,
@@ -89,7 +88,6 @@ export async function createClient(body: any) {
     createdAt: now,
     updatedAt: now,
   }
-  console.log("doc => ", doc)
 
   const session = await mongoose.startSession()
   session.startTransaction()

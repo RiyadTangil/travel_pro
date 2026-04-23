@@ -1,9 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
+import { useSearchParams } from "next/navigation"
 import { Table } from "antd"
 import type { ColumnsType } from "antd/es/table"
 import { PageWrapper } from "@/components/shared/page-wrapper"
+import { LedgerEntityCard } from "@/components/shared/ledger-entity-card"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import type { DateRange } from "react-day-picker"
@@ -30,11 +32,19 @@ interface LedgerEntry {
   note: string
 }
 
+interface EntityInfo {
+  name: string
+  mobile: string
+  email: string
+  address: string
+}
+
 interface LedgerData {
   entries: LedgerEntry[]
   totalDebit: number
   totalCredit: number
   closingBalance: number
+  entity: EntityInfo | null
 }
 
 
@@ -56,13 +66,26 @@ function balanceText(n: number) {
 }
 
 export default function VendorLedgerPage() {
+  const searchParams  = useSearchParams()
+  const urlVendorId   = searchParams.get("vendorId") ?? ""
+
   const { lookups } = useInvoiceLookups()
-  const [vendorId, setVendorId] = useState("")
-  const [dateRange, setDateRange] = useState<DateRange | undefined>()
-  const [loading, setLoading] = useState(false)
+  const [vendorId,   setVendorId]   = useState(urlVendorId)
+  const [dateRange,  setDateRange]  = useState<DateRange | undefined>()
+  const [loading,    setLoading]    = useState(false)
   const [ledgerData, setLedgerData] = useState<LedgerData | null>(null)
 
-  const vendorOptions = (lookups?.vendors ?? []).map((v) => ({ value: v.id, label: v.name }))
+  const vendorOptions  = (lookups?.vendors ?? []).map((v) => ({ value: v.id, label: v.name }))
+  const autoFetchedRef = useRef(false)
+
+  // Auto-fetch once options have loaded when the page was opened via URL with a vendorId
+  useEffect(() => {
+    if (urlVendorId && vendorOptions.length > 0 && !autoFetchedRef.current) {
+      autoFetchedRef.current = true
+      fetchLedger()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vendorOptions.length])
 
   const fetchLedger = async () => {
     if (!vendorId) return
@@ -188,6 +211,7 @@ export default function VendorLedgerPage() {
 
   const scrollX = columns.reduce((sum, col) => sum + ((col.width as number) || 120), 0)
 
+  const entity = ledgerData?.entity
 
   return (
     <PageWrapper
@@ -197,6 +221,19 @@ export default function VendorLedgerPage() {
       ]}
     >
       <div className="mx-4 min-w-0 max-w-full space-y-4">
+
+        {entity && (
+          <LedgerEntityCard
+            title="Vendor Details"
+            rows={[
+              { label: "Name",    value: entity.name    },
+              { label: "Mobile",  value: entity.mobile  },
+              { label: "Email",   value: entity.email   },
+              { label: "Address", value: entity.address },
+            ]}
+          />
+        )}
+
         <FilterToolbar
           showDateRange
           dateRange={dateRange}

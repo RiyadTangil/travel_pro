@@ -1,6 +1,7 @@
 import { Types } from "mongoose"
 import connectMongoose from "@/lib/mongoose"
 import { ClientTransaction } from "@/models/client-transaction"
+import { Client } from "@/models/client"
 import { AppError } from "@/errors/AppError"
 
 export async function getClientLedger(
@@ -13,6 +14,8 @@ export async function getClientLedger(
   if (!clientId || !Types.ObjectId.isValid(clientId)) {
     throw new AppError("Valid Client ID is required", 400)
   }
+
+  const clientDoc = await Client.findById(new Types.ObjectId(clientId)).lean() as any
 
   const matchStage: Record<string, unknown> = {
     clientId: new Types.ObjectId(clientId),
@@ -83,9 +86,12 @@ export async function getClientLedger(
     const credit = isCredit ? Number(txn.amount || 0) : 0
     runningBalance += debit - credit
 
+    // Invoice debit entries (direction:"invoice") have transactionType:"invoice"
+    // Payment credit entries (direction:"receiv") have other transactionTypes
     const particulars =
-      txn.invoiceType === "INVOICE"          ? "Payment (Invoice)"
-      : txn.invoiceType === "EXPENSE"        ? "Expense"
+      txn.transactionType === "invoice"        ? `Invoice ${txn.voucherNo || ""}`.trim()
+      : txn.invoiceType === "INVOICE"          ? "Payment (Invoice)"
+      : txn.invoiceType === "EXPENSE"          ? "Expense"
       : txn.invoiceType === "BALANCE_TRANSFER" ? "Balance Transfer"
       : "Money Receipt"
 
@@ -116,5 +122,13 @@ export async function getClientLedger(
     totalDebit,
     totalCredit,
     closingBalance: runningBalance,
+    entity: clientDoc
+      ? {
+          name:    clientDoc.name    || "",
+          phone:   clientDoc.phone   || "",
+          email:   clientDoc.email   || "",
+          address: clientDoc.address || "",
+        }
+      : null,
   }
 }

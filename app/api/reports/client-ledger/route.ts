@@ -18,7 +18,7 @@ export async function GET(request: Request) {
 
   } catch (error: any) {
     console.error("Ledger API Error:", error)
-    const status = error instanceof AppError ? error.statusCode : 500
+    const status = error instanceof AppError ? error.status : 500
     const message = error instanceof AppError ? error.message : "Internal Server Error"
     return NextResponse.json({ error: message }, { status })
   }

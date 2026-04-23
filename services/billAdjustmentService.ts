@@ -61,6 +61,13 @@ async function persistBillAdjustmentLedger(
   const ledgerTransactionType = ledgerOpts.clientLedgerTransactionType
   const isMonetoryTranseciton = false
 
+  // Opening-balance callers may pass an explicit ledgerDirection to override the default
+  // isDebit→"payout" / !isDebit→"receiv" mapping, because for opening balances the balance
+  // arithmetic (presentBalance / vendorBalance) requires the opposite isDebit polarity from
+  // what the ledger display needs.
+  const defaultDirection: "payout" | "receiv" = isDebit ? "payout" : "receiv"
+  const ledgerDirection: "payout" | "receiv" = (data.ledgerDirection as "payout" | "receiv" | undefined) ?? defaultDirection
+
   if (data.type === "Account" && data.accountId) {
     const balanceChange = isDebit ? -amount : amount
     const account = await Account.findOneAndUpdate(
@@ -77,7 +84,7 @@ async function persistBillAdjustmentLedger(
         accountName: data.name,
         payType: data.paymentMethod || "CASH",
         amount,
-        direction: isDebit ? "payout" : "receiv",
+        direction: defaultDirection, // Account ledger is not affected by the override
         transactionType: ledgerTransactionType,
         isMonetoryTranseciton,
         lastTotalAmount: account.lastBalance,
@@ -104,7 +111,7 @@ async function persistBillAdjustmentLedger(
         clientId: new Types.ObjectId(data.clientId),
         clientName: client.name,
         amount,
-        direction: isDebit ? "payout" : "receiv",
+        direction: ledgerDirection,
         transactionType: ledgerTransactionType,
         isMonetoryTranseciton,
         lastTotalAmount: client.presentBalance,
@@ -129,7 +136,7 @@ async function persistBillAdjustmentLedger(
         vendorId: new Types.ObjectId(data.vendorId),
         clientName: vendor.name,
         amount,
-        direction: isDebit ? "payout" : "receiv",
+        direction: ledgerDirection,
         transactionType: ledgerTransactionType,
         isMonetoryTranseciton,
         lastTotalAmount: net,
@@ -227,6 +234,9 @@ export async function createClientOpeningBillAdjustment(
       note: "Opening balance",
       name: params.clientName,
       source: "opening_balance",
+      // Due  → client owes us → DEBIT in client ledger ("payout")
+      // Advance → client paid ahead → CREDIT in client ledger ("receiv")
+      ledgerDirection: isDue ? "payout" : "receiv",
     },
     params.companyId,
     { clientLedgerTransactionType: "opening_balance" }
@@ -262,6 +272,9 @@ export async function createVendorOpeningBillAdjustment(
       note: "Opening balance",
       name: params.vendorName,
       source: "opening_balance",
+      // Due  → we owe vendor → CREDIT in vendor ledger ("receiv")
+      // Advance → vendor owes us → DEBIT in vendor ledger ("payout")
+      ledgerDirection: isDue ? "receiv" : "payout",
     },
     params.companyId,
     { clientLedgerTransactionType: "opening_balance" }

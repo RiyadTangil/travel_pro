@@ -32,8 +32,6 @@ const isPublicPath = (path: string) =>
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   
-  console.log(`[Middleware] Processing ${path}`);
-  
   // Allow public paths without authentication
   if (isPublicPath(path)) {
     console.log(`[Middleware] Public path: ${path}, allowing access`);
@@ -42,7 +40,6 @@ export async function middleware(request: NextRequest) {
   
   // Get the NextAuth token
   try {
-    console.log(`[Middleware] Checking NextAuth token for path: ${path}`);
     
     const token = await getToken({ 
       req: request,
@@ -58,8 +55,6 @@ export async function middleware(request: NextRequest) {
       url.searchParams.set('callbackUrl', encodeURI(request.url));
       return NextResponse.redirect(url);
     }
-    
-    console.log(`[Middleware] User role: ${token.role}, accessing: ${path}`);
     
     // Admin routes check
     if (path.startsWith('/admin') && token.role !== 'admin') {
@@ -81,8 +76,6 @@ export async function middleware(request: NextRequest) {
         },
       });
     }
-    
-    console.log(`[Middleware] Access granted for ${path}`);
     return NextResponse.next();
   } catch (error) {
     console.error(`[Middleware] Error processing ${path}:`, error);

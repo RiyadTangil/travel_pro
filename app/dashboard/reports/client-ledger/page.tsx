@@ -1,9 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
+import { useSearchParams } from "next/navigation"
 import { Table } from "antd"
 import type { ColumnsType } from "antd/es/table"
 import { PageWrapper } from "@/components/shared/page-wrapper"
+import { LedgerEntityCard } from "@/components/shared/ledger-entity-card"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import type { DateRange } from "react-day-picker"
@@ -29,11 +31,19 @@ interface LedgerEntry {
   note: string
 }
 
+interface EntityInfo {
+  name: string
+  phone: string
+  email: string
+  address: string
+}
+
 interface LedgerData {
   entries: LedgerEntry[]
   totalDebit: number
   totalCredit: number
   closingBalance: number
+  entity: EntityInfo | null
 }
 
 
@@ -55,13 +65,26 @@ function balanceText(n: number) {
 }
 
 export default function ClientLedgerPage() {
+  const searchParams   = useSearchParams()
+  const urlClientId    = searchParams.get("clientId") ?? ""
+
   const { lookups } = useInvoiceLookups()
-  const [clientId,  setClientId]  = useState("")
-  const [dateRange, setDateRange] = useState<DateRange | undefined>()
-  const [loading,   setLoading]   = useState(false)
+  const [clientId,   setClientId]   = useState(urlClientId)
+  const [dateRange,  setDateRange]  = useState<DateRange | undefined>()
+  const [loading,    setLoading]    = useState(false)
   const [ledgerData, setLedgerData] = useState<LedgerData | null>(null)
 
-  const clientOptions = (lookups?.clients ?? []).map((c) => ({ value: c.id, label: c.name }))
+  const clientOptions  = (lookups?.clients ?? []).map((c) => ({ value: c.id, label: c.name }))
+  const autoFetchedRef = useRef(false)
+
+  // Auto-fetch once options have loaded when the page was opened via URL with a clientId
+  useEffect(() => {
+    if (urlClientId && clientOptions.length > 0 && !autoFetchedRef.current) {
+      autoFetchedRef.current = true
+      fetchLedger()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientOptions.length])
 
   const fetchLedger = async () => {
     if (!clientId) return
@@ -187,6 +210,7 @@ export default function ClientLedgerPage() {
 
   const scrollX = columns.reduce((sum, col) => sum + ((col.width as number) || 120), 0)
 
+  const entity = ledgerData?.entity
 
   return (
     <PageWrapper
@@ -196,6 +220,19 @@ export default function ClientLedgerPage() {
       ]}
     >
       <div className="mx-4 min-w-0 max-w-full space-y-4">
+
+        {entity && (
+          <LedgerEntityCard
+            title="Client Details"
+            rows={[
+              { label: "Name",    value: entity.name    },
+              { label: "Mobile",  value: entity.phone   },
+              { label: "Email",   value: entity.email   },
+              { label: "Address", value: entity.address },
+            ]}
+          />
+        )}
+
         <FilterToolbar
           showDateRange
           dateRange={dateRange}

@@ -63,6 +63,100 @@ async function adjustVendorInvoiceCostBalance(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Vendor-cost aggregation helpers  (prevent N+1 DB round-trips)
+// ---------------------------------------------------------------------------
+
+/** Aggregate totalCost per unique vendorId across a list of billing items. */
+function buildVendorCostMap(items: any[]): Map<string, number> {
+  const map = new Map<string, number>()
+  for (const item of items) {
+    const vOid = normalizeVendorObjectId(item.vendorId ?? item.vendor)
+    if (!vOid) continue
+    const cost = effectiveVendorLineCost(item)
+    if (cost <= 0) continue
+    const key = vOid.toString()
+    map.set(key, (map.get(key) ?? 0) + cost)
+  }
+  return map
+}
+
+/**
+ * Apply (or revert) vendor balance changes in parallel — one DB call per UNIQUE vendor.
+ * multiplier +1 = apply new cost, -1 = revert old cost
+ */
+async function applyVendorCostMap(
+  map: Map<string, number>,
+  multiplier: 1 | -1,
+  now: string,
+  session: mongoose.ClientSession
+) {
+  if (map.size === 0) return
+  await Promise.all(
+    Array.from(map.entries()).map(([vid, cost]) =>
+      Types.ObjectId.isValid(vid)
+        ? adjustVendorInvoiceCostBalance(new Types.ObjectId(vid), cost * multiplier, now, session)
+        : Promise.resolve()
+    )
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Invoice ledger helpers — ClientTransaction audit trail (isMonetoryTranseciton: false)
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a single ClientTransaction row for an invoice (non-monetary, accounting entry):
+ *   • One DEBIT for the client (invoice raised → client owes us, direction "invoice")
+ * Vendor costs are NOT stored here — they are derived directly from InvoiceItem records.
+ * voucherNo = invoiceNo so it is human-readable and unique per invoice.
+ */
+async function createInvoiceLedgerTxns(opts: {
+  invoiceId: Types.ObjectId
+  invoiceNo: string
+  salesDate: string
+  clientId: Types.ObjectId
+  clientName: string
+  netTotal: number
+  companyId: Types.ObjectId
+  now: string
+  session: mongoose.ClientSession
+}) {
+  const { invoiceId, invoiceNo, salesDate, clientId, clientName, netTotal, companyId, now, session } = opts
+  if (netTotal <= 0) return
+
+  await ClientTransaction.insertMany([{
+    date: salesDate,
+    voucherNo: invoiceNo,
+    clientId,
+    invoiceId,
+    clientName,
+    companyId,
+    invoiceType: "INVOICE",
+    amount: netTotal,
+    direction: "invoice",
+    transactionType: "invoice",
+    isMonetoryTranseciton: false,
+    note: `Invoice ${invoiceNo}`,
+    createdAt: now,
+    updatedAt: now,
+  }], { session })
+}
+
+/** Delete invoice-originated ClientTransaction rows (call on update / delete). */
+async function deleteInvoiceLedgerTxns(
+  invoiceId: Types.ObjectId | string,
+  companyId: Types.ObjectId,
+  session: mongoose.ClientSession
+) {
+  const oid = typeof invoiceId === "string" ? new Types.ObjectId(invoiceId) : invoiceId
+  await ClientTransaction.deleteMany(
+    { invoiceId: oid, transactionType: "invoice", companyId },
+    { session }
+  )
+}
+
+
 function pickVendorIdFromItem(i: any): any {
   const raw = i.vendor ?? i.billing_comvendor ?? i.vendorId
   if (raw && typeof raw === "object" && "_id" in raw) return String((raw as any)._id)
@@ -630,7 +724,8 @@ export async function createNonCommissionInvoice(body: any, companyId: string) {
       const invoiceId = result[0]._id
       createdId = String(invoiceId)
 
-      // 5. Create Child Records
+      // 5. Create Child Records — collect vendor costs during loop (no sequential DB calls)
+      const vendorCostMap = new Map<string, number>()
       for (const item of invoiceItems) {
         const { ticketDetails, paxEntries, flightEntries } = item
         
@@ -710,14 +805,19 @@ export async function createNonCommissionInvoice(body: any, companyId: string) {
           })), { session })
         }
 
-        // e. Update Vendor Balance
-        if (ticketDetails.vendor && parseNumber(ticketDetails.purchasePrice, 0) > 0) {
+        // e. Accumulate vendor cost (no DB call inside loop)
+        const purchaseCost = parseNumber(ticketDetails.purchasePrice, 0)
+        if (ticketDetails.vendor && purchaseCost > 0) {
           const vOid = normalizeVendorObjectId(ticketDetails.vendor)
           if (vOid) {
-            await adjustVendorInvoiceCostBalance(vOid, parseNumber(ticketDetails.purchasePrice, 0), now, session)
+            const key = vOid.toString()
+            vendorCostMap.set(key, (vendorCostMap.get(key) ?? 0) + purchaseCost)
           }
         }
       }
+
+      // 5b. Apply all vendor balance updates in parallel (one call per unique vendor)
+      await applyVendorCostMap(vendorCostMap, 1, now, session)
 
       // 6. Update Client Balance
       await Client.updateOne(
@@ -725,6 +825,19 @@ export async function createNonCommissionInvoice(body: any, companyId: string) {
         { $inc: { presentBalance: -netTotal }, $set: { updatedAt: now } },
         { session }
       )
+
+      // 7. Create invoice ledger transactions (audit trail — client debit only)
+      await createInvoiceLedgerTxns({
+        invoiceId,
+        invoiceNo: headerDoc.invoiceNo,
+        salesDate: headerDoc.salesDate,
+        clientId: new Types.ObjectId(clientDoc._id),
+        clientName: names.clientName || "",
+        netTotal,
+        companyId: companyIdObj,
+        now,
+        session,
+      })
 
       resultOk = true
     })
@@ -847,10 +960,15 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
   try {
     let resultOk = false
     await session.withTransaction(async () => {
-      // 1. Delete existing related records (Soft delete or hard delete for replacement)
+      // 1. Fetch existing records before deletion (need for vendor cost revert)
       const invId = new Types.ObjectId(id)
       const oldInv = await Invoice.findOne({ _id: invId, companyId: companyIdObj }).session(session)
       if (!oldInv) throw new AppError("Invoice not found", 404)
+
+      // 1a. Build old vendor cost map before deleting child records
+      const now = new Date().toISOString()
+      const oldItems = await InvoiceItem.find({ invoiceId: invId, companyId: companyIdObj }).session(session)
+      const oldVendorCostMap = buildVendorCostMap(oldItems)
 
       await Promise.all([
         InvoiceItem.deleteMany({ invoiceId: invId, companyId: companyIdObj }).session(session),
@@ -859,9 +977,14 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
         InvoiceTransport.deleteMany({ invoiceId: invId, companyId: companyIdObj }).session(session),
       ])
 
+      // 1b. Revert old vendor balances + delete old ledger txns
+      await Promise.all([
+        applyVendorCostMap(oldVendorCostMap, -1, now, session),
+        deleteInvoiceLedgerTxns(invId, companyIdObj, session),
+      ])
+
       // 2. Re-create header and children using existing create logic adapted for Update
       const { general, items: invoiceItems, billing } = body
-      const now = new Date().toISOString()
 
       const clientDoc = await Client.findOne({ _id: new Types.ObjectId(general.clientId), companyId: companyIdObj }).lean()
       if (!clientDoc) throw new AppError("Client not found", 404)
@@ -905,7 +1028,8 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
 
       await Invoice.updateOne({ _id: id, companyId: companyIdObj }, { $set: headerUpdates }, { session })
 
-      // 3. Create Child Records (Same as create logic)
+      // 3. Create Child Records — accumulate new vendor costs during loop
+      const newVendorCostMap = new Map<string, number>()
       for (const item of invoiceItems) {
         const { ticketDetails, paxEntries, flightEntries } = item
 
@@ -984,7 +1108,20 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
             updatedAt: now
           })), { session })
         }
+
+        // e. Accumulate new vendor cost (no DB call inside loop)
+        const purchaseCost = parseNumber(ticketDetails.purchasePrice, 0)
+        if (ticketDetails.vendor && purchaseCost > 0) {
+          const vOid = normalizeVendorObjectId(ticketDetails.vendor)
+          if (vOid) {
+            const key = vOid.toString()
+            newVendorCostMap.set(key, (newVendorCostMap.get(key) ?? 0) + purchaseCost)
+          }
+        }
       }
+
+      // 3b. Apply new vendor balances in parallel
+      await applyVendorCostMap(newVendorCostMap, 1, now, session)
 
       // 4. Update Client Balance (Adjust by delta)
       if (delta !== 0) {
@@ -994,6 +1131,19 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
           { session }
         )
       }
+
+      // 5. Re-create invoice ledger transactions (client debit only)
+      await createInvoiceLedgerTxns({
+        invoiceId: invId,
+        invoiceNo: headerUpdates.invoiceNo,
+        salesDate: headerUpdates.salesDate,
+        clientId: new Types.ObjectId(clientDoc._id),
+        clientName: names.clientName || "",
+        netTotal,
+        companyId: companyIdObj,
+        now,
+        session,
+      })
 
       resultOk = true
     })
@@ -1022,46 +1172,16 @@ export async function deleteInvoiceById(id: string, companyId: string) {
       const invoiceId = inv._id
       const now = new Date().toISOString()
 
-      // 1. Fetch items and aggregate costs by vendor to avoid N+1
+      // 1. Fetch items, revert vendor balances in parallel + delete ledger txns
       const existingItems = await InvoiceItem.find({ invoiceId, companyId: companyIdObj }).session(session)
-      const vendorCostsMap = new Map<string, number>()
-      
-      for (const item of existingItems) {
-        const lineCost = effectiveVendorLineCost(item)
-        if (item.vendorId && lineCost > 0) {
-          const vId = String(item.vendorId)
-          vendorCostsMap.set(vId, (vendorCostsMap.get(vId) || 0) + lineCost)
-        }
-      }
+      const vendorCostsMap = buildVendorCostMap(existingItems)
 
-      // 2. Bulk update vendors
-      if (vendorCostsMap.size > 0) {
-        const vendorIds = Array.from(vendorCostsMap.keys()).filter((id) => Types.ObjectId.isValid(id))
-        const vendors = await Vendor.find({ _id: { $in: vendorIds.map((id) => new Types.ObjectId(id)) } }).session(session)
-        
-        for (const vendor of vendors) {
-          const revertAmount = vendorCostsMap.get(String(vendor._id)) || 0
-          let currentNet = 0
-          if (vendor.presentBalance && typeof vendor.presentBalance === 'object') {
-            const pType = vendor.presentBalance.type
-            const pAmount = Number(vendor.presentBalance.amount || 0)
-            currentNet = (pType === 'advance' ? pAmount : -pAmount)
-          } else {
-            currentNet = Number(vendor.presentBalance || 0)
-          }
-          
-          // Reverting the cost: Invoice cost subtracted from balance, so we ADD it back
-          const newNet = currentNet + revertAmount
-          const newType = newNet >= 0 ? "advance" : "due"
-          const newAmount = Math.abs(newNet)
-          
-          vendor.presentBalance = { type: newType, amount: newAmount }
-          vendor.updatedAt = now
-          await vendor.save({ session })
-        }
-      }
+      await Promise.all([
+        applyVendorCostMap(vendorCostsMap, -1, now, session),
+        deleteInvoiceLedgerTxns(invoiceId, companyIdObj, session),
+      ])
 
-      // 3. Adjust Client Balance (reverting the invoice net total impact)
+      // 2. Adjust Client Balance (reverting the invoice net total impact)
       const net = Number(inv.netTotal || inv.billing?.netTotal || 0)
       if (net !== 0 && inv.clientId) {
         // Invoice increases client due (negative impact on balance), so we add it back
@@ -1072,7 +1192,7 @@ export async function deleteInvoiceById(id: string, companyId: string) {
         )
       }
 
-      // 4. Cascading Soft Delete for all related tables
+      // 3. Cascading Soft Delete for all related tables
       const softDeleteFilter = { invoiceId, companyId: companyIdObj }
       const softDeleteUpdate = { $set: { isDeleted: true, updatedAt: now } }
       
@@ -1173,7 +1293,8 @@ export async function createInvoice(body: any, companyId: string) {
       const invoiceId = result[0]._id
       createdId = String(invoiceId)
 
-      // b. Create Child Records
+      // b. Create Child Records + vendor balance (grouped, parallel)
+      const vendorCostMap = buildVendorCostMap(billingItems)
       if (billingItems.length) {
         await InvoiceItem.insertMany(billingItems.map(i => ({ 
           ...i, 
@@ -1184,13 +1305,8 @@ export async function createInvoice(body: any, companyId: string) {
           updatedAt: now 
         })), { session })
 
-        for (const item of billingItems) {
-          const vOid = normalizeVendorObjectId(item.vendorId)
-          const lineCost = effectiveVendorLineCost(item)
-          if (vOid && lineCost > 0) {
-            await adjustVendorInvoiceCostBalance(vOid, lineCost, now, session)
-          }
-        }
+        // One DB call per unique vendor, all parallel — no N+1
+        await applyVendorCostMap(vendorCostMap, 1, now, session)
       }
 
       const { tickets, hotels, transports, passports } = globalDetails
@@ -1247,6 +1363,19 @@ export async function createInvoice(body: any, companyId: string) {
         invoice_total_vendor_price: String(billingItems.reduce((s: number, i: any) => s + i.totalCost, 0).toFixed(2)),
         invoice_sales_date: headerDoc.salesDate, invoice_date: headerDoc.salesDate, invoice_due_date: headerDoc.dueDate || null,
       }
+
+      // e. Create invoice ledger transactions (audit trail — client debit only)
+      await createInvoiceLedgerTxns({
+        invoiceId,
+        invoiceNo: headerDoc.invoiceNo,
+        salesDate: headerDoc.salesDate,
+        clientId: new Types.ObjectId(clientDoc._id),
+        clientName: names.clientName || "",
+        netTotal: summary.netTotal,
+        companyId: companyIdObj,
+        now,
+        session,
+      })
     })
     return { ok: true, id: createdId, created: response }
   } catch (err: any) {
@@ -1300,19 +1429,19 @@ export async function updateInvoiceById(id: string, body: any, companyId: string
   const session = await mongoose.startSession()
   try {
     await session.withTransaction(async () => {
-      // 2. Revert Old Vendor Balances
+      const idObj = new Types.ObjectId(id)
+
+      // 2. Build old vendor cost map, then revert old balances + delete old ledger txns (parallel)
       const oldItems = await InvoiceItem.find({ invoiceId: id, companyId: companyIdObj }).session(session)
-      for (const item of oldItems) {
-        const vOid = item.vendorId ? normalizeVendorObjectId(item.vendorId) : null
-        const lineCost = effectiveVendorLineCost(item)
-        if (vOid && lineCost > 0) {
-          await adjustVendorInvoiceCostBalance(vOid, -lineCost, now, session)
-        }
-      }
+      const oldVendorCostMap = buildVendorCostMap(oldItems)
+
+      await Promise.all([
+        applyVendorCostMap(oldVendorCostMap, -1, now, session),
+        deleteInvoiceLedgerTxns(idObj, companyIdObj, session),
+      ])
 
       // 3. Update Header & Replace Children
       await Invoice.updateOne({ _id: id, companyId: companyIdObj }, { $set: headerUpdates }, { session })
-      const idObj = new Types.ObjectId(id)
       await Promise.all([
         InvoiceItem.deleteMany({ invoiceId: idObj, companyId: companyIdObj }).session(session),
         InvoiceTicket.deleteMany({ invoiceId: idObj, companyId: companyIdObj }).session(session),
@@ -1321,6 +1450,8 @@ export async function updateInvoiceById(id: string, body: any, companyId: string
         InvoicePassport.deleteMany({ invoiceId: idObj, companyId: companyIdObj }).session(session),
       ])
 
+      // Build new vendor cost map + apply in parallel
+      const newVendorCostMap = buildVendorCostMap(billingItems)
       if (billingItems.length) {
         await InvoiceItem.insertMany(billingItems.map(i => ({ 
           ...i, 
@@ -1331,13 +1462,8 @@ export async function updateInvoiceById(id: string, body: any, companyId: string
           updatedAt: now 
         })), { session })
 
-        for (const item of billingItems) {
-          const vOid = normalizeVendorObjectId(item.vendorId)
-          const lineCost = effectiveVendorLineCost(item)
-          if (vOid && lineCost > 0) {
-            await adjustVendorInvoiceCostBalance(vOid, lineCost, now, session)
-          }
-        }
+        // One DB call per unique vendor, all parallel — no N+1
+        await applyVendorCostMap(newVendorCostMap, 1, now, session)
       }
 
       const { tickets, hotels, transports, passports } = globalDetails
@@ -1369,6 +1495,19 @@ export async function updateInvoiceById(id: string, body: any, companyId: string
       if (clientDelta !== 0 && inv.clientId) {
         await Client.updateOne({ _id: inv.clientId, companyId: companyIdObj }, { $inc: { presentBalance: -clientDelta }, $set: { updatedAt: now } }, { session })
       }
+
+      // 5. Re-create invoice ledger transactions (client debit only)
+      await createInvoiceLedgerTxns({
+        invoiceId: idObj,
+        invoiceNo: headerUpdates.invoiceNo,
+        salesDate: headerUpdates.salesDate,
+        clientId: new Types.ObjectId(inv.clientId),
+        clientName: names.clientName || "",
+        netTotal: summary.netTotal,
+        companyId: companyIdObj,
+        now,
+        session,
+      })
     })
     return { ok: true }
   } catch (err: any) {

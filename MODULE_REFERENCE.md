@@ -477,3 +477,141 @@ Remaining amount = `payment.amount` − sum of all `vendor_payment_allocations.a
 - **List page:** `FilterToolbar` (date range, search, refresh, Add Payment), Ant `Table` with `TableRowActions` (View → navigates to detail page, Edit, Delete with confirm).
 - **Add/Edit modal** (`PaymentModal`): RHF `FormProvider`, `DateInput`, `VendorSelect`, `SpecificInvoicePayment` sub-form for invoice/ticket types. Payment type selector drives which sub-form renders.
 - **View page** (`/dashboard/vendors/payment/[id]`): Ant `Tabs` — "Invoice" (placeholder) and "Details". Details tab shows payment header + either line-item table (for "invoice"/"ticket") or allocations table (for "overall"/"advance") with **"Add Invoice"** button that opens `VendorPaymentAllocateModal`.
+
+---
+
+## 13. Client Ledger (report)
+
+**Purpose:** Statement of all debit/credit movements for a single client, derived from `client_transactions`. Produces a chronological ledger with a running balance and an entity details card.
+
+**Total operations: 1** (read-only; no writes).
+
+| # | Operation | Trigger | Collections |
+|---|-----------|---------|-------------|
+| **1** | **Fetch ledger** | `GET /api/reports/client-ledger?clientId&dateFrom?&dateTo?` + `x-company-id` | `client_transactions` (aggregate with lookup to `invoice_items` and `invoice_tickets`), `clients_manager` (single document for entity info) |
+
+### Data sources
+
+| Column | Source |
+|--------|--------|
+| Date / VoucherNo / Amount / Direction / Note | `client_transactions` |
+| Pax Name | `invoice_items.paxName` + `invoice_tickets.passengerName` (joined via `invoiceId`) |
+| PNR / Ticket No. / Route | `invoice_tickets` (joined via `invoiceId`) |
+| Pay Type | `client_transactions.payType` + `accountName` |
+| Debit / Credit | Derived from `direction`: `"receiv"` → credit, anything else → debit |
+| Balance | Cumulative `debit − credit` (positive = Due, negative = Advance) |
+| Entity card | `clients_manager` document (`name`, `phone`, `email`, `address`) |
+
+### Particulars mapping
+
+| `transactionType` / `invoiceType` | Particulars label |
+|-----------------------------------|-------------------|
+| `transactionType: "invoice"` | `Invoice <voucherNo>` |
+| `invoiceType: "INVOICE"` | `Payment (Invoice)` |
+| `invoiceType: "EXPENSE"` | `Expense` |
+| `invoiceType: "BALANCE_TRANSFER"` | `Balance Transfer` |
+| anything else | `Money Receipt` |
+
+### URL deep-link
+
+Navigating to `/dashboard/reports/client-ledger?clientId=<id>` pre-selects the client in the dropdown and auto-fetches the ledger once the lookup options have loaded.
+
+### Response shape
+
+```json
+{
+  "entries": [{ "id", "date", "particulars", "voucherNo", "paxName", "pnr", "ticketNo", "route", "payType", "debit", "credit", "balance", "note" }],
+  "totalDebit": 0,
+  "totalCredit": 0,
+  "closingBalance": 0,
+  "entity": { "name", "phone", "email", "address" }
+}
+```
+
+### Example
+
+Client "Mohammad Yeasir Arafat" has one invoice (INV-0001, 15,000) and one money receipt (MR-0001, 5,000):
+
+1. **GET** `/api/reports/client-ledger?clientId=<id>` →
+   - Row 1: `Invoice INV-0001`, debit 15,000, balance Due 15,000
+   - Row 2: `Payment (Invoice)`, credit 5,000, balance Due 10,000
+   - `totalDebit: 15000`, `totalCredit: 5000`, `closingBalance: 10000`
+   - `entity: { name: "Mohammad Yeasir Arafat", phone: "+966...", email: "", address: "..." }`
+2. UI renders `LedgerEntityCard` ("Client Details") above the `FilterToolbar`, then the Ant Design table below.
+
+**Code:** `services/clientLedgerService.ts`, `app/api/reports/client-ledger/route.ts`, UI `app/dashboard/reports/client-ledger/page.tsx`, shared component `components/shared/ledger-entity-card.tsx`.
+
+**UI:** `LedgerEntityCard` (appears after first search), `FilterToolbar` (date range + `ClearableSelect` for client + Search button), Ant `Table` with horizontal scroll and fixed summary row. URL param `clientId` triggers auto-fetch on mount.
+
+---
+
+## 14. Vendor Ledger (report)
+
+**Purpose:** Statement of all cost and payment movements for a single vendor, combining two sources: invoice costs from `invoice_items` (grouped per invoice) and payment/return entries from `client_transactions`.
+
+**Total operations: 1** (read-only; no writes).
+
+| # | Operation | Trigger | Collections |
+|---|-----------|---------|-------------|
+| **1** | **Fetch ledger** | `GET /api/reports/vendor-ledger?vendorId&dateFrom?&dateTo?` + `x-company-id` | `invoice_items` (aggregate + lookup to `invoices` + `invoice_tickets`), `client_transactions` (payments/returns only), `vendors` (single document for entity info) |
+
+### Data sources
+
+Two separate query streams are merged and sorted chronologically:
+
+#### Stream A — Invoice costs (`invoice_items`)
+
+| Column | Source |
+|--------|--------|
+| Date | `invoices.salesDate` (via `$lookup`) |
+| VoucherNo | `invoices.invoiceNo` |
+| Total Cost | `$sum: invoice_items.totalCost` (grouped per `invoiceId`) |
+| Pax Name | `invoice_items.paxName` + `invoice_tickets.passengerName` |
+| PNR / Ticket No. / Route | `invoice_tickets` (joined via `invoiceId`) |
+| Particulars | `"Invoice Cost"` |
+| Ledger impact | **Credit** (we owe the vendor for the service) |
+
+#### Stream B — Payments / returns (`client_transactions`)
+
+| Column | Source |
+|--------|--------|
+| Date / VoucherNo / Amount / Note | `client_transactions` |
+| Particulars | Derived from `invoiceType`: `VENDOR_PAYMENT` → "Vendor Payment", `ADVANCE_RETURN` → "Advance Return", etc. |
+| Ledger impact | `direction: "payout"` → **Debit** (we paid); `direction: "receiv"` → **Credit** (vendor returned advance) |
+
+> `direction: "invoice"` rows are excluded from Stream B to avoid double-counting (those costs are sourced from `invoice_items`).
+
+### Running balance
+
+`balance += credit − debit` (positive = Due to vendor, negative = Advance held by us).
+
+### URL deep-link
+
+Navigating to `/dashboard/reports/vendor-ledger?vendorId=<id>` pre-selects the vendor in the dropdown and auto-fetches the ledger once the lookup options have loaded.
+
+### Response shape
+
+```json
+{
+  "entries": [{ "id", "date", "particulars", "voucherNo", "paxName", "pnr", "ticketNo", "route", "payType", "debit", "credit", "balance", "note" }],
+  "totalDebit": 0,
+  "totalCredit": 0,
+  "closingBalance": 0,
+  "entity": { "name", "mobile", "email", "address" }
+}
+```
+
+### Example
+
+Vendor "Omor Faruk" has one invoice cost (INV-0003, totalCost 8,000) and one payment (VP-0001, 5,000):
+
+1. **GET** `/api/reports/vendor-ledger?vendorId=<id>` →
+   - Row 1: `Invoice Cost` (from `invoice_items`), credit 8,000, balance Due 8,000
+   - Row 2: `Vendor Payment` (from `client_transactions`), debit 5,000, balance Due 3,000
+   - `totalDebit: 5000`, `totalCredit: 8000`, `closingBalance: 3000`
+   - `entity: { name: "Omor Faruk", mobile: "01700000000", email: "", address: "" }`
+2. UI renders `LedgerEntityCard` ("Vendor Details") above the `FilterToolbar`, then the Ant Design table below.
+
+**Code:** `services/vendorLedgerService.ts`, `app/api/reports/vendor-ledger/route.ts`, UI `app/dashboard/reports/vendor-ledger/page.tsx`, shared component `components/shared/ledger-entity-card.tsx`.
+
+**UI:** `LedgerEntityCard` (appears after first search), `FilterToolbar` (date range + `ClearableSelect` for vendor + Search button), Ant `Table` with horizontal scroll and fixed summary row. URL param `vendorId` triggers auto-fetch on mount.
