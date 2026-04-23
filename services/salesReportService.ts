@@ -1,7 +1,6 @@
 import { Types } from "mongoose"
 import connectMongoose from "@/lib/mongoose"
 import { Invoice } from "@/models/invoice"
-import { AppError } from "@/errors/AppError"
 
 export interface SalesReportParams {
   clientId?: string
@@ -14,6 +13,14 @@ export interface SalesReportParams {
   companyId?: string
 }
 
+/**
+ * Returns paginated invoice rows + grand-total aggregates in a single
+ * MongoDB round-trip using $facet.
+ *
+ * Optimization vs. previous version:
+ *   Before: Invoice.find()  +  Invoice.countDocuments()  +  Invoice.aggregate()  = 3 DB calls
+ *   After:  Invoice.aggregate([ $match, { $facet: { items, totals, count } } ])  = 1 DB call
+ */
 export async function getSalesReport(params: SalesReportParams) {
   await connectMongoose()
 
@@ -25,100 +32,97 @@ export async function getSalesReport(params: SalesReportParams) {
     dateTo,
     page = 1,
     pageSize = 20,
-    companyId
+    companyId,
   } = params
 
-  const query: any = {}
+  const query: Record<string, unknown> = { isDeleted: { $ne: true } }
 
-  if (companyId) {
-    query.companyId = new Types.ObjectId(companyId)
-  }
+  if (companyId) query.companyId = new Types.ObjectId(companyId)
 
-  if (clientId && Types.ObjectId.isValid(clientId)) {
+  if (clientId && Types.ObjectId.isValid(clientId))
     query.clientId = new Types.ObjectId(clientId)
-  }
 
-  if (employeeId && Types.ObjectId.isValid(employeeId)) {
+  if (employeeId && Types.ObjectId.isValid(employeeId))
     query.employeeId = new Types.ObjectId(employeeId)
-  }
 
-  // categoryId might be a string name or an ID depending on how it's stored
-  // In the current Invoice model, there is no explicit category field, 
-  // but invoiceType exists: ["standard", "visa", "non_commission"]
-  // If the user wants to filter by "Category", we might need to check how it's mapped.
-  // Assuming for now categoryId refers to invoiceType or a custom field.
-  if (categoryId) {
-    query.invoiceType = categoryId 
-  }
+  if (categoryId) query.invoiceType = categoryId
 
   if (dateFrom || dateTo) {
-    query.salesDate = {}
-    if (dateFrom) query.salesDate.$gte = dateFrom
-    if (dateTo) query.salesDate.$lte = dateTo
+    const df: Record<string, string> = {}
+    if (dateFrom) df.$gte = dateFrom
+    if (dateTo)   df.$lte = dateTo
+    query.salesDate = df
   }
 
   const skip = (page - 1) * pageSize
 
-  const [docs, total] = await Promise.all([
-    Invoice.find(query)
-      .sort({ salesDate: -1, createdAt: -1 })
-      .skip(skip)
-      .limit(pageSize)
-      .lean(),
-    Invoice.countDocuments(query)
+  const [result] = await Invoice.aggregate([
+    { $match: query },
+    {
+      $facet: {
+        // ── paginated rows ───────────────────────────────────────────────────
+        items: [
+          { $sort: { salesDate: -1, createdAt: -1 } },
+          { $skip: skip },
+          { $limit: pageSize },
+        ],
+        // ── grand totals for the whole result set ────────────────────────────
+        totals: [
+          {
+            $group: {
+              _id: null,
+              totalSales: {
+                $sum: { $ifNull: ["$netTotal", { $ifNull: ["$billing.netTotal", 0] }] },
+              },
+              totalCost:      { $sum: { $ifNull: ["$billing.totalCost", 0] } },
+              totalCollected: { $sum: { $ifNull: ["$receivedAmount", 0] } },
+            },
+          },
+        ],
+        // ── total document count ─────────────────────────────────────────────
+        count: [{ $count: "n" }],
+      },
+    },
   ])
 
-  const items = docs.map((d: any) => {
-    const netTotal = Number(d.netTotal || d.billing?.netTotal || 0)
-    const totalCost = Number(d.billing?.totalCost || 0)
-    const profit = netTotal - totalCost
-    const receivedAmount = Number(d.receivedAmount || 0)
-    const dueAmount = Math.max(0, netTotal - receivedAmount)
+  const docs          = (result.items   ?? []) as any[]
+  const total         = (result.count[0]?.n   ?? 0)  as number
+  const raw           = result.totals[0] ?? { totalSales: 0, totalCost: 0, totalCollected: 0 }
 
+  const items = docs.map((d: any) => {
+    const netTotal       = Number(d.netTotal ?? d.billing?.netTotal ?? 0)
+    const totalCost      = Number(d.billing?.totalCost ?? 0)
+    const receivedAmount = Number(d.receivedAmount ?? 0)
     return {
-      id: String(d._id),
-      date: d.salesDate,
-      invoiceNo: d.invoiceNo,
-      clientName: d.clientName || "",
-      category: d.invoiceType || "Other",
-      salesBy: d.salesByName || "",
-      salesPrice: netTotal,
-      costPrice: totalCost,
-      profit: profit,
-      collectAmount: receivedAmount,
-      dueAmount: dueAmount,
+      id:             String(d._id),
+      clientId:       String(d.clientId ?? ""),
+      date:           d.salesDate ?? "",
+      invoiceNo:      d.invoiceNo ?? "",
+      clientName:     d.clientName ?? "",
+      category:       d.invoiceType ?? "Other",
+      salesBy:        d.salesByName ?? "",
+      salesPrice:     netTotal,
+      costPrice:      totalCost,
+      profit:         netTotal - totalCost,
+      collectAmount:  receivedAmount,
+      dueAmount:      Math.max(0, netTotal - receivedAmount),
     }
   })
 
-  // Calculate totals for the entire filtered set (not just the page)
-  const aggregateTotals = await Invoice.aggregate([
-    { $match: query },
-    {
-      $group: {
-        _id: null,
-        totalSales: { $sum: { $ifNull: ["$netTotal", { $ifNull: ["$billing.netTotal", 0] }] } },
-        totalCost: { $sum: { $ifNull: ["$billing.totalCost", 0] } },
-        totalCollected: { $sum: { $ifNull: ["$receivedAmount", 0] } },
-      }
-    }
-  ])
-
-  const overallTotals = aggregateTotals[0] || { totalSales: 0, totalCost: 0, totalCollected: 0 }
-  
   return {
     items,
     pagination: {
       total,
       page,
       pageSize,
-      totalPages: Math.ceil(total / pageSize)
+      totalPages: Math.ceil(total / pageSize),
     },
     totals: {
-      salesPrice: overallTotals.totalSales,
-      costPrice: overallTotals.totalCost,
-      profit: overallTotals.totalSales - overallTotals.totalCost,
-      collectAmount: overallTotals.totalCollected,
-      dueAmount: Math.max(0, overallTotals.totalSales - overallTotals.totalCollected)
-    }
+      salesPrice:    raw.totalSales,
+      costPrice:     raw.totalCost,
+      profit:        raw.totalSales - raw.totalCost,
+      collectAmount: raw.totalCollected,
+      dueAmount:     Math.max(0, raw.totalSales - raw.totalCollected),
+    },
   }
 }

@@ -1,22 +1,22 @@
 "use client"
 
-import { useState, useMemo, useEffect, useCallback } from "react"
-import { Card, CardContent } from "@/components/ui/card"
+import { useState, useEffect, useCallback } from "react"
+import { Table } from "antd"
+import type { ColumnsType } from "antd/es/table"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { format } from "date-fns"
 import { PageWrapper } from "@/components/shared/page-wrapper"
 import { Search, Printer, FileSpreadsheet } from "lucide-react"
-import { useInvoiceLookups } from "@/hooks/useInvoiceLookups"
 import { ClearableSelect } from "@/components/shared/clearable-select"
 import { DateRangePickerWithPresets } from "@/components/shared/date-range-with-presets"
 import { DateRange } from "react-day-picker"
 import Link from "next/link"
 import { toast } from "@/components/ui/use-toast"
-import { cn } from "@/lib/utils"
 
 interface SalesEarningItem {
   id: string
+  clientId: string
   date: string
   invoiceNo: string
   clientName: string
@@ -126,13 +126,131 @@ export default function MonthlySalesEarningPage() {
     fetchReport()
   }, [fetchReport])
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(amount)
-  }
+  const fmt = (n: number) =>
+    new Intl.NumberFormat("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(n)
+
+  const columns: ColumnsType<SalesEarningItem> = [
+    {
+      title: "SL",
+      key: "sl",
+      width: 52,
+      render: (_: unknown, __: SalesEarningItem, i: number) =>
+        (page - 1) * 20 + i + 1,
+    },
+    {
+      title: "Date",
+      dataIndex: "date",
+      key: "date",
+      width: 110,
+      render: (v: string) => (v ? format(new Date(v), "dd MMM yyyy") : "—"),
+    },
+    {
+      title: "Invoice No.",
+      dataIndex: "invoiceNo",
+      key: "invoiceNo",
+      width: 130,
+      render: (v: string, row: SalesEarningItem) => (
+        <Link href={`/dashboard/invoices/${row.id}`} className="text-sky-500 hover:underline font-medium">
+          {v}
+        </Link>
+      ),
+    },
+    {
+      title: "Client Name",
+      dataIndex: "clientName",
+      key: "clientName",
+      width: 170,
+      render: (v: string, row: SalesEarningItem) => (
+        <Link
+          href={`/dashboard/reports/client-ledger?clientId=${row.clientId}`}
+          className="text-sky-500 hover:underline"
+        >
+          {v}
+        </Link>
+      ),
+    },
+    {
+      title: "Sales By",
+      dataIndex: "salesBy",
+      key: "salesBy",
+      width: 130,
+    },
+    {
+      title: "Sales Category",
+      dataIndex: "salesCategory",
+      key: "salesCategory",
+      width: 130,
+    },
+    {
+      title: "Sales Price",
+      dataIndex: "salesPrice",
+      key: "salesPrice",
+      width: 120,
+      align: "right" as const,
+      render: (v: number) => <span className="font-medium">{fmt(v)}</span>,
+    },
+    {
+      title: "Purchase Amt",
+      dataIndex: "purchaseAmount",
+      key: "purchaseAmount",
+      width: 120,
+      align: "right" as const,
+      render: (v: number) => <span className="font-medium">{fmt(v)}</span>,
+    },
+    {
+      title: "Client Disc.",
+      dataIndex: "clientDiscount",
+      key: "clientDiscount",
+      width: 110,
+      align: "right" as const,
+      render: (v: number) => <span className="font-medium">{fmt(v)}</span>,
+    },
+    {
+      title: "Svc Charge",
+      dataIndex: "serviceCharge",
+      key: "serviceCharge",
+      width: 110,
+      align: "right" as const,
+      render: (v: number) => <span className="font-medium">{fmt(v)}</span>,
+    },
+    {
+      title: "Earning Amt",
+      dataIndex: "earningAmount",
+      key: "earningAmount",
+      width: 120,
+      align: "right" as const,
+      render: (v: number) => (
+        <span className="font-medium text-green-600">{fmt(v)}</span>
+      ),
+    },
+    {
+      title: "Collected Amt",
+      dataIndex: "collectedAmount",
+      key: "collectedAmount",
+      width: 125,
+      align: "right" as const,
+      render: (v: number) => <span className="font-medium">{fmt(v)}</span>,
+    },
+    {
+      title: "Due Amount",
+      dataIndex: "dueAmount",
+      key: "dueAmount",
+      width: 120,
+      align: "right" as const,
+      render: (v: number) => (
+        <span className={`font-medium ${v > 0 ? "text-red-500" : "text-green-600"}`}>
+          {v > 0 ? fmt(v) : "PAID"}
+        </span>
+      ),
+    },
+  ]
+
+  const scrollX = columns.reduce((s, c) => s + ((c.width as number) || 120), 0)
+  const totals  = reportData?.totals
 
   return (
     <PageWrapper breadcrumbs={[{ label: "Reports", href: "/dashboard/reports" }, { label: "Monthly Sales Earning" }]}>
-      <div className="px-4 space-y-6">
+      <div className="px-4 space-y-4">
         <div className="flex gap-2">
           <Button variant="outline" className="bg-sky-500 text-white hover:bg-sky-600 border-none" onClick={() => window.print()}>
             <Printer className="w-4 h-4 mr-2" /> Print
@@ -154,7 +272,7 @@ export default function MonthlySalesEarningPage() {
           </div>
 
           <div className="space-y-2">
-            <Label className="text-gray-700 font-semibold">Select sales by</Label>
+            <Label className="text-gray-700 font-semibold">Select Sales By</Label>
             <ClearableSelect
               options={employees}
               value={selectedEmployee}
@@ -179,87 +297,51 @@ export default function MonthlySalesEarningPage() {
           </div>
         </div>
 
-        <Card className="border shadow-sm">
-          <CardContent className="p-0">
-            <div className="p-4 border-b">
-               <h3 className="text-lg font-bold text-center">Monthly Sales Earning And Due</h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs border-collapse">
-                <thead className="bg-gray-100 border-b">
-                  <tr>
-                    <th className="px-2 py-3 text-left font-bold border-r">SL.</th>
-                    <th className="px-2 py-3 text-left font-bold border-r">Date</th>
-                    <th className="px-2 py-3 text-left font-bold border-r">Invoice No.</th>
-                    <th className="px-2 py-3 text-left font-bold border-r">Client Name</th>
-                    <th className="px-2 py-3 text-left font-bold border-r">Sales By</th>
-                    <th className="px-2 py-3 text-left font-bold border-r">Sales Category</th>
-                    <th className="px-2 py-3 text-right font-bold border-r">Sales Price</th>
-                    <th className="px-2 py-3 text-right font-bold border-r">Purchase Amount</th>
-                    <th className="px-2 py-3 text-right font-bold border-r">Client Discount</th>
-                    <th className="px-2 py-3 text-right font-bold border-r">Service Charge</th>
-                    <th className="px-2 py-3 text-right font-bold border-r">Earning Amount</th>
-                    <th className="px-2 py-3 text-right font-bold border-r">Collected Amount</th>
-                    <th className="px-2 py-3 text-right font-bold">Due Amount</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y border-b">
-                  {reportData?.items.map((item, index) => (
-                    <tr key={item.id} className="hover:bg-gray-50">
-                      <td className="px-2 py-2 border-r">{(page - 1) * 20 + index + 1}</td>
-                      <td className="px-2 py-2 border-r whitespace-nowrap">{item.date ? format(new Date(item.date), "dd MMM yyyy") : "-"}</td>
-                      <td className="px-2 py-2 border-r">
-                        <Link href={`/dashboard/invoices/${item.id}`} className="text-sky-500 hover:underline">
-                          {item.invoiceNo}
-                        </Link>
-                      </td>
-                      <td className="px-2 py-2 border-r">
-                        <Link href={`/dashboard/reports/client-ledger?clientId=${item.id}`} className="text-sky-500 hover:underline">
-                          {item.clientName}
-                        </Link>
-                      </td>
-                      <td className="px-2 py-2 border-r">{item.salesBy}</td>
-                      <td className="px-2 py-2 border-r">{item.salesCategory}</td>
-                      <td className="px-2 py-2 text-right border-r font-medium">{formatCurrency(item.salesPrice)}</td>
-                      <td className="px-2 py-2 text-right border-r font-medium">{formatCurrency(item.purchaseAmount)}</td>
-                      <td className="px-2 py-2 text-right border-r font-medium">{formatCurrency(item.clientDiscount)}</td>
-                      <td className="px-2 py-2 text-right border-r font-medium">{formatCurrency(item.serviceCharge)}</td>
-                      <td className="px-2 py-2 text-right border-r font-medium text-green-600">{formatCurrency(item.earningAmount)}</td>
-                      <td className="px-2 py-2 text-right border-r font-medium">{formatCurrency(item.collectedAmount)}</td>
-                      <td className={cn(
-                        "px-2 py-2 text-right font-medium",
-                        item.dueAmount > 0 ? "text-red-500" : "text-green-600"
-                      )}>
-                        {item.dueAmount > 0 ? formatCurrency(item.dueAmount) : "PAID"}
-                      </td>
-                    </tr>
-                  ))}
-                  {reportData?.items.length === 0 && (
-                    <tr>
-                      <td colSpan={13} className="px-4 py-8 text-center text-gray-500">
-                        No records found for the selected criteria.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-                {reportData && reportData.items.length > 0 && (
-                  <tfoot className="bg-gray-50 font-bold">
-                    <tr>
-                      <td colSpan={6} className="px-2 py-3 text-right border-r uppercase">Total:</td>
-                      <td className="px-2 py-3 text-right border-r">{formatCurrency(reportData.totals.salesPrice)}</td>
-                      <td className="px-2 py-3 text-right border-r">{formatCurrency(reportData.totals.purchaseAmount)}</td>
-                      <td className="px-2 py-3 text-right border-r">{formatCurrency(reportData.totals.clientDiscount)}</td>
-                      <td className="px-2 py-3 text-right border-r">{formatCurrency(reportData.totals.serviceCharge)}</td>
-                      <td className="px-2 py-3 text-right border-r">{formatCurrency(reportData.totals.earningAmount)}</td>
-                      <td className="px-2 py-3 text-right border-r">{formatCurrency(reportData.totals.collectedAmount)}</td>
-                      <td className="px-2 py-3 text-right">{formatCurrency(reportData.totals.dueAmount)}</td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Report Table */}
+        <div className="bg-white rounded-md border shadow-sm overflow-hidden">
+          <div className="p-4 border-b">
+            <h3 className="text-base font-bold text-center">Monthly Sales Earning And Due</h3>
+          </div>
+          <Table<SalesEarningItem>
+            rowKey="id"
+            columns={columns}
+            dataSource={reportData?.items ?? []}
+            loading={loading}
+            scroll={{ x: scrollX }}
+            className="border-none"
+            locale={{ emptyText: loading ? "Loading…" : "No records found for the selected criteria." }}
+            pagination={{
+              current: page,
+              pageSize: 20,
+              total: reportData?.pagination.total ?? 0,
+              onChange: (p) => { setPage(p); fetchReport(p) },
+              showSizeChanger: false,
+              showTotal: (t) => `Total ${t} invoices`,
+            }}
+            summary={() =>
+              totals ? (
+                <Table.Summary fixed="bottom">
+                  <Table.Summary.Row className="bg-gray-100 font-bold">
+                    <Table.Summary.Cell index={0} colSpan={6} align="right">
+                      TOTAL
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={1} align="right">{fmt(totals.salesPrice)}</Table.Summary.Cell>
+                    <Table.Summary.Cell index={2} align="right">{fmt(totals.purchaseAmount)}</Table.Summary.Cell>
+                    <Table.Summary.Cell index={3} align="right">{fmt(totals.clientDiscount)}</Table.Summary.Cell>
+                    <Table.Summary.Cell index={4} align="right">{fmt(totals.serviceCharge)}</Table.Summary.Cell>
+                    <Table.Summary.Cell index={5} align="right">
+                      <span className="text-green-600">{fmt(totals.earningAmount)}</span>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={6} align="right">{fmt(totals.collectedAmount)}</Table.Summary.Cell>
+                    <Table.Summary.Cell index={7} align="right">
+                      <span className="text-red-500">{fmt(totals.dueAmount)}</span>
+                    </Table.Summary.Cell>
+                  </Table.Summary.Row>
+                </Table.Summary>
+              ) : null
+            }
+          />
+        </div>
       </div>
     </PageWrapper>
   )

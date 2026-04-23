@@ -1,135 +1,147 @@
-
+import { Types } from "mongoose"
 import connectMongoose from "@/lib/mongoose"
 import { Vendor } from "@/models/vendor"
 import { InvoiceItem } from "@/models/invoice-item"
 import { ClientTransaction } from "@/models/client-transaction"
-import { Types } from "mongoose"
 
-export async function getVendorsTotalDueAdvance(date: string, vendorId?: string) {
+type VendorBalanceStats = {
+  vendorId: string
+  name: string
+  mobile: string
+  email: string
+  presentDue: number
+  presentAdvance: number
+  lastBalance: number
+}
+
+/**
+ * Historical vendor balances as of `date`.
+ *
+ * Mirrors the two-stream design of vendorLedgerService:
+ *
+ * Stream A — Invoice costs (InvoiceItem → Invoice for salesDate)
+ *   credit += totalCost   (we owe the vendor for work done)
+ *
+ * Stream B — Payments & opening balance (ClientTransaction, vendorId)
+ *   payout direction → debit  (we paid the vendor)
+ *   receiv direction → credit (vendor returned advance / opening advance)
+ *
+ * balance = credit_A + credit_B − debit_B
+ *   positive → Due (we owe vendor)
+ *   negative → Advance (vendor owes us)
+ */
+export async function getVendorsTotalDueAdvance(
+  date: string,
+  vendorId?: string
+): Promise<VendorBalanceStats[]> {
   await connectMongoose()
-
-  const matchStage: any = { }
-  // Check if vendors have deleted flag
-  // Based on invoice-lookups, vendors don't seem to have isDeleted check in snippet, but standard practice.
-  // We'll proceed without it unless we see it in model.
-  
-  if (vendorId && Types.ObjectId.isValid(vendorId)) {
-    matchStage._id = new Types.ObjectId(vendorId)
-  }
 
   const targetDate = date || new Date().toISOString().slice(0, 10)
 
-  const pipeline: any[] = [
-    { $match: matchStage },
-    {
-      $lookup: {
-        from: "invoice_items",
-        let: { vid: "$_id" },
-        pipeline: [
-          {
-            $match: {
-              $expr: {
-                $and: [
-                  { $eq: ["$vendorId", "$$vid"] },
-                  { $lte: ["$createdAt", targetDate] }
-                ]
-              }
-            }
+  // ── 1. Fetch matching vendors ──────────────────────────────────────────────
+  const vendorMatch: Record<string, unknown> = {}
+  if (vendorId && Types.ObjectId.isValid(vendorId)) {
+    vendorMatch._id = new Types.ObjectId(vendorId)
+  }
+
+  const vendors = await Vendor.find(vendorMatch).lean() as any[]
+  if (vendors.length === 0) return []
+
+  const vendorIds = vendors.map((v) => v._id)
+
+  // ── 2. Invoice costs up to targetDate ─────────────────────────────────────
+  // Join InvoiceItem → Invoice to get salesDate, then filter by salesDate.
+  const costStats: { _id: Types.ObjectId; totalCost: number }[] =
+    await InvoiceItem.aggregate([
+      {
+        $match: {
+          vendorId: { $in: vendorIds },
+          isDeleted: { $ne: true },
+        },
+      },
+      {
+        $lookup: {
+          from: "invoices",
+          localField: "invoiceId",
+          foreignField: "_id",
+          as: "inv",
+        },
+      },
+      { $unwind: { path: "$inv", preserveNullAndEmptyArrays: false } },
+      { $match: { "inv.salesDate": { $lte: targetDate } } },
+      {
+        $group: {
+          _id: "$vendorId",
+          totalCost: { $sum: "$totalCost" },
+        },
+      },
+    ])
+
+  // ── 3. ClientTransaction totals per vendor up to targetDate ───────────────
+  // Includes opening balance (opening_balance type) and payment rows.
+  // Excludes any stale direction:"invoice" rows from before the refactor.
+  const txnStats: { _id: { vendorId: Types.ObjectId; direction: string }; total: number }[] =
+    await ClientTransaction.aggregate([
+      {
+        $match: {
+          vendorId: { $in: vendorIds },
+          date: { $lte: targetDate },
+          direction: { $ne: "invoice" },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            vendorId:  "$vendorId",
+            direction: "$direction",
           },
-          { $group: { _id: null, total: { $sum: "$totalCost" } } }
-        ],
-        as: "invStats"
-      }
-    },
-    {
-      $lookup: {
-        from: "client_transactions",
-        let: { vid: "$_id" },
-        pipeline: [
-          {
-            $match: {
-              $expr: {
-                $and: [
-                  { 
-                    $or: [
-                      { $eq: ["$vendorId", "$$vid"] },
-                      // { $eq: ["$clientId", "$$vid"] } // if needed
-                    ] 
-                  },
-                  { $lte: ["$date", targetDate] }
-                ]
-              }
-            }
-          },
-          { $group: { _id: "$direction", total: { $sum: "$amount" } } }
-        ],
-        as: "txnStats"
-      }
-    },
-    {
-      $project: {
-        name: 1,
-        mobile: 1,
-        email: 1,
-        presentBalance: 1, // Current DB Balance
-        openingBalance: 1,
-        openingBalanceType: 1,
-        costTotal: { $ifNull: [{ $arrayElemAt: ["$invStats.total", 0] }, 0] },
-        txnStats: 1
-      }
-    }
-  ]
+          total: { $sum: "$amount" },
+        },
+      },
+    ])
 
-  const results = await Vendor.aggregate(pipeline)
+  // ── 4. Build lookup maps ───────────────────────────────────────────────────
+  const costMap = new Map<string, number>()
+  for (const stat of costStats) {
+    costMap.set(String(stat._id), Number(stat.totalCost))
+  }
 
-  const processed = results.map(doc => {
-    // 1. Calculate Opening Balance
-    let opening = Number(doc.openingBalance || 0)
-    if (doc.openingBalanceType === "advance") {
-      opening = -Math.abs(opening)
-    } else {
-      opening = Math.abs(opening)
-    }
+  const txnMap = new Map<string, { payout: number; receiv: number }>()
+  for (const stat of txnStats) {
+    const vid = String(stat._id.vendorId)
+    if (!txnMap.has(vid)) txnMap.set(vid, { payout: 0, receiv: 0 })
+    const entry = txnMap.get(vid)!
+    if (stat._id.direction === "payout") entry.payout += Number(stat.total)
+    else if (stat._id.direction === "receiv") entry.receiv += Number(stat.total)
+  }
 
-    // 2. Invoice Costs (Credit -> Increases Liability/Due)
-    const costs = Number(doc.costTotal || 0)
+  // ── 5. Shape final rows ────────────────────────────────────────────────────
+  return vendors.map((doc) => {
+    const vid = String(doc._id)
+    const costs                  = costMap.get(vid) ?? 0
+    const { payout = 0, receiv = 0 } = txnMap.get(vid) ?? {}
 
-    // 3. Transactions
-    let txnDebit = 0  // Payout (We paid vendor -> Reduces Liability)
-    let txnCredit = 0 // Receiv (Vendor returned -> Increases Liability/Reduces Advance)
+    // balance = costs(credit) + receiv(credit) − payout(debit)
+    const calculatedBalance = costs + receiv - payout
 
-    if (Array.isArray(doc.txnStats)) {
-      doc.txnStats.forEach((s: any) => {
-        if (s._id === "payout") txnDebit += s.total
-        if (s._id === "receiv") txnCredit += s.total
-      })
-    }
-
-    // 4. Calculate Balance up to Date
-    // Balance = Opening + Costs + Receiv - Payout
-    const calculatedBalance = opening + costs + txnCredit - txnDebit
-
-    // Current DB Balance parsing
+    // Parse current DB balance for "Last Balance" column
     let lastBalance = 0
-    if (doc.presentBalance) {
-        if (typeof doc.presentBalance === 'object') {
-            const amt = Number(doc.presentBalance.amount || 0)
-            lastBalance = doc.presentBalance.type === 'advance' ? -amt : amt
-        } else {
-            lastBalance = Number(doc.presentBalance || 0)
-        }
+    const pb = doc.presentBalance as any
+    if (pb && typeof pb === "object") {
+      const amt = Number(pb.amount || 0)
+      lastBalance = pb.type === "advance" ? -amt : amt
+    } else {
+      lastBalance = Number(pb || 0)
     }
 
     return {
-      vendorId: String(doc._id),
-      name: doc.name,
-      mobile: doc.mobile || "",
-      email: doc.email || "N/A",
-      presentDue: calculatedBalance > 0 ? calculatedBalance : 0,
+      vendorId:       vid,
+      name:           doc.name    || "",
+      mobile:         doc.mobile  || "",
+      email:          doc.email   || "",
+      presentDue:     calculatedBalance > 0 ? calculatedBalance          : 0,
       presentAdvance: calculatedBalance < 0 ? Math.abs(calculatedBalance) : 0,
-      lastBalance: lastBalance 
+      lastBalance,
     }
   })
-
-  return processed
 }

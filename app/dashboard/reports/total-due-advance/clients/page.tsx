@@ -1,18 +1,19 @@
-
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
-import { Card, CardContent } from "@/components/ui/card"
+import { useState, useEffect, useRef } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
+import { Table } from "antd"
+import type { ColumnsType } from "antd/es/table"
+import { PageWrapper } from "@/components/shared/page-wrapper"
+import { ClearableSelect } from "@/components/shared/clearable-select"
+import FilterToolbar from "@/components/shared/filter-toolbar"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { DashboardHeader } from "@/components/dashboard/header"
+import { DateInput } from "@/components/ui/date-input"
 import { format } from "date-fns"
 import { Search, Printer, FileSpreadsheet } from "lucide-react"
 import { useInvoiceLookups } from "@/hooks/useInvoiceLookups"
 import { cn } from "@/lib/utils"
-import { useSearchParams, useRouter } from "next/navigation"
-import ClientSelect from "@/components/clients/client-select"
-import { DateInput } from "@/components/ui/date-input"
+import Link from "next/link"
 
 type ClientRow = {
   clientId: string
@@ -25,29 +26,41 @@ type ClientRow = {
   creditLimit: number
 }
 
+function formatAmount(n: number) {
+  return new Intl.NumberFormat("en-BD", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(n)
+}
+
 export default function TotalDueAdvanceClientPage() {
-  const { lookups } = useInvoiceLookups()
   const searchParams = useSearchParams()
-  const router = useRouter()
-  
-  const [selectedClient, setSelectedClient] = useState<string>("all")
-  const [date, setDate] = useState<Date | undefined>(new Date())
-  
+  const router       = useRouter()
+  const { lookups }  = useInvoiceLookups()
+
+  const urlClientId = searchParams.get("clientId") ?? "all"
+  const urlDate     = searchParams.get("date") ?? ""
+
+  const [selectedClient, setSelectedClient] = useState(urlClientId)
+  const [date,   setDate]   = useState<Date | undefined>(urlDate ? new Date(urlDate) : new Date())
   const [loading, setLoading] = useState(false)
-  const [rows, setRows] = useState<ClientRow[]>([])
+  const [rows,    setRows]    = useState<ClientRow[]>([])
 
-  const clientsList = useMemo(() => {
-    const list = lookups?.clients || []
-    return [{ id: "all", name: "ALL", uniqueId: 0 }, ...list]
-  }, [lookups?.clients])
+  const clientOptions = [
+    { value: "all", label: "ALL" },
+    ...(lookups?.clients ?? []).map((c) => ({ value: c.id, label: c.name })),
+  ]
 
-  // Init from URL
+  const autoFetchedRef = useRef(false)
+
+  // Auto-fetch on mount when arriving from a URL with date param
   useEffect(() => {
-    const cid = searchParams.get("clientId")
-    const d = searchParams.get("date")
-    if (cid) setSelectedClient(cid)
-    if (d) setDate(new Date(d))
-  }, [searchParams])
+    if (urlDate && lookups && !autoFetchedRef.current) {
+      autoFetchedRef.current = true
+      handleSearch()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!lookups])
 
   const handleSearch = async () => {
     if (!date) return
@@ -56,17 +69,12 @@ export default function TotalDueAdvanceClientPage() {
       const params = new URLSearchParams()
       if (selectedClient && selectedClient !== "all") params.set("clientId", selectedClient)
       params.set("date", format(date, "yyyy-MM-dd"))
-      
-      // Update URL without reload
-      router.push(`?${params.toString()}`)
 
-      const res = await fetch(`/api/reports/total-due-advance/clients?${params.toString()}`)
+      router.replace(`?${params.toString()}`, { scroll: false })
+
+      const res  = await fetch(`/api/reports/total-due-advance/clients?${params.toString()}`)
       const data = await res.json()
-      if (Array.isArray(data)) {
-        setRows(data)
-      } else {
-        setRows([])
-      }
+      setRows(Array.isArray(data) ? data : [])
     } catch (err) {
       console.error(err)
     } finally {
@@ -74,143 +82,175 @@ export default function TotalDueAdvanceClientPage() {
     }
   }
 
-  // Initial load if date is present
-  useEffect(() => {
-    if (date) {
-        if (searchParams.get("date")) {
-            handleSearch()
-        }
-    }
-  }, []) 
+  const totalDue     = rows.reduce((s, r) => s + r.presentDue,     0)
+  const totalAdvance = rows.reduce((s, r) => s + r.presentAdvance, 0)
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-BD', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount)
-  }
+  const columns: ColumnsType<ClientRow> = [
+    {
+      title: "SL",
+      key: "sl",
+      width: 56,
+      render: (_: unknown, __: ClientRow, i: number) => i + 1,
+    },
+    {
+      title: "Client Name",
+      dataIndex: "name",
+      key: "name",
+      width: 200,
+      render: (name: string, row: ClientRow) => (
+        <Link
+          href={`/dashboard/reports/client-ledger?clientId=${row.clientId}`}
+          className="text-blue-500 hover:underline font-medium"
+        >
+          {name}
+        </Link>
+      ),
+    },
+    {
+      title: "Mobile No.",
+      dataIndex: "mobile",
+      key: "mobile",
+      width: 140,
+      render: (v: string) => v || "—",
+    },
+    {
+      title: "Email",
+      dataIndex: "email",
+      key: "email",
+      width: 180,
+      render: (v: string) => v || "—",
+    },
+    {
+      title: "Present Due",
+      dataIndex: "presentDue",
+      key: "presentDue",
+      width: 130,
+      align: "right" as const,
+      render: (v: number) =>
+        v > 0 ? <span className="text-red-500 font-medium">{formatAmount(v)}</span> : "—",
+    },
+    {
+      title: "Present Advance",
+      dataIndex: "presentAdvance",
+      key: "presentAdvance",
+      width: 140,
+      align: "right" as const,
+      render: (v: number) =>
+        v > 0 ? <span className="text-green-500 font-medium">{formatAmount(v)}</span> : "—",
+    },
+    {
+      title: "Last Balance",
+      dataIndex: "lastBalance",
+      key: "lastBalance",
+      width: 130,
+      align: "right" as const,
+      render: (v: number) => (
+        <span className={cn("font-medium", v > 0 ? "text-red-500" : v < 0 ? "text-green-500" : "text-gray-400")}>
+          {v !== 0 ? formatAmount(Math.abs(v)) : "—"}
+        </span>
+      ),
+    },
+    {
+      title: "Credit Limit",
+      dataIndex: "creditLimit",
+      key: "creditLimit",
+      width: 120,
+      align: "right" as const,
+      render: (v: number) => (v ? formatAmount(v) : "N/A"),
+    },
+  ]
 
-  const totalDue = rows.reduce((sum, r) => sum + r.presentDue, 0)
-  const totalAdvance = rows.reduce((sum, r) => sum + r.presentAdvance, 0)
-  const totalLastBalance = rows.reduce((sum, r) => sum + r.lastBalance, 0)
+  const scrollX = columns.reduce((s, col) => s + ((col.width as number) || 120), 0)
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white shadow-sm">
-        <div className="mx-auto px-4 py-4">
-          <DashboardHeader />
-        </div>
-      </header>
-
-      <main className="flex-grow py-6 px-4">
-        <div className="flex items-center gap-2 mb-6 text-sm text-gray-500">
-             <span>Dashboard</span> <span>&gt;</span> <span>Report</span> <span>&gt;</span> <span className="font-medium text-gray-900">Total Due/Advance (Client)</span>
-        </div>
-
-        <div className="mb-6 flex flex-col md:flex-row gap-4 items-end justify-between">
-          <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto items-end">
-            
-            {/* Client Select */}
-            <div className="space-y-1 w-full md:w-[300px]">
-              <Label className="text-xs text-red-500 font-normal">* Select Client</Label>
-              <ClientSelect
-                value={selectedClient}
-                onChange={(id) => setSelectedClient(id || "all")}
-                preloaded={clientsList}
-                placeholder="Select Client"
-              />
-            </div>
-
-            {/* Date Select */}
-            <div className="space-y-1 w-full md:w-[240px]">
-              <Label className="text-xs text-red-500 font-normal">* Select Date</Label>
-              <DateInput 
-                value={date} 
-                onChange={setDate} 
+    <PageWrapper
+      breadcrumbs={[
+        { label: "Reports", href: "/dashboard/reports" },
+        { label: "Total Due / Advance (Clients)" },
+      ]}
+    >
+      <div className="mx-4 min-w-0 max-w-full space-y-4">
+        <FilterToolbar
+          showRefresh={false}
+          onRefresh={handleSearch}
+          filterExtrasBefore={
+            <ClearableSelect
+              options={clientOptions}
+              value={selectedClient}
+              onChange={(v) => setSelectedClient(v || "all")}
+              placeholder="Filter by Client"
+              className="w-64"
+            />
+          }
+          filterExtras={
+            <div className="flex items-center gap-2">
+              <DateInput
+                value={date}
+                onChange={setDate}
                 placeholder="Pick a date"
+                className="w-44"
               />
-            </div>
-
-            {/* Search Button */}
-            <div className="pb-0">
-              <Button onClick={handleSearch} disabled={!date || loading} className="bg-sky-400 hover:bg-sky-500 text-white w-full md:w-auto">
-                {loading ? "Searching..." : <><Search className="w-4 h-4 mr-2" /> Search</>}
+              <Button
+                onClick={handleSearch}
+                disabled={!date || loading}
+                className="bg-sky-500 hover:bg-sky-600"
+              >
+                <Search className="w-4 h-4 mr-2" />
+                {loading ? "Loading..." : "Search"}
               </Button>
             </div>
+          }
+        >
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="bg-sky-500 hover:bg-sky-600 text-white border-none">
+              <Printer className="w-4 h-4 mr-1" /> Print
+            </Button>
+            <Button variant="outline" size="sm" className="bg-sky-500 hover:bg-sky-600 text-white border-none">
+              <FileSpreadsheet className="w-4 h-4 mr-1" /> Excel
+            </Button>
           </div>
+        </FilterToolbar>
 
-          {/* Action Buttons */}
-          <div className="flex gap-2 mt-4 md:mt-0">
-             <Button variant="outline" className="bg-sky-400 hover:bg-sky-500 text-white border-none"><Printer className="w-4 h-4 mr-2"/> Print</Button>
-             <Button variant="outline" className="bg-sky-400 hover:bg-sky-500 text-white border-none"><FileSpreadsheet className="w-4 h-4 mr-2"/> Excel Report</Button>
-          </div>
+        {rows.length > 0 && (
+          <p className="text-sm text-gray-500">
+            Total records: <span className="font-semibold text-gray-700">{rows.length}</span>
+          </p>
+        )}
+
+        <div className="min-w-0 max-w-full bg-white rounded-md border shadow-sm overflow-hidden">
+          <Table<ClientRow>
+            rowKey="clientId"
+            columns={columns}
+            dataSource={rows}
+            loading={loading}
+            scroll={{ x: scrollX }}
+            pagination={false}
+            className="border-none"
+            locale={{
+              emptyText: loading ? "Loading..." : "Select a date and click Search",
+            }}
+            summary={() =>
+              rows.length > 0 ? (
+                <Table.Summary fixed="bottom">
+                  <Table.Summary.Row className="bg-gray-100">
+                    <Table.Summary.Cell index={0} colSpan={4} align="right">
+                      <span className="font-bold">Total Due &amp; Advance</span>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={1} align="right">
+                      <span className="text-red-500 font-bold">{formatAmount(totalDue)}</span>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={2} align="right">
+                      <span className="text-green-500 font-bold">{formatAmount(totalAdvance)}</span>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={3} />
+                    <Table.Summary.Cell index={4} />
+                  </Table.Summary.Row>
+                </Table.Summary>
+              ) : null
+            }
+          />
         </div>
-        
-        <div className="mb-4">
-            <h2 className="text-lg font-semibold">Total Due/Advance (Client)</h2>
-            <p className="text-sm text-gray-500 mt-2">You have total: Results</p>
-        </div>
-
-        {/* Table */}
-        <Card className="border-none shadow-none bg-transparent">
-          <CardContent className="p-0">
-            <div className="bg-white rounded-md border shadow-sm overflow-hidden overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-100 border-b">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 w-[50px]">SL.</th>
-                    <th className="px-4 py-3 text-left font-semibold text-blue-600">Client Name</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Mobile No.</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Email No.</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-700">Present Due</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-700">Present Advance</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-700">Last Balance</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-700">Credit Limit</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {rows.length === 0 ? (
-                    <tr>
-                        <td colSpan={8} className="h-40 text-center text-gray-500">
-                             <div className="flex flex-col items-center justify-center">
-                                {/* Placeholder Icon */}
-                                <div className="text-4xl mb-2">📂</div>
-                                No data
-                             </div>
-                        </td>
-                    </tr>
-                  ) : (
-                    rows.map((row, index) => (
-                        <tr key={row.clientId} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-gray-600">{index + 1}</td>
-                            <td className="px-4 py-3 text-blue-500">{row.name}</td>
-                            <td className="px-4 py-3 text-gray-600">{row.mobile}</td>
-                            <td className="px-4 py-3 text-gray-600">{row.email}</td>
-                            <td className="px-4 py-3 text-right text-red-500">{formatCurrency(row.presentDue)}</td>
-                            <td className="px-4 py-3 text-right text-green-500">{formatCurrency(row.presentAdvance)}</td>
-                            <td className={cn("px-4 py-3 text-right", row.lastBalance > 0 ? "text-red-500" : "text-green-500")}>
-                                {formatCurrency(Math.abs(row.lastBalance))}
-                            </td>
-                            <td className="px-4 py-3 text-right text-gray-600">{row.creditLimit ? formatCurrency(row.creditLimit) : "N/A"}</td>
-                        </tr>
-                    ))
-                  )}
-
-                  {/* Totals Row */}
-                  {rows.length > 0 && (
-                     <tr className="bg-white font-bold border-t">
-                        <td colSpan={4} className="px-4 py-3 text-right text-gray-800">Total Due & Advance</td>
-                        <td className="px-4 py-3 text-right text-red-500">{formatCurrency(totalDue)}</td>
-                        <td className="px-4 py-3 text-right text-green-500">{formatCurrency(totalAdvance)}</td>
-                        <td className={cn("px-4 py-3 text-right", totalLastBalance > 0 ? "text-red-500" : "text-green-500")}>
-                            {formatCurrency(Math.abs(totalLastBalance))}
-                        </td>
-                        <td></td>
-                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      </main>
-    </div>
+      </div>
+    </PageWrapper>
   )
 }

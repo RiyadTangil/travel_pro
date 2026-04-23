@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useMemo, useEffect, useCallback } from "react"
-import { Card, CardContent } from "@/components/ui/card"
+import { useState, useEffect, useCallback } from "react"
+import { Table } from "antd"
+import type { ColumnsType } from "antd/es/table"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { PageWrapper } from "@/components/shared/page-wrapper"
 import { format } from "date-fns"
 import { Search, Printer, FileSpreadsheet } from "lucide-react"
-import { useInvoiceLookups } from "@/hooks/useInvoiceLookups"
 import { ClearableSelect } from "@/components/shared/clearable-select"
 import { DateRangePickerWithPresets } from "@/components/shared/date-range-with-presets"
 import { DateRange } from "react-day-picker"
@@ -16,6 +16,7 @@ import { toast } from "@/components/ui/use-toast"
 
 interface SalesItem {
   id: string
+  clientId: string
   date: string
   invoiceNo: string
   clientName: string
@@ -46,7 +47,6 @@ interface SalesReportData {
 }
 
 export default function SalesReportPage() {
-  const { lookups } = useInvoiceLookups()
   const [selectedClient, setSelectedClient] = useState<string>("")
   const [selectedEmployee, setSelectedEmployee] = useState<string>("")
   const [selectedCategory, setSelectedCategory] = useState<string>("")
@@ -129,13 +129,115 @@ export default function SalesReportPage() {
     fetchReport()
   }, [fetchReport])
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(amount)
-  }
+  const fmt = (n: number) =>
+    new Intl.NumberFormat("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(n)
+
+  const columns: ColumnsType<SalesItem> = [
+    {
+      title: "SL",
+      key: "sl",
+      width: 52,
+      render: (_: unknown, __: SalesItem, i: number) =>
+        (page - 1) * 20 + i + 1,
+    },
+    {
+      title: "Date",
+      dataIndex: "date",
+      key: "date",
+      width: 110,
+      render: (v: string) => (v ? format(new Date(v), "dd MMM yyyy") : "—"),
+    },
+    {
+      title: "Invoice No",
+      dataIndex: "invoiceNo",
+      key: "invoiceNo",
+      width: 130,
+      render: (v: string, row: SalesItem) => (
+        <Link href={`/dashboard/invoices/${row.id}`} className="text-sky-500 hover:underline font-medium">
+          {v}
+        </Link>
+      ),
+    },
+    {
+      title: "Client Name",
+      dataIndex: "clientName",
+      key: "clientName",
+      width: 170,
+      render: (v: string, row: SalesItem) => (
+        <Link
+          href={`/dashboard/reports/client-ledger?clientId=${row.clientId}`}
+          className="text-sky-500 hover:underline"
+        >
+          {v}
+        </Link>
+      ),
+    },
+    {
+      title: "Category",
+      dataIndex: "category",
+      key: "category",
+      width: 120,
+    },
+    {
+      title: "Sales By",
+      dataIndex: "salesBy",
+      key: "salesBy",
+      width: 130,
+    },
+    {
+      title: "Sales Price",
+      dataIndex: "salesPrice",
+      key: "salesPrice",
+      width: 120,
+      align: "right" as const,
+      render: (v: number) => <span className="font-medium">{fmt(v)}</span>,
+    },
+    {
+      title: "Cost Price",
+      dataIndex: "costPrice",
+      key: "costPrice",
+      width: 110,
+      align: "right" as const,
+      render: (v: number) => <span className="font-medium">{fmt(v)}</span>,
+    },
+    {
+      title: "Profit",
+      dataIndex: "profit",
+      key: "profit",
+      width: 110,
+      align: "right" as const,
+      render: (v: number) => (
+        <span className="font-medium text-green-600">{fmt(v)}</span>
+      ),
+    },
+    {
+      title: "Collect Amount",
+      dataIndex: "collectAmount",
+      key: "collectAmount",
+      width: 130,
+      align: "right" as const,
+      render: (v: number) => <span className="font-medium">{fmt(v)}</span>,
+    },
+    {
+      title: "Due Amount",
+      dataIndex: "dueAmount",
+      key: "dueAmount",
+      width: 120,
+      align: "right" as const,
+      render: (v: number) => (
+        <span className={`font-medium ${v > 0 ? "text-red-500" : "text-green-600"}`}>
+          {v > 0 ? fmt(v) : "PAID"}
+        </span>
+      ),
+    },
+  ]
+
+  const scrollX = columns.reduce((s, c) => s + ((c.width as number) || 120), 0)
+  const totals  = reportData?.totals
 
   return (
     <PageWrapper breadcrumbs={[{ label: "Reports", href: "/dashboard/reports" }, { label: "Daily Sales Report" }]}>
-      <div className="px-4 space-y-6">
+      <div className="px-4 space-y-4">
         {/* Top Buttons */}
         <div className="flex gap-2">
           <Button variant="outline" className="bg-sky-500 text-white hover:bg-sky-600 border-none" onClick={() => window.print()}>
@@ -195,81 +297,48 @@ export default function SalesReportPage() {
         </div>
 
         {/* Report Table */}
-        <Card className="border shadow-sm">
-          <CardContent className="p-0">
-            <div className="p-4 border-b">
-               <h3 className="text-lg font-bold text-center">Sales Report</h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
-                <thead className="bg-gray-100 border-b">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-bold border-r">SL.</th>
-                    <th className="px-4 py-3 text-left font-bold border-r">Date</th>
-                    <th className="px-4 py-3 text-left font-bold border-r">Invoice No</th>
-                    <th className="px-4 py-3 text-left font-bold border-r">Client Name</th>
-                    <th className="px-4 py-3 text-left font-bold border-r">Category</th>
-                    <th className="px-4 py-3 text-left font-bold border-r">Sales By</th>
-                    <th className="px-4 py-3 text-right font-bold border-r">Sales Price</th>
-                    <th className="px-4 py-3 text-right font-bold border-r">Cost Price</th>
-                    <th className="px-4 py-3 text-right font-bold border-r">Profit</th>
-                    <th className="px-4 py-3 text-right font-bold border-r">Collect Amount</th>
-                    <th className="px-4 py-3 text-right font-bold">Due Amount</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y border-b">
-                  {reportData?.items.map((item, index) => (
-                    <tr key={item.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-2 border-r">{(page - 1) * 20 + index + 1}</td>
-                      <td className="px-4 py-2 border-r">{item.date ? format(new Date(item.date), "dd-MM-yyyy") : "-"}</td>
-                      <td className="px-4 py-2 border-r">
-                        <Link href={`/dashboard/invoices/${item.id}`} className="text-sky-500 hover:underline">
-                          {item.invoiceNo}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-2 border-r">
-                        <Link href={`/dashboard/reports/client-ledger?clientId=${item.id}`} className="text-sky-500 hover:underline">
-                          {item.clientName}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-2 border-r">{item.category}</td>
-                      <td className="px-4 py-2 border-r">
-                        <Link href="#" className="text-sky-500 hover:underline">
-                          {item.salesBy}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-2 text-right border-r font-medium">{formatCurrency(item.salesPrice)}</td>
-                      <td className="px-4 py-2 text-right border-r font-medium">{formatCurrency(item.costPrice)}</td>
-                      <td className="px-4 py-2 text-right border-r font-medium text-green-600">{formatCurrency(item.profit)}</td>
-                      <td className="px-4 py-2 text-right border-r font-medium">{formatCurrency(item.collectAmount)}</td>
-                      <td className="px-4 py-2 text-right font-medium text-red-500">{formatCurrency(item.dueAmount)}</td>
-                    </tr>
-                  ))}
-                  {reportData?.items.length === 0 && (
-                    <tr>
-                      <td colSpan={11} className="px-4 py-8 text-center text-gray-500">
-                        No sales found for the selected criteria.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-                {reportData && reportData.items.length > 0 && (
-                  <tfoot className="bg-gray-50 font-bold">
-                    <tr>
-                      <td colSpan={6} className="px-4 py-3 text-right border-r">TOTAL</td>
-                      <td className="px-4 py-3 text-right border-r">{formatCurrency(reportData.totals.salesPrice)}</td>
-                      <td className="px-4 py-3 text-right border-r">{formatCurrency(reportData.totals.costPrice)}</td>
-                      <td className="px-4 py-3 text-right border-r">{formatCurrency(reportData.totals.profit)}</td>
-                      <td className="px-4 py-3 text-right border-r">{formatCurrency(reportData.totals.collectAmount)}</td>
-                      <td className="px-4 py-3 text-right">{formatCurrency(reportData.totals.dueAmount)}</td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </div>
-            {/* Pagination controls could be added here */}
-          </CardContent>
-        </Card>
+        <div className="bg-white rounded-md border shadow-sm overflow-hidden">
+          <div className="p-4 border-b">
+            <h3 className="text-base font-bold text-center">Sales Report</h3>
+          </div>
+          <Table<SalesItem>
+            rowKey="id"
+            columns={columns}
+            dataSource={reportData?.items ?? []}
+            loading={loading}
+            scroll={{ x: scrollX }}
+            className="border-none"
+            locale={{ emptyText: loading ? "Loading…" : "No sales found for the selected criteria." }}
+            pagination={{
+              current: page,
+              pageSize: 20,
+              total: reportData?.pagination.total ?? 0,
+              onChange: (p) => { setPage(p); fetchReport(p) },
+              showSizeChanger: false,
+              showTotal: (t) => `Total ${t} invoices`,
+            }}
+            summary={() =>
+              totals ? (
+                <Table.Summary fixed="bottom">
+                  <Table.Summary.Row className="bg-gray-100 font-bold">
+                    <Table.Summary.Cell index={0} colSpan={6} align="right">
+                      TOTAL
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={1} align="right">{fmt(totals.salesPrice)}</Table.Summary.Cell>
+                    <Table.Summary.Cell index={2} align="right">{fmt(totals.costPrice)}</Table.Summary.Cell>
+                    <Table.Summary.Cell index={3} align="right">
+                      <span className="text-green-600">{fmt(totals.profit)}</span>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={4} align="right">{fmt(totals.collectAmount)}</Table.Summary.Cell>
+                    <Table.Summary.Cell index={5} align="right">
+                      <span className="text-red-500">{fmt(totals.dueAmount)}</span>
+                    </Table.Summary.Cell>
+                  </Table.Summary.Row>
+                </Table.Summary>
+              ) : null
+            }
+          />
+        </div>
       </div>
     </PageWrapper>
   )
