@@ -104,11 +104,13 @@ export function BillingInformation({ invoiceType = "standard", onRequestAddVendo
   useEffect(() => {
     if (items.length === 0 && productOptions.length > 0) {
       const visaProduct = productOptions.find(p => p.name === "Invoice(Visa)")
-      setItems([{ 
-        id: "1", 
-        ...initialItem,
-        product: invoiceType === "visa" ? (visaProduct?.id || "Invoice(Visa)") : ""
-      }])
+      const otherProduct = productOptions.find(p => p.name === "OTHER")
+      const defaultProduct = invoiceType === "visa"
+        ? (visaProduct?.id || "Invoice(Visa)")
+        : invoiceType === "standard"
+          ? (otherProduct?.id || "")
+          : ""
+      setItems([{ id: "1", ...initialItem, product: defaultProduct }])
     }
   }, [productOptions, invoiceType, items.length])
 
@@ -118,11 +120,13 @@ export function BillingInformation({ invoiceType = "standard", onRequestAddVendo
 
   const addItem = useCallback(() => {
     const visaProduct = productOptions.find(p => p.name === "Invoice(Visa)")
-    const newItem: BillingItem = { 
-      id: Date.now().toString(), 
-      ...initialItem,
-      product: invoiceType === "visa" ? (visaProduct?.id || "Invoice(Visa)") : ""
-    }
+    const otherProduct = productOptions.find(p => p.name === "OTHER")
+    const defaultProduct = invoiceType === "visa"
+      ? (visaProduct?.id || "Invoice(Visa)")
+      : invoiceType === "standard"
+        ? (otherProduct?.id || "")
+        : ""
+    const newItem: BillingItem = { id: Date.now().toString(), ...initialItem, product: defaultProduct }
     setItems(prev => [...prev, newItem])
   }, [invoiceType, productOptions])
 

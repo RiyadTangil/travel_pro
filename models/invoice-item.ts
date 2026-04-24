@@ -16,6 +16,7 @@ const InvoiceItemSchema = new Schema({
   paidAmount: { type: Number, default: 0 },
   dueAmount: { type: Number, default: 0 },
   vendorId: { type: Schema.Types.ObjectId, ref: "Vendor", index: true },
+  productId: { type: Schema.Types.ObjectId, index: true },
   
   // Visa specific fields (Flattened for performance/simplicity as per payload)
   country: { type: String },

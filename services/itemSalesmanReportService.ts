@@ -6,6 +6,7 @@ import { AppError } from "@/errors/AppError"
 export interface ItemSalesmanParams {
   employeeId?: string
   productName?: string
+  productId?: string
   dateFrom?: string
   dateTo?: string
   page?: number
@@ -19,6 +20,7 @@ export async function getItemSalesmanReport(params: ItemSalesmanParams) {
   const {
     employeeId,
     productName,
+    productId,
     dateFrom,
     dateTo,
     page = 1,
@@ -32,7 +34,10 @@ export async function getItemSalesmanReport(params: ItemSalesmanParams) {
     match.companyId = companyId // Stored as string in InvoiceItem
   }
 
-  if (productName && productName !== "All") {
+  // Filter by productId (preferred — accurate ObjectId match) or fall back to name
+  if (productId && Types.ObjectId.isValid(productId)) {
+    match.productId = new Types.ObjectId(productId)
+  } else if (productName && productName !== "All") {
     match.product = productName
   }
 

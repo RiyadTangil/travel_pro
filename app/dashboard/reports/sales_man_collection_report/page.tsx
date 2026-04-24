@@ -1,7 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect, useCallback } from "react"
-import { Card, CardContent } from "@/components/ui/card"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { PageWrapper } from "@/components/shared/page-wrapper"
@@ -12,13 +11,15 @@ import { DateRangePickerWithPresets } from "@/components/shared/date-range-with-
 import { DateRange } from "react-day-picker"
 import Link from "next/link"
 import { toast } from "@/components/ui/use-toast"
-import { cn } from "@/lib/utils"
+import { Table } from "antd"
+import type { ColumnsType } from "antd/es/table"
 
 interface SalesmanCollectionItem {
   id: string
   date: string
   invoiceNo: string
   clientName: string
+  clientId?: string
   salesBy: string
   salesPrice: number
   collectedAmount: number
@@ -45,12 +46,10 @@ export default function SalesmanCollectionReportPage() {
   
   const [employees, setEmployees] = useState<{ label: string; value: string }[]>([])
 
-  // Fetch dropdown data
   useEffect(() => {
     const fetchDropdownData = async () => {
       try {
         const empRes = await fetch('/api/employees')
-
         if (empRes.ok) {
           const json = await empRes.json()
           const employeeOptions = (json.employees || []).map((e: any) => ({ label: e.name, value: e.id }))
@@ -76,11 +75,7 @@ export default function SalesmanCollectionReportPage() {
       const data = await res.json()
       setReportData(data)
     } catch (e) {
-      toast({
-        title: "Error",
-        description: "Failed to load report",
-        variant: "destructive"
-      })
+      toast({ title: "Error", description: "Failed to load report", variant: "destructive" })
     } finally {
       setLoading(false)
     }
@@ -90,14 +85,82 @@ export default function SalesmanCollectionReportPage() {
     fetchReport()
   }, [fetchReport])
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(amount)
-  }
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(amount)
+
+  const columns: ColumnsType<SalesmanCollectionItem> = [
+    {
+      title: "SL.",
+      key: "sl",
+      width: 60,
+      render: (_: any, __: any, index: number) => index + 1,
+    },
+    {
+      title: "Date",
+      dataIndex: "date",
+      key: "date",
+      width: 110,
+      render: (v: string) => v ? format(new Date(v), "dd-MM-yyyy") : "-",
+    },
+    {
+      title: "Invoice No",
+      dataIndex: "invoiceNo",
+      key: "invoiceNo",
+      width: 140,
+      render: (v: string, row: SalesmanCollectionItem) => (
+        <Link href={`/dashboard/invoices/${row.id}`} className="text-sky-500 hover:underline">
+          {v}
+        </Link>
+      ),
+    },
+    {
+      title: "Client Name",
+      dataIndex: "clientName",
+      key: "clientName",
+      width: 160,
+      render: (v: string, row: SalesmanCollectionItem) =>
+        row.clientId ? (
+          <Link href={`/dashboard/reports/client-ledger?clientId=${row.clientId}`} className="text-sky-500 hover:underline">
+            {v}
+          </Link>
+        ) : v,
+    },
+    {
+      title: "Sales By",
+      dataIndex: "salesBy",
+      key: "salesBy",
+      width: 140,
+    },
+    {
+      title: "Sales Price",
+      dataIndex: "salesPrice",
+      key: "salesPrice",
+      align: "right",
+      width: 120,
+      render: (v: number) => formatCurrency(v),
+    },
+    {
+      title: "Collected Amount",
+      dataIndex: "collectedAmount",
+      key: "collectedAmount",
+      align: "right",
+      width: 140,
+      render: (v: number) => formatCurrency(v),
+    },
+    {
+      title: "Due",
+      dataIndex: "due",
+      key: "due",
+      align: "right",
+      width: 110,
+      render: (v: number) => <span className="text-red-500 font-medium">{formatCurrency(v)}</span>,
+    },
+  ]
 
   return (
     <PageWrapper breadcrumbs={[{ label: "Reports", href: "/dashboard/reports" }, { label: "Salesman Collection Report" }]}>
-      <div className="px-4 space-y-6">
-        <div className="flex gap-2">
+      <div className="px-2 sm:px-4 space-y-6">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" className="bg-sky-500 text-white hover:bg-sky-600 border-none" onClick={() => window.print()}>
             <Printer className="w-4 h-4 mr-2" /> Print
           </Button>
@@ -106,91 +169,58 @@ export default function SalesmanCollectionReportPage() {
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 items-end bg-white p-4 rounded-md shadow-sm border">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end bg-white p-4 rounded-md shadow-sm border">
           <div className="space-y-2">
             <Label className="text-gray-700 font-semibold">Select Sales Man</Label>
-            <ClearableSelect
-              options={employees}
-              value={selectedSalesman}
-              onChange={setSelectedSalesman}
-              placeholder="All"
-            />
+            <ClearableSelect options={employees} value={selectedSalesman} onChange={setSelectedSalesman} placeholder="All" />
           </div>
 
           <div className="space-y-2">
             <Label className="text-red-500 font-semibold">* <span className="text-gray-700">Date Range</span></Label>
-            <DateRangePickerWithPresets
-              date={dateRange}
-              onDateChange={setDateRange}
-              className="w-full"
-            />
+            <DateRangePickerWithPresets date={dateRange} onDateChange={setDateRange} className="w-full" />
           </div>
 
           <div className="flex justify-start">
-            <Button onClick={fetchReport} disabled={loading} className="bg-sky-500 hover:bg-sky-600 text-white px-8">
+            <Button onClick={fetchReport} disabled={loading} className="bg-sky-500 hover:bg-sky-600 text-white w-full sm:w-auto px-8">
               {loading ? "Searching..." : <><Search className="w-4 h-4 mr-2" /> Search</>}
             </Button>
           </div>
         </div>
 
-        <Card className="border shadow-sm">
-          <CardContent className="p-0">
-            <div className="p-4 border-b">
-               <h3 className="text-lg font-bold text-center">Sales Man Wise Collection & Due</h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
-                <thead className="bg-gray-100 border-b">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-bold border-r">SL.</th>
-                    <th className="px-4 py-3 text-left font-bold border-r">Date</th>
-                    <th className="px-4 py-3 text-left font-bold border-r">Invoice No</th>
-                    <th className="px-4 py-3 text-left font-bold border-r">Client Name</th>
-                    <th className="px-4 py-3 text-left font-bold border-r">Sales By</th>
-                    <th className="px-4 py-3 text-right font-bold border-r">Sales Price</th>
-                    <th className="px-4 py-3 text-right font-bold border-r">Collected Amount</th>
-                    <th className="px-4 py-3 text-right font-bold">Due</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y border-b">
-                  {reportData?.items.map((item, index) => (
-                    <tr key={item.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-2 border-r">{index + 1}</td>
-                      <td className="px-4 py-2 border-r whitespace-nowrap">{item.date ? format(new Date(item.date), "dd-MM-yyyy") : "-"}</td>
-                      <td className="px-4 py-2 border-r">
-                        <Link href={`/dashboard/invoices/${item.id}`} className="text-sky-500 hover:underline">
-                          {item.invoiceNo}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-2 border-r">{item.clientName}</td>
-                      <td className="px-4 py-2 border-r">{item.salesBy}</td>
-                      <td className="px-4 py-2 text-right border-r font-medium">{formatCurrency(item.salesPrice)}</td>
-                      <td className="px-4 py-2 text-right border-r font-medium">{formatCurrency(item.collectedAmount)}</td>
-                      <td className="px-4 py-2 text-right font-medium text-red-500">{formatCurrency(item.due)}</td>
-                    </tr>
-                  ))}
-                  {(!reportData || reportData.items.length === 0) && (
-                    <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
-                        No records found for the selected criteria.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-                {reportData && reportData.items.length > 0 && (
-                  <tfoot className="bg-gray-50 font-bold">
-                    <tr>
-                      <td colSpan={5} className="px-4 py-3 text-right border-r uppercase">Total:</td>
-                      <td className="px-4 py-3 text-right border-r">{formatCurrency(reportData.totals.salesPrice)}</td>
-                      <td className="px-4 py-3 text-right border-r">{formatCurrency(reportData.totals.collectedAmount)}</td>
-                      <td className="px-4 py-3 text-right">{formatCurrency(reportData.totals.due)}</td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="bg-white rounded-md border shadow-sm">
+          <div className="p-4 border-b">
+            <h3 className="text-lg font-bold text-center">Sales Man Wise Collection & Due</h3>
+          </div>
+          <Table
+            columns={columns}
+            dataSource={reportData?.items || []}
+            rowKey="id"
+            loading={loading}
+            size="small"
+            scroll={{ x: 900 }}
+            pagination={false}
+            summary={() =>
+              reportData && reportData.items.length > 0 ? (
+                <Table.Summary fixed>
+                  <Table.Summary.Row className="font-bold bg-gray-50">
+                    <Table.Summary.Cell index={0} colSpan={5} align="right">
+                      <span className="font-bold uppercase">Total:</span>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={1} align="right">
+                      <span className="font-bold">{formatCurrency(reportData.totals.salesPrice)}</span>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={2} align="right">
+                      <span className="font-bold">{formatCurrency(reportData.totals.collectedAmount)}</span>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={3} align="right">
+                      <span className="font-bold text-red-500">{formatCurrency(reportData.totals.due)}</span>
+                    </Table.Summary.Cell>
+                  </Table.Summary.Row>
+                </Table.Summary>
+              ) : null
+            }
+          />
+        </div>
       </div>
     </PageWrapper>
   )

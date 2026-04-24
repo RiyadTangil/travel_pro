@@ -13,6 +13,7 @@ export async function GET(request: Request) {
     const params = {
       employeeId: searchParams.get("employeeId") || undefined,
       productName: searchParams.get("productName") || undefined,
+      productId: searchParams.get("productId") || undefined,
       dateFrom: searchParams.get("dateFrom") || undefined,
       dateTo: searchParams.get("dateTo") || undefined,
       page: Number(searchParams.get("page") || 1),

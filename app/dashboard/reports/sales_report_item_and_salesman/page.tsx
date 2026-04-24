@@ -1,7 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect, useCallback } from "react"
-import { Card, CardContent } from "@/components/ui/card"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { PageWrapper } from "@/components/shared/page-wrapper"
@@ -12,6 +11,8 @@ import { DateRangePickerWithPresets } from "@/components/shared/date-range-with-
 import { DateRange } from "react-day-picker"
 import Link from "next/link"
 import { toast } from "@/components/ui/use-toast"
+import { Table } from "antd"
+import type { ColumnsType } from "antd/es/table"
 
 interface ItemSalesmanItem {
   id: string
@@ -52,7 +53,6 @@ export default function ItemSalesmanReportPage() {
   const [products, setProducts] = useState<{ label: string; value: string }[]>([])
   const [employees, setEmployees] = useState<{ label: string; value: string }[]>([])
 
-  // Fetch dropdown data
   useEffect(() => {
     const fetchDropdownData = async () => {
       try {
@@ -65,8 +65,8 @@ export default function ItemSalesmanReportPage() {
           const json = await prodRes.json()
           const productList = json.data || json.products || []
           const productOptions = productList.map((p: any) => ({ 
-            label: p.name || p.product_name, 
-            value: p.name || p.product_name 
+            label: p.product_name || p.name,
+            value: String(p.id || p._id)
           }))
           setProducts([{ label: "All", value: "" }, ...productOptions])
         }
@@ -88,7 +88,7 @@ export default function ItemSalesmanReportPage() {
       setLoading(true)
       const params = new URLSearchParams()
       if (selectedEmployee) params.append("employeeId", selectedEmployee)
-      if (selectedProduct) params.append("productName", selectedProduct)
+      if (selectedProduct) params.append("productId", selectedProduct)
       if (dateRange?.from) params.append("dateFrom", format(dateRange.from, "yyyy-MM-dd"))
       if (dateRange?.to) params.append("dateTo", format(dateRange.to, "yyyy-MM-dd"))
       params.append("page", String(pageNum))
@@ -100,11 +100,7 @@ export default function ItemSalesmanReportPage() {
       setReportData(data)
       setPage(pageNum)
     } catch (e) {
-      toast({
-        title: "Error",
-        description: "Failed to load report",
-        variant: "destructive"
-      })
+      toast({ title: "Error", description: "Failed to load report", variant: "destructive" })
     } finally {
       setLoading(false)
     }
@@ -114,14 +110,71 @@ export default function ItemSalesmanReportPage() {
     fetchReport()
   }, [fetchReport])
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(amount)
-  }
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(amount)
+
+  const columns: ColumnsType<ItemSalesmanItem> = [
+    {
+      title: "SL.",
+      key: "sl",
+      width: 60,
+      render: (_: any, __: any, index: number) => (page - 1) * 20 + index + 1,
+    },
+    {
+      title: "Sales Date",
+      dataIndex: "salesDate",
+      key: "salesDate",
+      width: 120,
+      render: (v: string) => v ? format(new Date(v), "dd-MM-yyyy") : "-",
+    },
+    {
+      title: "Invoice No",
+      dataIndex: "invoiceNo",
+      key: "invoiceNo",
+      width: 140,
+      render: (v: string, row: ItemSalesmanItem) => (
+        <Link href={`/dashboard/invoices/${row.invoiceId}`} className="text-sky-500 hover:underline">
+          {v}
+        </Link>
+      ),
+    },
+    {
+      title: "Product Name",
+      dataIndex: "productName",
+      key: "productName",
+      width: 160,
+    },
+    {
+      title: "Client Name",
+      dataIndex: "clientName",
+      key: "clientName",
+      width: 160,
+      render: (v: string, row: ItemSalesmanItem) => (
+        <Link href={`/dashboard/reports/client-ledger?clientId=${row.clientId}`} className="text-sky-500 hover:underline">
+          {v}
+        </Link>
+      ),
+    },
+    {
+      title: "Sales By",
+      dataIndex: "salesBy",
+      key: "salesBy",
+      width: 140,
+    },
+    {
+      title: "Sales Amount",
+      dataIndex: "salesAmount",
+      key: "salesAmount",
+      align: "right",
+      width: 130,
+      render: (v: number) => formatCurrency(v),
+    },
+  ]
 
   return (
     <PageWrapper breadcrumbs={[{ label: "Reports", href: "/dashboard/reports" }, { label: "Item & Salesman Wise Report" }]}>
-      <div className="px-4 space-y-6">
-        <div className="flex gap-2">
+      <div className="px-2 sm:px-4 space-y-6">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" className="bg-sky-500 text-white hover:bg-sky-600 border-none" onClick={() => window.print()}>
             <Printer className="w-4 h-4 mr-2" /> Print
           </Button>
@@ -130,105 +183,64 @@ export default function ItemSalesmanReportPage() {
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 items-end bg-white p-4 rounded-md shadow-sm border">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end bg-white p-4 rounded-md shadow-sm border">
           <div className="space-y-2">
-            <Label className="text-gray-700 font-semibold">Select sales by</Label>
-            <ClearableSelect
-              options={employees}
-              value={selectedEmployee}
-              onChange={setSelectedEmployee}
-              placeholder="All"
-            />
+            <Label className="text-gray-700 font-semibold">Select Sales By</Label>
+            <ClearableSelect options={employees} value={selectedEmployee} onChange={setSelectedEmployee} placeholder="All" />
           </div>
 
           <div className="space-y-2">
             <Label className="text-gray-700 font-semibold">Select Product</Label>
-            <ClearableSelect
-              options={products}
-              value={selectedProduct}
-              onChange={setSelectedProduct}
-              placeholder="All"
-            />
+            <ClearableSelect options={products} value={selectedProduct} onChange={setSelectedProduct} placeholder="All" />
           </div>
 
           <div className="space-y-2">
             <Label className="text-red-500 font-semibold">* <span className="text-gray-700">Date Range</span></Label>
-            <DateRangePickerWithPresets
-              date={dateRange}
-              onDateChange={setDateRange}
-              className="w-full"
-            />
+            <DateRangePickerWithPresets date={dateRange} onDateChange={setDateRange} className="w-full" />
           </div>
 
           <div className="flex justify-start">
-            <Button onClick={() => fetchReport(1)} disabled={loading} className="bg-sky-500 hover:bg-sky-600 text-white px-8">
+            <Button onClick={() => fetchReport(1)} disabled={loading} className="bg-sky-500 hover:bg-sky-600 text-white w-full sm:w-auto px-8">
               {loading ? "Searching..." : <><Search className="w-4 h-4 mr-2" /> Search</>}
             </Button>
           </div>
         </div>
 
-        <Card className="border shadow-sm">
-          <CardContent className="p-0">
-            <div className="p-4 border-b">
-               <h3 className="text-lg font-bold text-center">Item & Sales Man-Wise Sales Report</h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
-                <thead className="bg-gray-100 border-b">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-bold border-r">SL.</th>
-                    <th className="px-4 py-3 text-left font-bold border-r">Sales Date</th>
-                    <th className="px-4 py-3 text-left font-bold border-r">Invoice No</th>
-                    <th className="px-4 py-3 text-left font-bold border-r">Product Name</th>
-                    <th className="px-4 py-3 text-left font-bold border-r">Client Name</th>
-                    <th className="px-4 py-3 text-left font-bold border-r">Sales By</th>
-                    <th className="px-4 py-3 text-right font-bold">Sales Amount</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y border-b">
-                  {reportData?.items.map((item, index) => (
-                    <tr key={item.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-2 border-r">{(page - 1) * 20 + index + 1}</td>
-                      <td className="px-4 py-2 border-r whitespace-nowrap">{item.salesDate ? format(new Date(item.salesDate), "dd-MM-yyyy") : "-"}</td>
-                      <td className="px-4 py-2 border-r">
-                        <Link href={`/dashboard/invoices/${item.invoiceId}`} className="text-sky-500 hover:underline">
-                          {item.invoiceNo}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-2 border-r">{item.productName}</td>
-                      <td className="px-4 py-2 border-r">
-                        <Link href={`/dashboard/reports/client-ledger?clientId=${item.clientId}`} className="text-sky-500 hover:underline">
-                          {item.clientName}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-2 border-r">
-                        <Link href="#" className="text-sky-500 hover:underline">
-                          {item.salesBy}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-2 text-right font-medium">{formatCurrency(item.salesAmount)}</td>
-                    </tr>
-                  ))}
-                  {reportData?.items.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
-                        No records found for the selected criteria.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-                {reportData && reportData.items.length > 0 && (
-                  <tfoot className="bg-gray-50 font-bold">
-                    <tr>
-                      <td colSpan={6} className="px-4 py-3 text-right border-r uppercase text-lg">Total:</td>
-                      <td className="px-4 py-3 text-right text-lg">{formatCurrency(reportData.totals.salesAmount)}</td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="bg-white rounded-md border shadow-sm">
+          <div className="p-4 border-b">
+            <h3 className="text-lg font-bold text-center">Item & Sales Man-Wise Sales Report</h3>
+          </div>
+          <Table
+            columns={columns}
+            dataSource={reportData?.items || []}
+            rowKey="id"
+            loading={loading}
+            size="small"
+            scroll={{ x: 800 }}
+            pagination={{
+              current: page,
+              pageSize: 20,
+              total: reportData?.pagination.total || 0,
+              showSizeChanger: false,
+              showTotal: (total) => `Total ${total} records`,
+              onChange: (p) => fetchReport(p),
+            }}
+            summary={() =>
+              reportData && reportData.items.length > 0 ? (
+                <Table.Summary fixed>
+                  <Table.Summary.Row className="font-bold bg-gray-50">
+                    <Table.Summary.Cell index={0} colSpan={6} align="right">
+                      <span className="uppercase font-bold text-base">Total:</span>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={1} align="right">
+                      <span className="font-bold text-base">{formatCurrency(reportData.totals.salesAmount)}</span>
+                    </Table.Summary.Cell>
+                  </Table.Summary.Row>
+                </Table.Summary>
+              ) : null
+            }
+          />
+        </div>
       </div>
     </PageWrapper>
   )

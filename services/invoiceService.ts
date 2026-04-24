@@ -715,6 +715,16 @@ export async function createNonCommissionInvoice(body: any, companyId: string) {
     updatedAt: now,
   }
 
+  // Look up "Air Ticket(Non-commission)" product for productId linkage
+  let nonCommProductId: Types.ObjectId | undefined
+  try {
+    const prodCol = mongoose.connection?.db?.collection("products")
+    if (prodCol) {
+      const prodDoc = await prodCol.findOne({ nameLower: "air ticket(non-commission)", deleted: { $ne: true } })
+      if (prodDoc) nonCommProductId = new Types.ObjectId(prodDoc._id)
+    }
+  } catch { /* ignore — productId is optional */ }
+
   const session = await mongoose.startSession()
   try {
     let resultOk = false
@@ -754,6 +764,7 @@ export async function createNonCommissionInvoice(body: any, companyId: string) {
           referenceId: ticketId,
           itemType: "ticket",
           product: "non_commission_ticket",
+          productId: nonCommProductId,
           paxName: ticketDetails.paxName || "",
           description: `Ticket: ${ticketDetails.ticketNo} | Route: ${ticketDetails.route}`,
           quantity: 1,
@@ -956,6 +967,17 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
   if (!Types.ObjectId.isValid(id)) throw new AppError("Invalid ID", 400)
   
   const companyIdObj = new Types.ObjectId(companyId)
+
+  // Look up "Air Ticket(Non-commission)" product for productId linkage
+  let nonCommProductId: Types.ObjectId | undefined
+  try {
+    const prodCol = mongoose.connection?.db?.collection("products")
+    if (prodCol) {
+      const prodDoc = await prodCol.findOne({ nameLower: "air ticket(non-commission)", deleted: { $ne: true } })
+      if (prodDoc) nonCommProductId = new Types.ObjectId(prodDoc._id)
+    }
+  } catch { /* ignore — productId is optional */ }
+
   const session = await mongoose.startSession()
   try {
     let resultOk = false
@@ -1058,6 +1080,7 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
           referenceId: ticketId,
           itemType: "ticket",
           product: "non_commission_ticket",
+          productId: nonCommProductId,
           paxName: ticketDetails.paxName || "",
           description: `Ticket: ${ticketDetails.ticketNo} | Route: ${ticketDetails.route}`,
           quantity: 1,
@@ -1301,6 +1324,7 @@ export async function createInvoice(body: any, companyId: string) {
           invoiceId, 
           companyId: companyIdObj,
           vendorId: (i.vendorId && Types.ObjectId.isValid(i.vendorId)) ? new Types.ObjectId(i.vendorId) : null,
+          productId: (i.product && Types.ObjectId.isValid(i.product)) ? new Types.ObjectId(i.product) : undefined,
           createdAt: now, 
           updatedAt: now 
         })), { session })
@@ -1458,6 +1482,7 @@ export async function updateInvoiceById(id: string, body: any, companyId: string
           invoiceId: idObj, 
           companyId: companyIdObj,
           vendorId: (i.vendorId && Types.ObjectId.isValid(i.vendorId)) ? new Types.ObjectId(i.vendorId) : null,
+          productId: (i.product && Types.ObjectId.isValid(i.product)) ? new Types.ObjectId(i.product) : undefined,
           createdAt: now, 
           updatedAt: now 
         })), { session })
