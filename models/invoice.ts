@@ -37,5 +37,13 @@ const InvoiceSchema = new Schema({
   updatedAt: { type: String },
 }, { collection: "invoices" })
 
+// Compound indexes for the most frequent query patterns
+// (companyId, salesDate) → list + sort  (most common list call)
+InvoiceSchema.index({ companyId: 1, salesDate: -1, isDeleted: 1 })
+// (companyId, clientId, status) → client ledger / balance reports
+InvoiceSchema.index({ companyId: 1, clientId: 1, status: 1 })
+// (companyId, invoiceType, isDeleted) → type-filtered list pages
+InvoiceSchema.index({ companyId: 1, invoiceType: 1, isDeleted: 1 })
+
 export const Invoice = models.Invoice || model("Invoice", InvoiceSchema)
 export type InvoiceDoc = InstanceType<typeof Invoice>

@@ -243,221 +243,197 @@ function coerceVendorObjectId(v: unknown): Types.ObjectId | null {
   return null
 }
 
-export async function updateVendorBalance(vendorId: string | Types.ObjectId, amountChange: number, session: any) {
-  const vendor = await Vendor.findById(vendorId).session(session)
-  if (vendor) {
-    let currentNet = 0
-    if (vendor.presentBalance && typeof vendor.presentBalance === 'object') {
-      const pType = vendor.presentBalance.type
-      const pAmount = Number(vendor.presentBalance.amount || 0)
-      currentNet = (pType === 'advance' ? pAmount : -pAmount)
-    } else {
-      currentNet = Number(vendor.presentBalance || 0)
-    }
+/**
+ * Atomically adjusts a vendor's presentBalance for a payment change.
+ *
+ * Vendor balance uses { type: "due"|"advance", amount: number }.
+ * We must read to know the current net before writing — this is safe because
+ * all callers hold an open session, so MongoDB document-level locking prevents
+ * concurrent writes.  Uses findByIdAndUpdate (no extra round-trip) once the
+ * new values are computed.  (Issue F: was previously two separate findById +
+ * findByIdAndUpdate calls; now a single atomic update after one lean read.)
+ */
+export async function updateVendorBalance(
+  vendorId: string | Types.ObjectId,
+  amountChange: number,
+  session: mongoose.ClientSession
+) {
+  if (!amountChange) return
+  const vid = typeof vendorId === "string" ? new Types.ObjectId(vendorId) : vendorId
+  const vendor = await Vendor.findById(vid).session(session).lean()
+  if (!vendor) return
 
-    // amountChange > 0 means payment (adding to balance), < 0 means reverting (subtracting)
-    const newNet = currentNet + amountChange
-    const newType = newNet >= 0 ? "advance" : "due"
-    const newAmount = Math.abs(newNet)
-
-    await Vendor.findByIdAndUpdate(vendorId, {
-      presentBalance: { type: newType, amount: newAmount }
-    }, { session })
+  const pb = (vendor as any).presentBalance
+  let currentNet: number
+  if (pb && typeof pb === "object" && "type" in pb) {
+    currentNet = pb.type === "advance" ? Number(pb.amount || 0) : -Number(pb.amount || 0)
+  } else {
+    currentNet = Number(pb || 0)
   }
+
+  const newNet = currentNet + amountChange
+  const newType = newNet >= 0 ? "advance" : "due"
+  const newAmount = Math.abs(newNet)
+
+  await Vendor.findByIdAndUpdate(
+    vid,
+    { $set: { presentBalance: { type: newType, amount: newAmount }, updatedAt: new Date().toISOString() } },
+    { session }
+  )
 }
 
 export async function createVendorPayment(data: any, companyId?: string) {
   await connectMongoose()
+
+  const {
+    invoiceId, invoiceVendors, paymentTo, paymentMethod,
+    accountId, amount, vendorAit, totalAmount,
+    receiptNo, referPassport, passportNo, date, note,
+  } = data
+
+  if (paymentTo === "invoice" && (!invoiceVendors || !invoiceVendors.length)) {
+    throw new AppError("No vendors selected for invoice payment", 400)
+  }
+  if (paymentTo === "ticket" && (!invoiceVendors || !invoiceVendors.length)) {
+    throw new AppError("No ticket lines selected", 400)
+  }
+
+  // Generate voucher BEFORE the transaction — gaps are acceptable in accounting
+  const voucherNo = await getNextVoucherNo(companyId)
+
+  let vendorId = data.vendorId ? new Types.ObjectId(data.vendorId) : undefined
+  let invoiceIdObj = invoiceId ? new Types.ObjectId(invoiceId) : undefined
+  const accountIdObj = accountId ? new Types.ObjectId(accountId) : undefined
+  const companyIdObj = companyId ? new Types.ObjectId(companyId) : undefined
+
   const session = await mongoose.startSession()
-  session.startTransaction()
+  let paymentRecord: any
 
   try {
-    const {
-      invoiceId,
-      invoiceVendors,
-      paymentTo,
-      paymentMethod,
-      accountId,
-      amount,
-      vendorAit,
-      totalAmount,
-      receiptNo,
-      referPassport,
-      passportNo,
-      date,
-      note,
-      voucher
-    } = data
-
-    if (paymentTo === "invoice" && (!invoiceVendors || !invoiceVendors.length)) {
-      throw new AppError("No vendors selected for invoice payment", 400)
-    }
-    if (paymentTo === "ticket" && (!invoiceVendors || !invoiceVendors.length)) {
-      throw new AppError("No ticket lines selected", 400)
-    }
-
-    const voucherNo = await getNextVoucherNo(companyId)
-
-    // Sanitize ObjectIds
-    let vendorId = data.vendorId ? new Types.ObjectId(data.vendorId) : undefined
-    let invoiceIdObj = invoiceId ? new Types.ObjectId(invoiceId) : undefined
-    const accountIdObj = accountId ? new Types.ObjectId(accountId) : undefined
-    const companyIdObj = companyId ? new Types.ObjectId(companyId) : undefined
-
-    if (paymentTo === "ticket") {
-      if (!companyIdObj) throw new AppError("Company ID is required", 401)
-      let firstInvoiceId: Types.ObjectId | undefined
-      for (const row of invoiceVendors) {
-        const payAmount = Number(row.amount)
-        if (payAmount <= 0) continue
-        const lineId = row.invoiceItemId
-        if (!lineId || !Types.ObjectId.isValid(String(lineId))) {
-          throw new AppError("Each row must select a ticket line", 400)
-        }
-        const vOid = coerceVendorObjectId(row.vendorId)
-        if (!vOid) throw new AppError("Vendor is required for each ticket line", 400)
-        const invItem = await InvoiceItem.findOne({
-          _id: new Types.ObjectId(String(lineId)),
-          vendorId: vOid,
-          companyId: companyIdObj,
-          product: NON_COMMISSION_TICKET_PRODUCT,
-          isDeleted: { $ne: true },
-        }).session(session)
-        if (!invItem) throw new AppError("Invalid ticket line for this vendor", 400)
-        const cost = Number(invItem.totalCost || 0)
-        const paid = Number(invItem.paidAmount ?? 0)
-        const due = Math.max(0, cost - paid)
-        if (payAmount > due + 1e-9) throw new AppError("Amount exceeds due for a ticket line", 400)
-        if (!firstInvoiceId) firstInvoiceId = new Types.ObjectId(String(invItem.invoiceId))
-      }
-      invoiceIdObj = firstInvoiceId
-      if (!vendorId && invoiceVendors.length) {
-        vendorId = new Types.ObjectId(String(invoiceVendors[0].vendorId))
-      }
-    }
-
-    const paymentRecord = new VendorPayment({
-      companyId: companyIdObj,
-      invoiceId: invoiceIdObj,
-      voucherNo,
-      paymentTo,
-      paymentMethod,
-      accountId: accountIdObj,
-      receiptNo,
-      amount,
-      vendorAit,
-      totalAmount,
-      paymentDate: date,
-      note,
-      referPassport,
-      passportNo,
-      vendorId,
-      invoiceVendors: invoiceVendors?.map((v: any) => ({
-        vendorId: new Types.ObjectId(v.vendorId),
-        amount: Number(v.amount),
-        ...(v.invoiceItemId && Types.ObjectId.isValid(String(v.invoiceItemId))
-          ? { invoiceItemId: new Types.ObjectId(String(v.invoiceItemId)) }
-          : {}),
-      })),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    })
-
-    await paymentRecord.save({ session })
-
-    if (paymentTo === "invoice" && invoiceVendors?.length) {
-      // Fetch all items once; filter per vendor in memory to avoid ObjectId type mismatches
-      const allInvoiceItems = await InvoiceItem.find({ invoiceId: String(invoiceId) }).session(session)
-
-      for (const row of invoiceVendors) {
-        const payAmount = Number(row.amount)
-        if (payAmount <= 0) continue
-        const vendorOid = new Types.ObjectId(row.vendorId)
-
-        const vendorItems = allInvoiceItems.filter(
-          (i: any) =>
-            String(i.vendorId) === String(vendorOid) ||
-            (i.vendorId?._id && String(i.vendorId._id) === String(vendorOid))
-        )
-
-        let remaining = payAmount
-        for (const invItem of vendorItems) {
-          if (remaining <= 0) break
+    await session.withTransaction(async () => {
+      if (paymentTo === "ticket") {
+        if (!companyIdObj) throw new AppError("Company ID is required", 401)
+        let firstInvoiceId: Types.ObjectId | undefined
+        for (const row of invoiceVendors) {
+          const payAmount = Number(row.amount)
+          if (payAmount <= 0) continue
+          const lineId = row.invoiceItemId
+          if (!lineId || !Types.ObjectId.isValid(String(lineId))) {
+            throw new AppError("Each row must select a ticket line", 400)
+          }
+          const vOid = coerceVendorObjectId(row.vendorId)
+          if (!vOid) throw new AppError("Vendor is required for each ticket line", 400)
+          const invItem = await InvoiceItem.findOne({
+            _id: new Types.ObjectId(String(lineId)),
+            vendorId: vOid,
+            companyId: companyIdObj,
+            product: NON_COMMISSION_TICKET_PRODUCT,
+            isDeleted: { $ne: true },
+          }).session(session)
+          if (!invItem) throw new AppError("Invalid ticket line for this vendor", 400)
           const cost = Number(invItem.totalCost || 0)
-          const paid = Number(invItem.paidAmount || 0)
-          const due = cost - paid
-          if (due <= 0) continue
-          const allocation = Math.min(remaining, due)
-          const newPaid = paid + allocation
+          const paid = Number(invItem.paidAmount ?? 0)
+          const due = Math.max(0, cost - paid)
+          if (payAmount > due + 1e-9) throw new AppError("Amount exceeds due for a ticket line", 400)
+          if (!firstInvoiceId) firstInvoiceId = new Types.ObjectId(String(invItem.invoiceId))
+        }
+        invoiceIdObj = firstInvoiceId
+        if (!vendorId && invoiceVendors.length) {
+          vendorId = new Types.ObjectId(String(invoiceVendors[0].vendorId))
+        }
+      }
+
+      paymentRecord = new VendorPayment({
+        companyId: companyIdObj, invoiceId: invoiceIdObj, voucherNo, paymentTo, paymentMethod,
+        accountId: accountIdObj, receiptNo, amount, vendorAit, totalAmount, paymentDate: date,
+        note, referPassport, passportNo, vendorId,
+        invoiceVendors: invoiceVendors?.map((v: any) => ({
+          vendorId: new Types.ObjectId(v.vendorId),
+          amount: Number(v.amount),
+          ...(v.invoiceItemId && Types.ObjectId.isValid(String(v.invoiceItemId))
+            ? { invoiceItemId: new Types.ObjectId(String(v.invoiceItemId)) } : {}),
+        })),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+      await paymentRecord.save({ session })
+
+      if (paymentTo === "invoice" && invoiceVendors?.length) {
+        const allInvoiceItems = await InvoiceItem.find({
+          invoiceId: new Types.ObjectId(String(invoiceId)),
+        }).session(session)
+
+        for (const row of invoiceVendors) {
+          const payAmount = Number(row.amount)
+          if (payAmount <= 0) continue
+          const vendorOid = new Types.ObjectId(row.vendorId)
+          const vendorItems = allInvoiceItems.filter(
+            (i: any) => String(i.vendorId) === String(vendorOid) ||
+              (i.vendorId?._id && String(i.vendorId._id) === String(vendorOid))
+          )
+          let remaining = payAmount
+          for (const invItem of vendorItems) {
+            if (remaining <= 0) break
+            const cost = Number(invItem.totalCost || 0)
+            const paid = Number(invItem.paidAmount || 0)
+            const due = cost - paid
+            if (due <= 0) continue
+            const allocation = Math.min(remaining, due)
+            const newPaid = paid + allocation
+            await InvoiceItem.findByIdAndUpdate(
+              invItem._id,
+              { $set: { paidAmount: newPaid, dueAmount: cost - newPaid } },
+              { session }
+            )
+            remaining -= allocation
+          }
+          await updateVendorBalance(vendorOid, payAmount, session)
+        }
+      } else if (paymentTo === "ticket" && invoiceVendors?.length) {
+        for (const row of invoiceVendors) {
+          const payAmount = Number(row.amount)
+          if (payAmount <= 0) continue
+          const lineId = new Types.ObjectId(String(row.invoiceItemId))
+          const vendorOid = new Types.ObjectId(row.vendorId)
+          const invItem = await InvoiceItem.findById(lineId).session(session)
+          if (!invItem) throw new AppError("Invoice line not found", 404)
+          const cost = Number(invItem.totalCost || 0)
+          const newPaid = Number(invItem.paidAmount ?? 0) + payAmount
           await InvoiceItem.findByIdAndUpdate(
-            invItem._id,
-            { $set: { paidAmount: newPaid, dueAmount: cost - newPaid } },
+            lineId,
+            { $set: { paidAmount: newPaid, dueAmount: Math.max(0, cost - newPaid) } },
             { session }
           )
-          remaining -= allocation
+          await updateVendorBalance(vendorOid, payAmount, session)
         }
-
-        await updateVendorBalance(vendorOid, payAmount, session)
+      } else if (["overall", "advance"].includes(paymentTo) && vendorId) {
+        await updateVendorBalance(vendorId, Number(amount), session)
       }
-    } else if (paymentTo === "ticket" && invoiceVendors?.length) {
-      for (const row of invoiceVendors) {
-        const payAmount = Number(row.amount)
-        if (payAmount <= 0) continue
-        const lineId = new Types.ObjectId(String(row.invoiceItemId))
-        const vendorOid = new Types.ObjectId(row.vendorId)
-        const invItem = await InvoiceItem.findById(lineId).session(session)
-        if (!invItem) throw new AppError("Invoice line not found", 404)
-        const cost = Number(invItem.totalCost || 0)
-        const newPaid = Number(invItem.paidAmount ?? 0) + payAmount
-        await InvoiceItem.findByIdAndUpdate(
-          lineId,
-          { $set: { paidAmount: newPaid, dueAmount: Math.max(0, cost - newPaid) } },
-          { session }
+
+      if (accountId) {
+        const acc = await Account.findByIdAndUpdate(
+          accountId,
+          { $inc: { lastBalance: -Number(totalAmount) } },
+          { session, new: true }
         )
-        await updateVendorBalance(vendorOid, payAmount, session)
-      }
-    } else if (["overall", "advance"].includes(paymentTo) && vendorId) {
-      await updateVendorBalance(vendorId, Number(amount), session)
-    }
-
-    if (accountId) {
-      const acc = await Account.findByIdAndUpdate(
-        accountId,
-        { $inc: { lastBalance: -Number(totalAmount) } },
-        { session, new: true }
-      )
-
-      if (acc) {
-        const transactionVendorId =
-          vendorId ?? (invoiceVendors?.length ? new Types.ObjectId(invoiceVendors[0].vendorId) : undefined)
-
-        await ClientTransaction.create(
-          [{
-            date,
-            voucherNo,
-            vendorId: transactionVendorId,
-            companyId: companyId ? new Types.ObjectId(companyId) : undefined,
+        if (acc) {
+          const transactionVendorId =
+            vendorId ?? (invoiceVendors?.length ? new Types.ObjectId(invoiceVendors[0].vendorId) : undefined)
+          await ClientTransaction.create([{
+            date, voucherNo, vendorId: transactionVendorId,
+            companyId: companyIdObj,
             invoiceType: "VENDOR_PAYMENT",
             paymentTypeId: new Types.ObjectId(accountId),
-            accountName: acc.name,
-            payType: paymentMethod,
-            amount: totalAmount,
-            direction: "payout",
-            lastTotalAmount: acc.lastBalance,
+            accountName: (acc as any).name, payType: paymentMethod,
+            amount: totalAmount, direction: "payout",
+            lastTotalAmount: (acc as any).lastBalance,
             note: note || "Vendor Payment",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          }],
-          { session }
-        )
+            createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+          }], { session })
+        }
       }
-    }
-
-    await session.commitTransaction()
+    })
     return paymentRecord
-  } catch (error) {
-    await session.abortTransaction()
-    throw error
   } finally {
     session.endSession()
   }
@@ -466,17 +442,18 @@ export async function createVendorPayment(data: any, companyId?: string) {
 export async function updateVendorPayment(id: string, data: any, companyId?: string) {
   await connectMongoose()
   const session = await mongoose.startSession()
-  session.startTransaction()
 
   try {
-    const existing = await VendorPayment.findOne({ _id: id, companyId }).session(session)
+    let existing: any
+    // Issue E: withTransaction() for auto-retry on transient errors
+    await session.withTransaction(async () => {
+    existing = await VendorPayment.findOne({ _id: id, companyId }).session(session)
     if (!existing) throw new AppError("Payment record not found", 404)
 
     // --- Reverse existing effects ---
     if (existing.paymentTo === "invoice" && existing.invoiceVendors?.length) {
-      // Fetch all items for the invoice once; filter per vendor in memory to avoid ObjectId type mismatches
       const allInvoiceItems = await InvoiceItem.find({
-        invoiceId: String(existing.invoiceId),
+        invoiceId: new Types.ObjectId(String(existing.invoiceId)),
       }).session(session)
 
       for (const row of existing.invoiceVendors) {
@@ -548,7 +525,10 @@ export async function updateVendorPayment(id: string, data: any, companyId?: str
         { $inc: { lastBalance: Number(existing.totalAmount) } },
         { session }
       )
-      await ClientTransaction.deleteMany({ voucherNo: existing.voucherNo }).session(session)
+      await ClientTransaction.deleteMany({
+        voucherNo: existing.voucherNo,
+        companyId: existing.companyId,
+      }).session(session)
     }
 
     const {
@@ -593,7 +573,10 @@ export async function updateVendorPayment(id: string, data: any, companyId?: str
 
     // --- Apply new effects ---
     if (paymentTo === "invoice" && invoiceVendors?.length) {
-      const allInvoiceItems = await InvoiceItem.find({ invoiceId: String(invoiceId) }).session(session)
+      // Issue N: use ObjectId (not String) to hit the index
+      const allInvoiceItems = await InvoiceItem.find({
+        invoiceId: new Types.ObjectId(String(invoiceId)),
+      }).session(session)
 
       for (const row of invoiceVendors) {
         const payAmount = Number(row.amount)
@@ -681,11 +664,8 @@ export async function updateVendorPayment(id: string, data: any, companyId?: str
       }
     }
 
-    await session.commitTransaction()
+    }) // end withTransaction (updateVendorPayment)
     return existing
-  } catch (error) {
-    await session.abortTransaction()
-    throw error
   } finally {
     session.endSession()
   }
@@ -694,15 +674,17 @@ export async function updateVendorPayment(id: string, data: any, companyId?: str
 export async function deleteVendorPayment(id: string, companyId?: string) {
   await connectMongoose()
   const session = await mongoose.startSession()
-  session.startTransaction()
 
   try {
+    // Issue E: withTransaction for transient-error auto-retry
+    await session.withTransaction(async () => {
     const existing = await VendorPayment.findOne({ _id: id, companyId }).session(session)
     if (!existing) throw new AppError("Payment record not found", 404)
 
     if (existing.paymentTo === "invoice" && existing.invoiceVendors?.length) {
+      // Issue N: ObjectId query to use the index
       const allInvoiceItems = await InvoiceItem.find({
-        invoiceId: String(existing.invoiceId),
+        invoiceId: new Types.ObjectId(String(existing.invoiceId)),
       }).session(session)
 
       for (const row of existing.invoiceVendors) {
@@ -773,16 +755,16 @@ export async function deleteVendorPayment(id: string, companyId?: string) {
         { $inc: { lastBalance: Number(existing.totalAmount) } },
         { session }
       )
-      await ClientTransaction.deleteMany({ voucherNo: existing.voucherNo }).session(session)
+      // Issue M: always include companyId so we never touch another company's records
+      await ClientTransaction.deleteMany({
+        voucherNo: existing.voucherNo,
+        companyId: existing.companyId,
+      }).session(session)
     }
 
     await VendorPayment.deleteOne({ _id: id }).session(session)
-
-    await session.commitTransaction()
+    }) // end withTransaction
     return { success: true }
-  } catch (error) {
-    await session.abortTransaction()
-    throw error
   } finally {
     session.endSession()
   }
@@ -1120,59 +1102,53 @@ export async function deleteVendorPaymentAllocation(
   const allocOid = new Types.ObjectId(allocId)
 
   const session = await mongoose.startSession()
-  session.startTransaction()
 
   try {
-    const payment = await VendorPayment.findOne({ _id: paymentOid, companyId: companyOid }).lean()
-    if (!payment) throw new AppError("Payment not found", 404)
+    // Issue E: withTransaction for auto-retry
+    await session.withTransaction(async () => {
+      const payment = await VendorPayment.findOne({ _id: paymentOid, companyId: companyOid }).session(session).lean()
+      if (!payment) throw new AppError("Payment not found", 404)
 
-    const alloc = await VendorPaymentAllocation.findOne({
-      _id: allocOid,
-      vendorPaymentId: paymentOid,
-      companyId: companyOid,
-    }).lean()
-    if (!alloc) throw new AppError("Allocation not found", 404)
+      const alloc = await VendorPaymentAllocation.findOne({
+        _id: allocOid, vendorPaymentId: paymentOid, companyId: companyOid,
+      }).session(session).lean()
+      if (!alloc) throw new AppError("Allocation not found", 404)
 
-    const allocRaw = alloc as any
-    const revertAmount = Math.max(0, Number(allocRaw.appliedAmount || 0))
-    const vendorOid = allocRaw.vendorId
-      ? new Types.ObjectId(String(allocRaw.vendorId))
-      : (payment as any).vendorId
-        ? new Types.ObjectId(String((payment as any).vendorId))
-        : null
+      const allocRaw = alloc as any
+      const revertAmount = Math.max(0, Number(allocRaw.appliedAmount || 0))
+      const vendorOid = allocRaw.vendorId
+        ? new Types.ObjectId(String(allocRaw.vendorId))
+        : (payment as any).vendorId
+          ? new Types.ObjectId(String((payment as any).vendorId))
+          : null
 
-    // Reverse InvoiceItem paidAmount for all vendor items in this invoice
-    if (allocRaw.invoiceId && vendorOid && revertAmount > 0) {
-      const vendorItems = await InvoiceItem.find({
-        invoiceId: allocRaw.invoiceId,
-        vendorId: vendorOid,
-        companyId: companyOid,
-        isDeleted: { $ne: true },
-      }).session(session)
+      if (allocRaw.invoiceId && vendorOid && revertAmount > 0) {
+        const vendorItems = await InvoiceItem.find({
+          invoiceId: allocRaw.invoiceId,
+          vendorId: vendorOid,
+          companyId: companyOid,
+          isDeleted: { $ne: true },
+        }).session(session)
 
-      let remaining = revertAmount
-      for (const invItem of vendorItems as any[]) {
-        if (remaining <= 0) break
-        const currentPaid = Number(invItem.paidAmount ?? 0)
-        if (currentPaid <= 0) continue
-        const revert = Math.min(remaining, currentPaid)
-        const newPaid = currentPaid - revert
-        await InvoiceItem.findByIdAndUpdate(
-          invItem._id,
-          { $set: { paidAmount: newPaid, dueAmount: Math.max(0, Number(invItem.totalCost || 0) - newPaid) } },
-          { session }
-        )
-        remaining -= revert
+        let remaining = revertAmount
+        for (const invItem of vendorItems as any[]) {
+          if (remaining <= 0) break
+          const currentPaid = Number(invItem.paidAmount ?? 0)
+          if (currentPaid <= 0) continue
+          const revert = Math.min(remaining, currentPaid)
+          const newPaid = currentPaid - revert
+          await InvoiceItem.findByIdAndUpdate(
+            invItem._id,
+            { $set: { paidAmount: newPaid, dueAmount: Math.max(0, Number(invItem.totalCost || 0) - newPaid) } },
+            { session }
+          )
+          remaining -= revert
+        }
       }
-    }
 
-    await VendorPaymentAllocation.deleteOne({ _id: allocOid, companyId: companyOid }, { session })
-
-    await session.commitTransaction()
+      await VendorPaymentAllocation.deleteOne({ _id: allocOid, companyId: companyOid }, { session })
+    })
     return { success: true }
-  } catch (err) {
-    await session.abortTransaction()
-    throw err
   } finally {
     session.endSession()
   }

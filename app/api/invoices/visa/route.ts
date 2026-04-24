@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { getServerSession, Session } from "next-auth"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import { listInvoices, createInvoice } from "@/services/invoiceService"
+import { AppError } from "@/errors/AppError"
+import { StandardInvoiceSchema, formatZodErrors } from "@/lib/validations/invoice"
 
 export async function GET(request: Request) {
   try {
@@ -37,8 +39,16 @@ export async function POST(request: Request) {
     if (!companyId) return NextResponse.json({ error: "Unauthorized: Company ID required" }, { status: 401 })
 
     const body = await request.json()
-    // createInvoice handles both standard and visa via body.invoiceType
-    const result = await createInvoice({ ...body, invoiceType: "visa" }, String(companyId))
+
+    const parsed = StandardInvoiceSchema.safeParse({ ...body, invoiceType: "visa" })
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: formatZodErrors(parsed.error) },
+        { status: 422 }
+      )
+    }
+
+    const result = await createInvoice(parsed.data, String(companyId))
     return NextResponse.json(result)
   } catch (error: any) {
     console.error("POST Visa Invoice Error:", error)

@@ -480,7 +480,225 @@ Remaining amount = `payment.amount` − sum of all `vendor_payment_allocations.a
 
 ---
 
-## 13. Client Ledger (report)
+## 13. Money Receipt (client collections)
+
+**Total core operations: 5** (voucher prefix **`MR-####`**; counter key **`voucher_mr`** on `counters`).
+
+**Purpose:** Records money **received from** a client into a company **account**. The `paymentTo` field selects how that cash is applied against **invoices** and how **client** and **account** balances move. All successful creates run inside a MongoDB transaction (`withTransaction`).
+
+| # | Operation | Trigger | Collections touched (typical) |
+|---|-----------|---------|--------------------------------|
+| **1** | **List** | `GET /api/money-receipts?page&pageSize&clientId&search&startDate&endDate` + company scope | `money_receipts` (read, paginated) |
+| **2** | **Create** | `POST /api/money-receipts` → `createMoneyReceipt` | `money_receipts`, `clients` (`presentBalance`), `accounts` (`lastBalance` +`hasTrxn`), `client_transactions`; **+ type-specific** (see below); optional `money_receipt_allocations` |
+| **3** | **Update** | `PUT /api/money-receipts/[id]` | Adjusts deltas on client + account(s); respects existing `money_receipt_allocations` (cannot shrink below applied total); updates ledger rows tied to voucher |
+| **4** | **Delete** | `DELETE /api/money-receipts/[id]` | Reverses client + account; reverses `invoices.receivedAmount` / `status` from `invoiceId` and from **every** `money_receipt_allocations` row; deletes allocation rows; deletes `client_transactions` with same `voucherNo` + `clientId` + `companyId` + `direction: receiv`; deletes `money_receipts` |
+| **5** | **Allocate (advance only)** | `POST /api/money-receipts/[id]/allocations` → `createReceiptAllocations` | `money_receipt_allocations` +rows; updates each target `invoices.receivedAmount` / `status`; `client_transactions` per allocation (`invoiceType: INVOICE`); updates MR `allocatedAmount` / `remainingAmount` |
+
+**Model enum (`paymentTo`):** `overall` | `advance` | `invoice` | `tickets` | `adjust`.
+
+**Always on create (all types):**
+
+| Collection | Change |
+|-----------|--------|
+| `money_receipts` | +1 row (`voucherNo`, `paymentTo`, `amount`, `discount`, `accountId`, `clientId`, `companyId`, …) |
+| `clients` | `presentBalance` **increases** by paid amount (`amount − discount`) — treated as client paying down due or building advance in the same numeric field |
+| `accounts` | `lastBalance` **+** paid amount (money in); `hasTrxn: true` |
+| `client_transactions` | At least one row, `direction: receiv`, `paymentTypeId` = account |
+
+**`money_receipt_allocations`:** Each row links one MR to one `invoiceId` with `appliedAmount` and duplicated `voucherNo`. Used whenever payment is split across invoices (overall distribution, specific invoice multi-row, tickets multi-row, and manual advance allocation from the receipt view).
+
+---
+
+### Type 1 — Overall (`paymentTo: "overall"`)
+
+Client pays a lump sum **not** tied to a single invoice at entry time. The service **auto-distributes** the paid amount across the client’s open invoices (newest `createdAt` first) until the cash runs out or all dues are cleared.
+
+| Collection | Change |
+|-----------|--------|
+| `invoices` | For each touched invoice: `receivedAmount` ↑, `status` → `partial` / `paid` |
+| `money_receipt_allocations` | One row per invoice slice actually applied (may be **zero** rows if the client had no due invoices — then entire amount stays unallocated on the MR) |
+| `client_transactions` | One row per allocation amount (`invoiceType` often `Sales Collection`); if money remains after all dues, an extra row with `invoiceType: OVERALL` for the leftover |
+
+**Example:** Client has INV-A due 6,000 and INV-B due 5,000. Overall receipt **10,000**:
+
+- `money_receipts` +1 (`MR-0001`, `paymentTo: overall`, paid 10,000)
+- Assume order pays INV-B first then INV-A: `money_receipt_allocations` +2 (5,000 + 5,000), INV-B paid, INV-A partial 1,000 remaining due
+- `client_transactions`: rows for 5,000 and 5,000 (plus possibly OVERALL 0 if fully allocated)
+- `clients.presentBalance` +10,000; `accounts` +10,000
+
+**Delete MR-0001:** allocations removed, invoice `receivedAmount` restored, client and account reversed, ledger rows for voucher removed.
+
+---
+
+### Type 2 — Advance (`paymentTo: "advance"`)
+
+Client **pre-pays**; nothing is applied to a specific invoice at save time. **`invoiceId`** on the MR is usually empty; **`remainingAmount`** on the MR starts equal to paid amount (minus any immediate allocation if you add rows later).
+
+| Collection | Change |
+|-----------|--------|
+| `invoices` | **No** automatic update on create |
+| `money_receipt_allocations` | **Optional** — created later via **Allocate** API / `ReceiptAdjustModal` on the MR detail page (`paymentTo === "advance"` only) |
+| `client_transactions` | Standard single `receiv` row (`invoiceType` reflects `ADVANCE`) |
+
+**Downstream:** When a **new** invoice is created, `invoiceService.autoApplyClientAdvanceToInvoice` finds advance MRs with `remainingAmount > 0` (oldest first), creates `money_receipt_allocations` against the new invoice, and updates MR `allocatedAmount` / `remainingAmount`.
+
+**Example:** Advance **20,000** on MR-0002:
+
+- `money_receipts` (`remainingAmount: 20000`, `allocatedAmount: 0`)
+- `clients` +20,000; `accounts` +20,000; `client_transactions` +1
+
+Later user opens MR view and allocates **8,000** to INV-X: `money_receipt_allocations` +1; INV-X `receivedAmount` +8,000; MR `remainingAmount` → 12,000; extra `client_transactions` row(s) per allocation rules.
+
+---
+
+### Type 3 — Specific invoice (`paymentTo: "invoice"`)
+
+Payment against one or more **invoices** of the same client.
+
+| Path | Behaviour |
+|------|-----------|
+| **Single invoice** | Body includes `invoiceId`; paid amount must not exceed that invoice’s **due** (`netTotal − receivedAmount`). One allocation row (or inline invoice update + allocation). |
+| **Multi-row UI** | Body includes `invoiceAllocations: [{ invoiceId, amount }, …]`; sum of amounts must equal paid amount; each invoice validated for ownership and due cap. |
+
+| Collection | Change |
+|-----------|--------|
+| `invoices` | Each targeted invoice: `receivedAmount` ↑, `status` updated |
+| `money_receipt_allocations` | One row per invoice slice |
+| `client_transactions` | Multiple `receiv` rows when several invoices (same voucher); otherwise one row |
+
+**Example:** MR-0003 pays INV-001 **3,000** and INV-002 **2,000** (total 5,000):
+
+- Two allocation rows; both invoices updated; client +5,000; account +5,000; ledger reflects split.
+
+---
+
+### Type 4 — Specific tickets (`paymentTo: "tickets"`)
+
+Same mechanics as **invoice** type for the backend: **`invoiceAllocations`** against **non-commission** (or ticket-scoped) invoice rows, with the same validation (client owns invoice, amount ≤ due, totals match). UI collects multiple ticket lines; service treats them like multi-invoice allocations.
+
+| Collection | Change |
+|-----------|--------|
+| `invoices` / `money_receipt_allocations` / `client_transactions` | Same pattern as Type 3 |
+
+---
+
+### Type 5 — Adjust with due (`paymentTo: "adjust"`)
+
+Accounting-only movement on the **client** side: money recorded into the account and client balance moves like a receipt, **but**:
+
+- **No** `invoices` rows are updated on create.
+- **No** `money_receipt_allocations` for applying to invoices.
+- **No** automatic application when new invoices are created (contrast **advance**).
+- **No** “Add invoice” adjustment from the MR view for this type (UI guard).
+
+| Collection | Change |
+|-----------|--------|
+| `money_receipts` | +1 (`paymentTo: adjust`) |
+| `clients` / `accounts` / `client_transactions` | Same sign pattern as other receipts |
+
+**Example:** “Adjust with due” **7,000** recorded against client **CL** on MR-0004:
+
+- Client `presentBalance` +7,000; bank account +7,000; ledger `receiv` 7,000; **no** invoice `receivedAmount` change.
+
+---
+
+### Allocation sub-module (client — advance MR only)
+
+| # | Operation | Trigger | Collections |
+|---|-----------|---------|---------------|
+| **1** | **List** | `GET /api/money-receipts/[id]/allocations` | `money_receipt_allocations` + invoice headers (read) |
+| **2** | **Create** | `POST /api/money-receipts/[id]/allocations` | See operation **5** in the core table above |
+| **3** | **Delete** | `DELETE /api/money-receipts/[id]/allocations/[allocId]` | Removes one allocation and reverses that slice on the invoice + ledger |
+
+**Remaining on MR** = `paidAmount − sum(appliedAmount)` across allocations (service recomputes from DB for safety).
+
+### Code paths
+
+- **Models:** `models/money-receipt.ts`, `models/money-receipt-allocation.ts`
+- **Service:** `services/moneyReceiptService.ts` (`createMoneyReceipt`, `createMoneyReceiptInSession` for atomic create-with-invoice), `createReceiptAllocations`, update/delete
+- **API:** `app/api/money-receipts/*`
+- **UI list:** `app/dashboard/money-receipts/page.tsx`
+- **UI view:** `app/dashboard/money-receipts/[id]/page.tsx`
+- **UI create/edit:** `components/money-receipts/ReceiptFormModal.tsx`, advance allocator `components/money-receipts/ReceiptAdjustModal.tsx`
+
+### UI patterns
+
+- **Receipt form:** Payment type radio drives which extra grids appear (overall vs advance vs invoice rows vs tickets vs adjust info banner).
+- **Invoice list MR column:** Resolved via **`money_receipt_allocations.voucherNo`** (not `money_receipts.invoiceId` alone) so **overall** receipts still show on invoice rows.
+
+---
+
+## 14. Client advance return (money returned to client)
+
+**Total operations: 4** (voucher prefix **`ADR-####`**; counter key **`voucher_adr`** on `counters`).
+
+**Purpose:** Records returning **excess client advance** (or paying out held advance) **out** of a selected **account**. This is the **mirror** of receiving an advance MR: cash leaves the account and the client’s `presentBalance` drops (client is less “ahead”).
+
+| # | Operation | Trigger | Collections touched |
+|---|-----------|---------|---------------------|
+| **1** | **List** | `GET /api/advance-returns?page&pageSize&search&dateFrom&dateTo&clientId` + header **`x-company-id`** | `advance_returns` (read, paginated; search on `voucherNo`, `clientName`, `accountName`) |
+| **2** | **Create** | `POST /api/advance-returns` + body | `advance_returns` +1; `clients` `presentBalance` **−** amount (must have sufficient advance); `accounts` `lastBalance` **−** amount; `client_transactions` +1 (`invoiceType: Money Advance Return`, `direction: payout`) |
+| **3** | **Update** | `PUT /api/advance-returns/[id]` | Transaction: adjusts client + account by **delta**; updates `advance_returns` row; updates matching `client_transactions` (same `voucherNo`, `payout`) |
+| **4** | **Delete** | `DELETE /api/advance-returns/[id]` | `clients` `presentBalance` **+** amount (reversed); `accounts` `lastBalance` **+** amount; `client_transactions.deleteOne` by `voucherNo` + `clientId` + `payout`; `advance_returns` removed |
+
+### Example
+
+Client **CL** has `presentBalance` high enough to represent **25,000** advance. Company returns **10,000** via **Bank A** (ADR-0001):
+
+1. **Create:** `advance_returns` +1; `clients.CL.presentBalance` 25,000 → 15,000; `accounts.A.lastBalance` −10,000; `client_transactions` payout 10,000 (`Money Advance Return`).
+2. **Edit** amount to **12,000:** client −2,000 more (net −12,000 vs original −10,000), account −2,000 more, row + ledger updated.
+3. **Delete ADR-0001:** client +12,000, account +12,000, ledger row deleted, `advance_returns` deleted.
+
+**Code:** `services/advanceReturnService.ts`, `controllers/advanceReturnController.ts`, `app/api/advance-returns/*`, `models/advance-return.ts`.
+
+**UI:** `app/dashboard/money-receipts/advance-return/page.tsx` — `FilterToolbar` (date range, debounced search, refresh), Ant `Table`, `AdvanceReturnModal` for add/edit, `DeleteButton` for remove. **Note:** `x-company-id` header is required on API calls from this page (same pattern as other money modules).
+
+---
+
+## 15. Invoices (three `invoiceType` values)
+
+**Purpose:** Sales documents that increase client due, store line economics, and (for types with vendor lines) increase vendor due. All types share collection **`invoices`** with discriminator field **`invoiceType`:** `"standard"` | `"visa"` | `"non_commission"`.
+
+| Type | UI / list route | Typical create API | Child collections (in addition to `invoices` + `invoice_items`) |
+|------|-----------------|--------------------|-----------------------------------|
+| **A — Standard** | `app/dashboard/invoices/page.tsx` | `POST /api/invoices` | `invoice_items`, optional `invoice_tickets`, `invoice_hotels`, `invoice_transports`, `invoice_passports` |
+| **B — Visa** | `app/dashboard/invoices-visa/page.tsx` | `POST /api/invoices/visa` (forces `invoiceType: visa`) | `invoice_items` (visa-shaped lines), `invoice_passports`, … |
+| **C — Non-commission** | `app/dashboard/invoices-non-commission/page.tsx` | `POST /api/invoices/non-commission` | `invoice_tickets`, `invoice_items` (`product: non_commission_ticket`), `invoice_passports`, `invoice_transports` per ticket |
+
+**Shared financial effects on create (high level):**
+
+| Collection | Typical change |
+|-----------|------------------|
+| `invoices` | Header + `billing` summary, `netTotal`, `receivedAmount` (0 or auto-applied advance), `status` |
+| `invoice_items` | Line-level sales/cost/vendor/product linkage |
+| `clients` | `presentBalance` moves with invoice total (client owes more / due increases in the stored convention) |
+| `vendors` | When lines carry vendor cost: `presentBalance` cost bucket updated (batched per vendor in service) |
+| `client_transactions` | Non-cash **invoice** ledger row (`transactionType: invoice`, `isMonetoryTranseciton: false`) for client reporting |
+| `money_receipts` / `money_receipt_allocations` | Optional if user enters inline payment on create; advance auto-apply may create allocations against new invoice |
+
+**List / filter APIs:**
+
+| Type | List query |
+|------|------------|
+| Standard | `GET /api/invoices?invoiceType=standard&page&pageSize&search&status&dateFrom&dateTo` |
+| Visa | `GET /api/invoices?invoiceType=visa&…` (visa page uses this) |
+| Non-commission | `GET /api/invoices/non-commission?…` (dedicated route; service expects **`dateFrom`** / **`dateTo`** on `salesDate`; map from UI if you use other param names) |
+
+**Example (standard):** User raises INV-0100 for client **CL** net **15,000** with two billing lines and one vendor cost **9,000**:
+
+- `invoices` +1; `invoice_items` +2; vendor balance +9,000 cost; client due +15,000 (`presentBalance` convention); `client_transactions` invoice row; optional MR if payment captured on same submit.
+
+**Example (visa):** Same pattern but items carry visa metadata (country, visa type, …); list page shows extra columns from aggregation.
+
+**Example (non-commission):** One row per air ticket: `invoice_tickets` + `invoice_items` with `non_commission_ticket`; passports/transports hang off ticket ids; vendor map aggregated for vendor balance batch.
+
+**Delete (all types):** `DELETE /api/invoices/[id]` soft-deletes header + children (`isDeleted: true`), reverses client + vendor deltas, removes invoice-scoped `client_transactions`, per service rules.
+
+**Code:** `services/invoiceService.ts` (`createInvoice`, `createNonCommissionInvoice`, `listInvoices`, `listNonCommissionInvoices`, …), `app/api/invoices/*`, modals `add-invoice-modal.tsx`, `add-visa-invoice-modal.tsx`, `add-non-commission-modal.tsx`.
+
+---
+
+## 16. Client Ledger (report)
 
 **Purpose:** Statement of all debit/credit movements for a single client, derived from `client_transactions`. Produces a chronological ledger with a running balance and an entity details card.
 
@@ -545,7 +763,7 @@ Client "Mohammad Yeasir Arafat" has one invoice (INV-0001, 15,000) and one money
 
 ---
 
-## 14. Vendor Ledger (report)
+## 17. Vendor Ledger (report)
 
 **Purpose:** Statement of all cost and payment movements for a single vendor, combining two sources: invoice costs from `invoice_items` (grouped per invoice) and payment/return entries from `client_transactions`.
 

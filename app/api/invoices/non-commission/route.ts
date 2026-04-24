@@ -3,6 +3,7 @@ import { getServerSession, Session } from "next-auth"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import { listNonCommissionInvoices, createNonCommissionInvoice } from "@/services/invoiceService"
 import { AppError } from "@/errors/AppError"
+import { NonCommissionInvoiceSchema, formatZodErrors } from "@/lib/validations/invoice"
 
 export async function GET(request: Request) {
   try {
@@ -38,7 +39,16 @@ export async function POST(request: Request) {
     if (!companyId) return NextResponse.json({ error: "Unauthorized: Company ID required" }, { status: 401 })
 
     const body = await request.json()
-    const result = await createNonCommissionInvoice(body, String(companyId))
+
+    const parsed = NonCommissionInvoiceSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Validation failed", details: formatZodErrors(parsed.error) },
+        { status: 422 }
+      )
+    }
+
+    const result = await createNonCommissionInvoice(parsed.data, String(companyId))
     return NextResponse.json(result)
   } catch (error: any) {
     console.error("POST Non-Commission Invoice Error:", error)
@@ -47,4 +57,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status })
   }
 }
-

@@ -14,7 +14,7 @@ import { MoneyReceipt } from "@/models/money-receipt"
 import { MoneyReceiptAllocation } from "@/models/money-receipt-allocation"
 import { ClientTransaction } from "@/models/client-transaction"
 import { AppError } from "@/errors/AppError"
-import { createMoneyReceipt } from "./moneyReceiptService"
+import { createMoneyReceiptInSession } from "./moneyReceiptService"
 
 function parseNumber(val: any, fallback = 0) {
   const n = parseFloat(val)
@@ -361,31 +361,48 @@ export async function getInvoiceById(id: string, companyId: string) {
     InvoicePassport.find({ invoiceId: invId, companyId: companyIdObj, isDeleted: { $ne: true } }).lean(),
   ])
 
-  // Collect vendor references
-  const vendorIds = Array.from(new Set((items || []).map(i => String(i.vendorId || "")).filter(Boolean)))
+  // Collect IDs needed for lookup (Issue J: all lookups in parallel)
+  const vendorIds = Array.from(new Set((items || []).map(i => String((i as any).vendorId || "")).filter(Boolean)))
   const vendorObjectIds = vendorIds.filter(Types.ObjectId.isValid).map((s) => new Types.ObjectId(s))
-  const vendorDocs = vendorObjectIds.length ? await Vendor.find({ _id: { $in: vendorObjectIds }, companyId: companyIdObj }).lean() : []
-  const vendors = vendorDocs.map(v => ({ id: String(v._id), name: v.name || "", email: v.email || "", mobile: v.mobile || "" }))
+  const productIds = Array.from(new Set((items || []).map(i => String((i as any).product || "")).filter(p => Types.ObjectId.isValid(p))))
+  const db = mongoose.connection?.db
 
-  // Collect product names for items
-  const productIds = Array.from(new Set((items || []).map(i => String(i.product || "")).filter(p => Types.ObjectId.isValid(p))))
-  const productDocs = productIds.length ? await mongoose.connection?.db?.collection("products").find({ _id: { $in: productIds.map(pid => new Types.ObjectId(pid)) } }).toArray() : []
-  const productMap = new Map<string, string>()
-  productDocs?.forEach((p: any) => productMap.set(String(p._id), p.product_name))
+  const [vendorDocs, productDocsRaw, employeeDoc, clientDoc, agentDoc] = await Promise.all([
+    vendorObjectIds.length
+      ? Vendor.find({ _id: { $in: vendorObjectIds }, companyId: companyIdObj }).lean()
+      : Promise.resolve([]),
+    productIds.length && db
+      ? db.collection("products").find({ _id: { $in: productIds.map(pid => new Types.ObjectId(pid)) } }).toArray()
+      : Promise.resolve([]),
+    (inv.employeeId && Types.ObjectId.isValid(String(inv.employeeId)))
+      ? Employee.findOne({ _id: inv.employeeId, companyId: companyIdObj }).lean()
+      : Promise.resolve(null),
+    (inv.clientId && Types.ObjectId.isValid(String(inv.clientId)))
+      ? Client.findOne({ _id: inv.clientId, companyId: companyIdObj }).lean()
+      : Promise.resolve(null),
+    (inv.agentId && Types.ObjectId.isValid(String(inv.agentId)) && db)
+      ? db.collection("agents").findOne({ _id: new Types.ObjectId(String(inv.agentId)), companyId: companyIdObj })
+      : Promise.resolve(null),
+  ])
+
+  const vendors = (vendorDocs as any[]).map(v => ({ id: String(v._id), name: v.name || "", email: v.email || "", mobile: v.mobile || "" }))
+  const productMap = new Map<string, string>();
+  (productDocsRaw as any[]).forEach((p: any) => productMap.set(String(p._id), p.product_name))
 
   const normalizedItems = (items || []).map((i: any) => ({
     ...i,
     productName: productMap.get(String(i.product)) || i.product
   }))
 
-  // Include employee detail for the selected salesBy
-  let employees: any[] = []
-  if (inv.employeeId && Types.ObjectId.isValid(String(inv.employeeId))) {
-    const e = await Employee.findOne({ _id: inv.employeeId, companyId: companyIdObj }).lean()
-    if (e) {
-      employees = [{ id: String(e._id), name: e.name || "", department: e.department || "", designation: e.designation || "", mobile: e.mobile || "", email: e.email || "" }]
-    }
-  }
+  const employees = employeeDoc
+    ? [{ id: String((employeeDoc as any)._id), name: (employeeDoc as any).name || "", department: (employeeDoc as any).department || "", designation: (employeeDoc as any).designation || "", mobile: (employeeDoc as any).mobile || "", email: (employeeDoc as any).email || "" }]
+    : []
+  const clients = clientDoc
+    ? [{ id: String((clientDoc as any)._id), name: (clientDoc as any).name || "", phone: (clientDoc as any).phone || "", email: (clientDoc as any).email || "" }]
+    : []
+  const agents = agentDoc
+    ? [{ id: String((agentDoc as any)._id), name: (agentDoc as any).name || "", email: (agentDoc as any).email || "", mobile: (agentDoc as any).mobile || (agentDoc as any).phone || "" }]
+    : []
 
   // Normalize child collections to UI-aligned shapes for edit prefill
   const mapTickets = (tickets || []).map((t: any, idx: number) => ({
@@ -417,27 +434,6 @@ export async function getInvoiceById(id: string, companyId: string) {
   }))
 
   const billingWithItems = { ...(inv.billing || {}), items: normalizedItems }
-  
-  // Fetch client details for prefill
-  let clients: any[] = []
-  if (inv.clientId && Types.ObjectId.isValid(String(inv.clientId))) {
-    const c = await Client.findOne({ _id: inv.clientId, companyId: companyIdObj }).lean()
-    if (c) {
-      clients = [{ id: String(c._id), name: c.name || "", phone: c.phone || "", email: c.email || "" }]
-    }
-  }
-
-  // Fetch agent details for prefill
-  let agents: any[] = []
-  if (inv.agentId && Types.ObjectId.isValid(String(inv.agentId))) {
-    const db = mongoose.connection?.db
-    if (db) {
-      const a = await db.collection("agents").findOne({ _id: new Types.ObjectId(String(inv.agentId)), companyId: companyIdObj })
-      if (a) {
-        agents = [{ id: String(a._id), name: a.name || "", email: a.email || "", mobile: a.mobile || a.phone || "" }]
-      }
-    }
-  }
 
   return {
     invoice: { ...inv, id: String(invId), billing: billingWithItems, tickets: mapTickets, hotels: mapHotels, transports: mapTransports, passports },
@@ -474,8 +470,6 @@ export async function listInvoices(params: {
   if (params.invoiceType) {
     filter.invoiceType = params.invoiceType
   } 
-  
-  console.log("Filter:", filter)
   
   if (params.search) {
     filter.$or = [
@@ -674,53 +668,91 @@ export async function listNonCommissionInvoices(params: {
     if (params.dateTo) filter.salesDate.$lte = params.dateTo
   }
 
-  const total = await Invoice.countDocuments(filter)
-  const docs = await Invoice.find(filter)
-    .sort({ salesDate: -1, createdAt: -1 })
-    .skip(skip)
-    .limit(pageSize)
-    .lean()
-
-  // Fetch all tickets for these invoices to get issue dates
-  const invIds = docs.map((d: any) => d._id)
-  const [allTickets, allAllocations] = await Promise.all([
-    InvoiceTicket.find({ invoiceId: { $in: invIds }, isDeleted: { $ne: true } }).lean(),
-    // Use allocations (not money_receipts.invoiceId) so "overall" MRs also appear
-    MoneyReceiptAllocation.find({ invoiceId: { $in: invIds } }).lean(),
+  // Single aggregation: count + paginated data + ticket issue dates + MR vouchers (Issue I fix)
+  const result = await Invoice.aggregate([
+    { $match: filter },
+    { $sort: { salesDate: -1, createdAt: -1 } },
+    {
+      $facet: {
+        metadata: [{ $count: "total" }],
+        data: [
+          { $skip: skip },
+          { $limit: pageSize },
+          // Issue dates from InvoiceTicket
+          {
+            $lookup: {
+              from: "invoice_tickets",
+              let: { invId: "$_id" },
+              pipeline: [
+                { $match: { $expr: { $and: [{ $eq: ["$invoiceId", "$$invId"] }, { $ne: ["$isDeleted", true] }] } } },
+                { $project: { issueDate: 1, createdAt: 1, _id: 0 } }
+              ],
+              as: "ticketDates"
+            }
+          },
+          // MR voucher numbers via allocations (covers overall + invoice + tickets)
+          {
+            $lookup: {
+              from: "money_receipt_allocations",
+              let: { invId: "$_id" },
+              pipeline: [
+                { $match: { $expr: { $eq: ["$invoiceId", "$$invId"] } } },
+                { $project: { voucherNo: 1, _id: 0 } }
+              ],
+              as: "mrAllocations"
+            }
+          },
+          {
+            $project: {
+              id: { $toString: "$_id" },
+              clientId: { $toString: { $ifNull: ["$clientId", ""] } },
+              invoiceNo: 1,
+              clientName: { $ifNull: ["$clientName", ""] },
+              clientPhone: { $ifNull: ["$clientPhone", ""] },
+              salesDate: 1,
+              dueDate: { $ifNull: ["$dueDate", ""] },
+              issueDate: { $ifNull: [{ $arrayElemAt: ["$ticketDates.issueDate", 0] }, "$salesDate"] },
+              issueDates: {
+                $filter: {
+                  input: {
+                    $map: {
+                      input: "$ticketDates",
+                      as: "t",
+                      in: { $ifNull: ["$$t.issueDate", "$$t.createdAt"] }
+                    }
+                  },
+                  as: "d",
+                  cond: { $and: [{ $ne: ["$$d", null] }, { $ne: ["$$d", ""] }] }
+                }
+              },
+              salesPrice: { $ifNull: ["$netTotal", 0] },
+              totalCost: { $ifNull: ["$billing.totalCost", 0] },
+              receivedAmount: { $ifNull: ["$receivedAmount", 0] },
+              dueAmount: {
+                $max: [0, { $subtract: [{ $ifNull: ["$netTotal", 0] }, { $ifNull: ["$receivedAmount", 0] }] }]
+              },
+              mrNo: {
+                $reduce: {
+                  input: { $setUnion: ["$mrAllocations.voucherNo", []] },
+                  initialValue: "",
+                  in: { $cond: [{ $eq: ["$$value", ""] }, "$$this", { $concat: ["$$value", ", ", "$$this"] }] }
+                }
+              },
+              passportNo: { $literal: "" },
+              salesBy: { $ifNull: ["$salesByName", ""] },
+              status: { $ifNull: ["$status", "due"] },
+              invoiceType: { $literal: "non_commission" },
+              createdAt: { $ifNull: ["$createdAt", { $toString: "$$NOW" }] },
+              updatedAt: { $ifNull: ["$updatedAt", { $toString: "$$NOW" }] },
+            }
+          }
+        ]
+      }
+    }
   ])
 
-  const invoices = docs.map((d: any) => {
-    const invId = d._id
-    const invTickets = allTickets.filter((t: any) => String(t.invoiceId) === String(invId))
-    const issueDates = Array.from(new Set(invTickets.map((t: any) => t.issueDate || t.createdAt))).filter(Boolean)
-
-    // Collect distinct voucher numbers via allocations (covers overall + invoice + tickets payment types)
-    const invAllocs = allAllocations.filter((a: any) => String(a.invoiceId) === String(invId))
-    const mrNos = Array.from(new Set(invAllocs.map((a: any) => a.voucherNo).filter(Boolean))).join(", ")
-
-    return {
-      id: String(invId),
-      clientId: String(d.clientId || ""),
-      invoiceNo: d.invoiceNo,
-      clientName: d.clientName || "",
-      clientPhone: d.clientPhone || "",
-      salesDate: d.salesDate,
-      dueDate: d.dueDate || "",
-      issueDate: issueDates[0] || d.salesDate, // Fallback
-      issueDates: issueDates,
-      salesPrice: parseNumber(d.netTotal, 0),
-      totalCost: parseNumber(d.billing?.totalCost || 0, 0),
-      receivedAmount: parseNumber(d.receivedAmount, 0),
-      dueAmount: Math.max(0, parseNumber(d.netTotal, 0) - parseNumber(d.receivedAmount, 0)),
-      mrNo: mrNos,
-      passportNo: "", 
-      salesBy: d.salesByName || "",
-      status: d.status || "due",
-      invoiceType: d.invoiceType || "non_commission",
-      createdAt: d.createdAt || new Date().toISOString(),
-      updatedAt: d.updatedAt || new Date().toISOString(),
-    }
-  })
+  const invoices = result[0]?.data || []
+  const total = result[0]?.metadata?.[0]?.total || 0
 
   return {
     items: invoices,
@@ -1412,15 +1444,25 @@ export async function createInvoice(body: any, companyId: string) {
       // b. Create Child Records + vendor balance (grouped, parallel)
       const vendorCostMap = buildVendorCostMap(billingItems)
       if (billingItems.length) {
-        await InvoiceItem.insertMany(billingItems.map(i => ({ 
-          ...i, 
-          invoiceId, 
-          companyId: companyIdObj,
-          vendorId: (i.vendorId && Types.ObjectId.isValid(i.vendorId)) ? new Types.ObjectId(i.vendorId) : null,
-          productId: (i.product && Types.ObjectId.isValid(i.product)) ? new Types.ObjectId(i.product) : undefined,
-          createdAt: now, 
-          updatedAt: now 
-        })), { session })
+        await InvoiceItem.insertMany(billingItems.map(i => {
+          // productId is pre-validated by the Zod schema (truthy only when product is an ObjectId)
+          const vendorRaw = (i as any).vendor || (i as any).vendorId || ""
+          const resolvedVendorId = vendorRaw && Types.ObjectId.isValid(String(vendorRaw))
+            ? new Types.ObjectId(String(vendorRaw))
+            : null
+          const resolvedProductId = (i as any).productId && Types.ObjectId.isValid(String((i as any).productId))
+            ? new Types.ObjectId(String((i as any).productId))
+            : undefined
+          return {
+            ...i,
+            invoiceId,
+            companyId: companyIdObj,
+            vendorId: resolvedVendorId,
+            productId: resolvedProductId,
+            createdAt: now,
+            updatedAt: now,
+          }
+        }), { session })
 
         // One DB call per unique vendor, all parallel — no N+1
         await applyVendorCostMap(vendorCostMap, 1, now, session)
@@ -1464,18 +1506,18 @@ export async function createInvoice(body: any, companyId: string) {
         session,
       })
 
-      // d. Money Receipt Logic
+      // d. Money Receipt Logic — runs inside the SAME transaction (Issue G fix)
       let moneyReceiptNo = ""
       let receivedSoFar = advanceApplied
       const moneyReceipt = payload.moneyReceipt
       if (moneyReceipt?.paymentMethod && moneyReceipt?.amount > 0) {
-        const mrResult = await createMoneyReceipt({
+        const mrResult = await createMoneyReceiptInSession({
           clientId: clientDoc._id, invoiceId: createdId, paymentTo: "invoice",
           amount: moneyReceipt.amount, discount: moneyReceipt.discount || 0,
           paymentDate: moneyReceipt.paymentDate || general.salesDate || now,
           paymentMethod: moneyReceipt.paymentMethod, accountId: moneyReceipt.accountId,
           note: moneyReceipt.note, manualReceiptNo: moneyReceipt.receiptNo
-        }, companyId)
+        }, companyId, session)
         if (mrResult.ok) {
           moneyReceiptNo = mrResult.created.receipt_vouchar_no
           receivedSoFar += parseNumber(moneyReceipt.amount, 0)

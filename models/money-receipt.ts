@@ -24,4 +24,7 @@ const MoneyReceiptSchema = new Schema({
   updatedAt: { type: String },
 }, { collection: "money_receipts" })
 
+// Hot-path for advance auto-apply (autoApplyClientAdvanceToInvoice)
+MoneyReceiptSchema.index({ clientId: 1, companyId: 1, paymentTo: 1, remainingAmount: 1 })
+
 export const MoneyReceipt = models.MoneyReceipt || model("MoneyReceipt", MoneyReceiptSchema)

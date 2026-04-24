@@ -318,6 +318,144 @@ export async function createMoneyReceipt(body: any, companyId: string) {
   }
 }
 
+/**
+ * Session-aware variant: runs `perform` within an ALREADY-OPEN transaction
+ * session supplied by the caller (e.g. createInvoice).  Does NOT open or
+ * commit its own session — that is the caller's responsibility.
+ *
+ * This ensures the money receipt and the invoice are committed atomically
+ * in the same transaction (Issue G fix).
+ */
+export async function createMoneyReceiptInSession(
+  body: any,
+  companyId: string,
+  externalSession: mongoose.ClientSession
+) {
+  await connectMongoose()
+  if (!companyId) throw new AppError("Company ID is required", 401)
+  const companyObjectId = new Types.ObjectId(companyId)
+  const now = new Date().toISOString()
+
+  const clientIdRaw = String(body.clientId || body.client_id || "").trim()
+  if (!Types.ObjectId.isValid(clientIdRaw)) throw new AppError("Invalid clientId", 400)
+  const clientId = new Types.ObjectId(clientIdRaw)
+
+  const paymentTo = String(body.paymentTo || body.receipt_payment_to || "").toLowerCase()
+  const invoiceIdRaw = String(body.invoiceId || body.invoice_id || "").trim()
+  const invoiceId = Types.ObjectId.isValid(invoiceIdRaw) ? new Types.ObjectId(invoiceIdRaw) : undefined
+
+  const rawAllocations: Array<{ invoiceId: string; amount: number }> = Array.isArray(body.invoiceAllocations) ? body.invoiceAllocations : []
+  const hasMultiAllocations = rawAllocations.length > 0 && (paymentTo === "invoice" || paymentTo === "tickets")
+
+  const amount = parseNumber(body.amount ?? body.receipt_total_amount, 0)
+  const discount = parseNumber(body.discount ?? body.receipt_discount_amount, 0)
+  const paidAmount = Math.max(0, amount - discount)
+  if (paidAmount <= 0) throw new AppError("Paid amount must be positive", 400)
+
+  const paymentDate = String(body.paymentDate || body.receipt_payment_date || now)
+  const manualReceiptNo = String(body.manualReceiptNo || body.receipt_money_receipt_no || "").trim() || undefined
+  const paymentMethod = String(body.paymentMethod || body.acctype_name || body.receipt_payment_method || "")
+  const accountIdRaw = String(body.accountId || body.receipt_account_id || body.payment_type_id || "").trim()
+  if (!Types.ObjectId.isValid(accountIdRaw)) throw new AppError("Invalid accountId", 400)
+  const accId = new Types.ObjectId(accountIdRaw)
+  const note = String(body.note || body.receipt_note || "")
+  const docOneName = String(body.docOneName || body.receipt_scan_copy || "")
+  const docTwoName = String(body.docTwoName || body.receipt_scan_copy2 || "")
+
+  const accountDoc = await Account.findOne({ _id: accId, companyId: companyObjectId }).session(externalSession).lean()
+  if (!accountDoc) throw new AppError("Account not found", 404)
+  const accountName = String(body.accountName || body.cheque_or_bank_name || body.account_name || (accountDoc as any)?.name || "")
+
+  const clientDoc = await Client.findOne({ _id: clientId, companyId: companyObjectId }).session(externalSession).lean()
+  if (!clientDoc) throw new AppError("Client not found", 404)
+
+  // Single-invoice validation
+  let invDoc: any = null
+  if (!hasMultiAllocations && invoiceId) {
+    invDoc = await Invoice.findOne({ _id: invoiceId, companyId: companyObjectId, isDeleted: { $ne: true } }).session(externalSession).lean()
+    if (!invDoc) throw new AppError("Invoice not found or has been deleted", 404)
+    if (String(invDoc.clientId || "") !== String(clientId)) throw new AppError("Invoice does not belong to client", 400)
+  }
+
+  // Reuse the shared perform logic by constructing a minimal call
+  // We pass the external session so all writes join the same transaction
+  const voucherNo = await nextVoucher("MR")
+  const newAccountBalance = parseNumber((accountDoc as any).lastBalance, 0) + paidAmount
+
+  const mrDoc: any = {
+    clientId, clientName: (clientDoc as any).name || "", companyId: companyObjectId,
+    invoiceId, voucherNo, paymentTo, paymentMethod, accountId: accId, accountName,
+    manualReceiptNo, amount, discount, paymentDate, note, docOneName, docTwoName,
+    createdAt: now, updatedAt: now,
+  }
+  const createdMr = await new MoneyReceipt(mrDoc).save({ session: externalSession })
+
+  await Client.updateOne(
+    { _id: clientId },
+    { $set: { presentBalance: parseNumber((clientDoc as any).presentBalance, 0) + paidAmount, updatedAt: now } },
+    { session: externalSession }
+  )
+
+  const allocated: Array<{ invoiceId: any; applied: number }> = []
+  if (invDoc) {
+    const oldReceived = parseNumber(invDoc.receivedAmount, 0)
+    const net = parseNumber(invDoc.netTotal, 0)
+    const newReceived = oldReceived + paidAmount
+    const status = newReceived >= net ? "paid" : newReceived > 0 ? "partial" : "due"
+    await Invoice.updateOne(
+      { _id: invoiceId },
+      { $set: { receivedAmount: newReceived, status, updatedAt: now } },
+      { session: externalSession }
+    )
+    allocated.push({ invoiceId, applied: paidAmount })
+  }
+
+  if (allocated.length) {
+    const allocDocs = allocated.map(a => ({
+      moneyReceiptId: createdMr._id, invoiceId: a.invoiceId, clientId,
+      companyId: companyObjectId, voucherNo, appliedAmount: a.applied, paymentDate,
+      createdAt: now, updatedAt: now,
+    }))
+    await MoneyReceiptAllocation.insertMany(allocDocs, { session: externalSession })
+    const appliedTotal = allocated.reduce((s, a) => s + a.applied, 0)
+    await MoneyReceipt.updateOne(
+      { _id: createdMr._id },
+      { $set: { allocatedAmount: appliedTotal, remainingAmount: Math.max(0, paidAmount - appliedTotal), updatedAt: now } },
+      { session: externalSession }
+    )
+  } else {
+    await MoneyReceipt.updateOne(
+      { _id: createdMr._id },
+      { $set: { allocatedAmount: 0, remainingAmount: paidAmount, updatedAt: now } },
+      { session: externalSession }
+    )
+  }
+
+  const txnDoc: any = {
+    date: paymentDate, voucherNo, clientId, clientName: (clientDoc as any).name || "",
+    companyId: companyObjectId, invoiceType: paymentTo?.toUpperCase?.() || "INVOICE",
+    paymentTypeId: accId, accountName, payType: paymentMethod || undefined,
+    amount: paidAmount, direction: "receiv", lastTotalAmount: newAccountBalance,
+    note: note || undefined, createdAt: now, updatedAt: now,
+  }
+  await new ClientTransaction(txnDoc).save({ session: externalSession })
+
+  await Account.updateOne(
+    { _id: accId, companyId: companyObjectId },
+    { $inc: { lastBalance: paidAmount }, $set: { hasTrxn: true, updatedAt: now } },
+    { session: externalSession }
+  )
+
+  return {
+    ok: true,
+    created: {
+      receipt_vouchar_no: voucherNo,
+      receipt_total_amount: paidAmount.toFixed(2),
+      invoice_id: invoiceId ? String(invoiceId) : undefined,
+    }
+  }
+}
+
 export async function listMoneyReceipts(params: { 
   page?: number; 
   pageSize?: number; 
