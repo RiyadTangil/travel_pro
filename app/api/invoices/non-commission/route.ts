@@ -20,6 +20,7 @@ export async function GET(request: Request) {
       dateFrom: searchParams.get("dateFrom") || undefined,
       dateTo: searchParams.get("dateTo") || undefined,
       clientId: searchParams.get("clientId") || undefined,
+      salesBy: searchParams.get("salesBy") || undefined,
       companyId: String(companyId),
       invoiceType: "non_commission"
     }

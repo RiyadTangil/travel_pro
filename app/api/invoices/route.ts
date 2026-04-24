@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession, Session } from "next-auth"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import { createInvoice, listInvoices } from "@/services/invoiceService"
-import { AppError } from "@/errors/AppError"
+import { apiErrorResponse } from "@/errors/apiErrorResponse"
 import { StandardInvoiceSchema, formatZodErrors } from "@/lib/validations/invoice"
 
 export async function GET(request: Request) {
@@ -21,14 +21,15 @@ export async function GET(request: Request) {
       dateFrom: searchParams.get("dateFrom") || undefined,
       dateTo: searchParams.get("dateTo") || undefined,
       clientId: searchParams.get("clientId") || undefined,
+      salesBy: searchParams.get("salesBy") || undefined,
       companyId: String(companyId)
     }
 
     const result = await listInvoices(params)
     return NextResponse.json(result)
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("GET Invoices Error:", error)
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
+    return apiErrorResponse(error)
   }
 }
 
@@ -50,10 +51,8 @@ export async function POST(request: Request) {
 
     const result = await createInvoice(parsed.data, String(companyId))
     return NextResponse.json(result)
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("POST Invoice Error:", error)
-    const status = error instanceof AppError ? error.status : 500
-    const message = error instanceof AppError ? error.message : "Internal Server Error"
-    return NextResponse.json({ error: message }, { status })
+    return apiErrorResponse(error)
   }
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { getItemSalesmanReport } from "@/services/itemSalesmanReportService"
-import { AppError } from "@/errors/AppError"
+import { apiErrorResponse } from "@/errors/apiErrorResponse"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 
@@ -24,10 +24,8 @@ export async function GET(request: Request) {
     const result = await getItemSalesmanReport(params)
     return NextResponse.json(result)
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Item Salesman Report API Error:", error)
-    const status = error instanceof AppError ? error.statusCode : 500
-    const message = error instanceof AppError ? error.message : "Internal Server Error"
-    return NextResponse.json({ error: message }, { status })
+    return apiErrorResponse(error)
   }
 }

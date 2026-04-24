@@ -38,6 +38,8 @@ export async function GET(request: Request) {
     const pageSize = Number(searchParams.get("pageSize") || 10)
     const skip = (page - 1) * pageSize
     const q = (searchParams.get("q") || "").trim().toLowerCase()
+    const dateFrom = (searchParams.get("dateFrom") || "").trim()
+    const dateTo = (searchParams.get("dateTo") || "").trim()
 
     const client = await clientPromise
     const db = client.db("manage_agency")
@@ -45,6 +47,11 @@ export async function GET(request: Request) {
 
     const query: any = { deleted: { $ne: true } }
     if (q) query.nameLower = { $regex: q, $options: "i" }
+    if (dateFrom || dateTo) {
+      query.createdAt = {}
+      if (dateFrom) query.createdAt.$gte = new Date(`${dateFrom}T00:00:00.000Z`)
+      if (dateTo) query.createdAt.$lte = new Date(`${dateTo}T23:59:59.999Z`)
+    }
 
     const total = await collection.countDocuments(query)
     const docs = await collection

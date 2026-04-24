@@ -1,88 +1,150 @@
 "use client"
 
 import { useMemo } from "react"
+import { Table } from "antd"
+import type { ColumnsType } from "antd/es/table"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Card, CardContent } from "@/components/ui/card"
 import { InlineLoader } from "@/components/ui/loader"
 import type { ProductItem } from "./product-modal"
 
 interface ProductTableProps {
   items: ProductItem[]
+  loading?: boolean
+  page: number
+  pageSize: number
+  total: number
+  onPageChange: (page: number, pageSize: number) => void
   onEdit: (item: ProductItem) => void
   onDelete: (item: ProductItem) => void
-  searchValue: string
-  onSearchChange: (v: string) => void
   currentCompanyId?: string | null
   loadingRowId?: string | null
 }
 
-export default function ProductTable({ items, onEdit, onDelete, searchValue, onSearchChange, currentCompanyId, loadingRowId }: ProductTableProps) {
-  const filtered = useMemo(() => {
-    const q = searchValue.trim().toLowerCase()
-    if (!q) return items
-    return items.filter((i) => i.name.toLowerCase().includes(q) || i.categoryTitle.toLowerCase().includes(q))
-  }, [items, searchValue])
+export default function ProductTable({
+  items,
+  loading = false,
+  page,
+  pageSize,
+  total,
+  onPageChange,
+  onEdit,
+  onDelete,
+  currentCompanyId,
+  loadingRowId,
+}: ProductTableProps) {
+  const columns: ColumnsType<ProductItem> = useMemo(
+    () => [
+      {
+        title: "SL.",
+        key: "sl",
+        width: 56,
+        align: "center",
+        render: (_: unknown, __: ProductItem, index: number) => (page - 1) * pageSize + index + 1,
+      },
+      { title: "Product Name", dataIndex: "name", key: "name", ellipsis: true },
+      { title: "Category", dataIndex: "categoryTitle", key: "categoryTitle", width: 160, ellipsis: true },
+      {
+        title: "Create Date",
+        dataIndex: "createdAt",
+        key: "createdAt",
+        width: 130,
+        render: (v: string | undefined) => (v ? new Date(v).toLocaleDateString() : "-"),
+      },
+      {
+        title: "Status",
+        dataIndex: "status",
+        key: "status",
+        width: 110,
+        render: (status: 1 | 0) =>
+          status === 1 ? (
+            <Badge className="bg-green-100 text-green-700 border-green-200">Active</Badge>
+          ) : (
+            <Badge variant="outline" className="border-grey-300 text-gray-700">
+              Inactive
+            </Badge>
+          ),
+      },
+      {
+        title: "Action",
+        key: "action",
+        fixed: "right",
+        width: 200,
+        render: (_: unknown, item: ProductItem) => {
+          const canEditDelete =
+            currentCompanyId && item.companyId && String(item.companyId) === String(currentCompanyId)
+          if (!canEditDelete) {
+            return <span className="text-muted-foreground">—</span>
+          }
+          return (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                className="bg-blue-500 hover:bg-blue-600"
+                onClick={() => onEdit(item)}
+                disabled={loadingRowId === item.id}
+              >
+                {loadingRowId === item.id ? (
+                  <span className="flex items-center gap-1">
+                    <InlineLoader /> Edit
+                  </span>
+                ) : (
+                  "Edit"
+                )}
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => onDelete(item)}
+                disabled={loadingRowId === item.id}
+              >
+                {loadingRowId === item.id ? (
+                  <span className="flex items-center gap-1">
+                    <InlineLoader /> Delete
+                  </span>
+                ) : (
+                  "Delete"
+                )}
+              </Button>
+            </div>
+          )
+        },
+      },
+    ],
+    [page, pageSize, currentCompanyId, loadingRowId, onEdit, onDelete]
+  )
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <Input value={searchValue} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search..." className="max-w-sm" />
-      </div>
-
-      <div className="overflow-x-auto rounded-md border">
-        <table className="w-full text-left">
-          <thead className="bg-muted/50">
-            <tr>
-              <th className="px-3 py-2">SL.</th>
-              <th className="px-3 py-2">Product Name</th>
-              <th className="px-3 py-2">Category</th>
-              <th className="px-3 py-2">Create Date</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((item, idx) => {
-              const canEditDelete = currentCompanyId && item.companyId && String(item.companyId) === String(currentCompanyId)
-              return (
-                <tr key={item.id} className="border-t">
-                  <td className="px-3 py-2">{idx + 1}</td>
-                  <td className="px-3 py-2">{item.name}</td>
-                  <td className="px-3 py-2">{item.categoryTitle}</td>
-                  <td className="px-3 py-2">{item.createdAt ? new Date(item.createdAt).toLocaleDateString() : "-"}</td>
-                  <td className="px-3 py-2">
-                    {item.status === 1 ? (
-                      <Badge className="bg-green-100 text-green-700 border-green-200">Active</Badge>
-                    ) : (
-                      <Badge variant="outline" className="border-grey-300 text-gray-700">Inactive</Badge>
-                    )}
-                  </td>
-                  <td className="px-3 py-2">
-                    {canEditDelete ? (
-                      <div className="flex gap-2">
-                        <Button size="sm" className="bg-blue-500 hover:bg-blue-600" onClick={() => onEdit(item)} disabled={loadingRowId === item.id}>
-                          {loadingRowId === item.id ? (<span className="flex items-center gap-1"><InlineLoader /> Edit</span>) : "Edit"}
-                        </Button>
-                        <Button size="sm" variant="destructive" onClick={() => onDelete(item)} disabled={loadingRowId === item.id}>
-                          {loadingRowId === item.id ? (<span className="flex items-center gap-1"><InlineLoader /> Delete</span>) : "Delete"}
-                        </Button>
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </td>
-                </tr>
-              )
-            })}
-            {filtered.length === 0 && (
-              <tr>
-                <td className="px-3 py-6 text-center text-muted-foreground" colSpan={6}>No products found</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <Card className="border-none shadow-none bg-transparent">
+      <CardContent className="p-0">
+        <div className="bg-white rounded-md border shadow-sm overflow-hidden">
+          <Table<ProductItem>
+            rowKey="id"
+            columns={columns}
+            dataSource={items}
+            loading={loading}
+            scroll={{ x: "max-content" }}
+            pagination={{
+              current: page,
+              pageSize,
+              total,
+              showSizeChanger: true,
+              showTotal: (t) => `Total ${t} items`,
+              onChange: (p, ps) => onPageChange(p, ps ?? pageSize),
+            }}
+            locale={{
+              emptyText: (
+                <div className="py-12 text-center text-muted-foreground">
+                  <div className="text-lg font-medium mb-2">No products found</div>
+                  <p className="text-sm">Try adjusting search or date range</p>
+                </div>
+              ),
+            }}
+            className="border-none"
+          />
+        </div>
+      </CardContent>
+    </Card>
   )
 }

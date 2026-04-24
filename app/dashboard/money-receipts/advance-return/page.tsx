@@ -154,7 +154,6 @@ export default function AdvanceReturnPage() {
   return (
     <PageWrapper breadcrumbs={[{ label: "Money Receipt" }, { label: "Advance Return" }]}>
       <div className="mx-4 mb-4 space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <FilterToolbar
             showDateRange
             dateRange={dateRange}
@@ -172,7 +171,6 @@ export default function AdvanceReturnPage() {
               Add Advance Return
             </Button>
           </FilterToolbar>
-        </div>
 
         <Card className="border-none shadow-none bg-transparent">
           <CardContent className="p-0">

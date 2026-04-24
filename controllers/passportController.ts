@@ -6,12 +6,7 @@ import {
   updatePassport,
   deletePassport,
 } from "@/services/passportService"
-
-function errResponse(err: any) {
-  const msg    = err?.message || "Internal server error"
-  const status = err?.status || err?.statusCode || 500
-  return NextResponse.json({ error: msg }, { status })
-}
+import { apiErrorResponse } from "@/errors/apiErrorResponse"
 
 export async function listPassportsHandler(request: NextRequest) {
   try {
@@ -29,7 +24,7 @@ export async function listPassportsHandler(request: NextRequest) {
     })
     return NextResponse.json(result)
   } catch (err) {
-    return errResponse(err)
+    return apiErrorResponse(err)
   }
 }
 
@@ -41,7 +36,7 @@ export async function createPassportHandler(request: NextRequest) {
     const result    = await createPassports(items, companyId)
     return NextResponse.json({ passports: result }, { status: 201 })
   } catch (err) {
-    return errResponse(err)
+    return apiErrorResponse(err)
   }
 }
 
@@ -55,7 +50,7 @@ export async function getPassportByIdHandler(
     const result    = await getPassportById(id, companyId)
     return NextResponse.json({ passport: result })
   } catch (err) {
-    return errResponse(err)
+    return apiErrorResponse(err)
   }
 }
 
@@ -70,7 +65,7 @@ export async function updatePassportHandler(
     const result    = await updatePassport(id, updates, companyId)
     return NextResponse.json(result)
   } catch (err) {
-    return errResponse(err)
+    return apiErrorResponse(err)
   }
 }
 
@@ -84,6 +79,6 @@ export async function deletePassportHandler(
     const result    = await deletePassport(id, companyId)
     return NextResponse.json(result)
   } catch (err) {
-    return errResponse(err)
+    return apiErrorResponse(err)
   }
 }

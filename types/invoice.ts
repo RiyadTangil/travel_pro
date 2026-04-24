@@ -5,6 +5,9 @@ export interface Invoice {
   clientPhone: string
   invoiceType: string
   salesDate: string
+  /** Present on some list projections (e.g. visa / ticket issue) */
+  issueDate?: string
+  issueDates?: string[]
   dueDate: string
   salesPrice: number
   totalCost?: number

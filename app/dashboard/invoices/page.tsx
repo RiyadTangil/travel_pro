@@ -6,12 +6,17 @@ import { Plus } from "lucide-react"
 import { MoneyReceiptModal } from "@/components/invoices/money-receipt-modal"
 import { AddInvoiceModal } from "@/components/invoices/add-invoice-modal"
 import { InvoiceTable } from "@/components/invoices/invoice-table"
-import { InvoiceFilters } from "@/components/invoices/invoice-filters"
-import { InvoiceStats } from "@/components/invoices/invoice-stats"
-// import { dummyInvoices } from "@/data/invoices"
-import { Invoice, InvoiceFilters as IInvoiceFilters, InvoiceStats as IInvoiceStats } from "@/types/invoice"
-
-import { PaginationWithLinks } from "@/components/ui/pagination-with-links"
+import { Invoice } from "@/types/invoice"
+import FilterToolbar from "@/components/shared/filter-toolbar"
+import { DateRange } from "react-day-picker"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
 import { useToast } from "@/components/ui/use-toast"
 import {
   AlertDialog,
@@ -24,8 +29,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Loader2 } from "lucide-react"
-
 import { PageWrapper } from "@/components/shared/page-wrapper"
+
+const DEFAULT_SALES_STAFF = ["Tanvir Hasan", "Ahmed Khan", "Fatima Rahman"]
 
 export default function InvoicesPage() {
   const { toast } = useToast()
@@ -33,72 +39,74 @@ export default function InvoicesPage() {
   const [editingInvoice, setEditingInvoice] = useState<Invoice | undefined>(undefined)
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
-  const [pagination, setPagination] = useState({
-    page: 1,
-    pageSize: 20,
-    total: 0,
-    totalPages: 0
-  })
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+  const [total, setTotal] = useState(0)
 
-  const [filters, setFilters] = useState<IInvoiceFilters>({
-    search: "",
-    status: "",
-    dateFrom: "",
-    dateTo: "",
-    salesBy: ""
-  })
+  const [dateRange, setDateRange] = useState<DateRange | undefined>()
+  const [search, setSearch] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
+  const [status, setStatus] = useState("")
+  const [salesBy, setSalesBy] = useState("")
 
-  // Load invoices from API
-  const loadInvoices = useCallback(async (page = 1, pageSize = pagination.pageSize) => {
-    try {
-      setLoading(true)
-      const params = new URLSearchParams({
-        page: String(page),
-        pageSize: String(pageSize),
-        invoiceType: "standard",
-        search: filters.search || "",
-        status: filters.status || "",
-        dateFrom: filters.dateFrom || "",
-        dateTo: filters.dateTo || "",
-        salesBy: filters.salesBy || ""
-      })
-      
-      const res = await fetch(`/api/invoices?${params.toString()}`)
-      const data = await res.json()
-      
-      setInvoices(data.items || [])
-      setPagination(prev => ({
-        ...prev,
-        page: data.pagination?.page || 1,
-        pageSize: data.pagination?.pageSize || 20,
-        total: data.pagination?.total || 0,
-        totalPages: Math.ceil(data.pagination?.total || 0 / data.pagination?.pageSize || 20)
-      }))
-    } catch (e) {
-      console.error("Load invoices error:", e)
-      toast({
-        title: "Error",
-        description: "Failed to load invoices",
-        variant: "destructive"
-      })
-    } finally {
-      setLoading(false)
-    }
-  }, [filters, pagination.pageSize, toast])
-
-  useEffect(() => {
-    loadInvoices(1)
-  }, [filters, loadInvoices])
-
-  // Get unique sales staff for filter options
   const salesByOptions = useMemo(() => {
-    // In a real system, this would come from an employee API
-    // For now, we extract from the loaded invoices
-    const uniqueStaff = Array.from(new Set(invoices.map(inv => inv.salesBy)))
-    return uniqueStaff.sort()
+    const fromData = Array.from(new Set(invoices.map((inv) => inv.salesBy).filter(Boolean)))
+    return Array.from(new Set([...DEFAULT_SALES_STAFF, ...fromData])).sort()
   }, [invoices])
 
-  // Deletion logic
+  const fetchInvoices = useCallback(
+    async (overridePage?: number, overridePageSize?: number) => {
+      const p = overridePage ?? page
+      const ps = overridePageSize ?? pageSize
+      try {
+        setLoading(true)
+        const params = new URLSearchParams({
+          page: String(p),
+          pageSize: String(ps),
+          invoiceType: "standard",
+          search: debouncedSearch,
+          status,
+          salesBy,
+        })
+        if (dateRange?.from) params.set("dateFrom", dateRange.from.toISOString().slice(0, 10))
+        if (dateRange?.to) params.set("dateTo", dateRange.to.toISOString().slice(0, 10))
+
+        const res = await fetch(`/api/invoices?${params.toString()}`)
+        const data = await res.json()
+
+        if (!res.ok) throw new Error(data?.error || "Request failed")
+
+        setInvoices(data.items || [])
+        setTotal(Number(data.pagination?.total ?? 0))
+      } catch (e) {
+        console.error("Load invoices error:", e)
+        toast({
+          title: "Error",
+          description: "Failed to load invoices",
+          variant: "destructive",
+        })
+      } finally {
+        setLoading(false)
+      }
+    },
+    [page, pageSize, debouncedSearch, dateRange, status, salesBy, toast]
+  )
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const next = search.trim()
+      setDebouncedSearch((prev) => {
+        if (next !== prev) setPage(1)
+        return next
+      })
+    }, 250)
+    return () => clearTimeout(t)
+  }, [search])
+
+  useEffect(() => {
+    void fetchInvoices()
+  }, [page, pageSize, debouncedSearch, dateRange, status, salesBy, fetchInvoices])
+
   const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
@@ -108,27 +116,26 @@ export default function InvoicesPage() {
 
   const confirmDelete = async () => {
     if (!invoiceToDelete) return
-    
+
     try {
       setIsDeleting(true)
       const res = await fetch(`/api/invoices/${invoiceToDelete.id}`, {
-        method: 'DELETE'
+        method: "DELETE",
       })
-      
+
       if (!res.ok) throw new Error("Delete failed")
-      
+
       toast({
         title: "Success",
         description: `Invoice ${invoiceToDelete.invoiceNo} deleted successfully`,
       })
-      
-      // Reload current page
-      loadInvoices(pagination.page)
+
+      await fetchInvoices()
     } catch (e) {
       toast({
         title: "Error",
         description: "Failed to delete invoice",
-        variant: "destructive"
+        variant: "destructive",
       })
     } finally {
       setIsDeleting(false)
@@ -153,60 +160,66 @@ export default function InvoicesPage() {
     setMoneyReceiptOpen(true)
   }
 
-  const handleAddInvoice = () => {
-    loadInvoices(1)
+  const handleInvoiceSaved = () => {
+    setPage(1)
+    void fetchInvoices(1)
   }
+
+
 
   return (
     <PageWrapper breadcrumbs={[{ label: "Invoices" }]}>
-      <div className="px-4 space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Invoices</h1>
-          <Button 
-            onClick={() => setIsModalOpen(true)}
-            className="bg-blue-600 hover:bg-blue-700"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Invoice
-          </Button>
-        </div>
+      <div className="mx-4 mb-4 space-y-4">
 
-        {/* Filters */}
-        <InvoiceFilters 
-          filters={filters}
-          onFiltersChange={setFilters}
-          salesByOptions={salesByOptions}
+          <FilterToolbar
+            showDateRange
+            dateRange={dateRange}
+            onDateRangeChange={(r) => {
+              setDateRange(r)
+              setPage(1)
+            }}
+            showSearch
+            search={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Search invoices, clients, passports..."
+            showRefresh
+            onRefresh={() => void fetchInvoices()}
+            className="flex-1 min-w-0"
+          > 
+              <Button
+                onClick={() => setIsModalOpen(true)}
+                className="bg-sky-500 hover:bg-sky-600 text-white shrink-0"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Invoice
+              </Button>
+
+          </FilterToolbar>
+       
+
+        <InvoiceTable
+          invoices={invoices}
+          loading={loading}
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={(p, ps) => {
+            setPage(p)
+            setPageSize(ps)
+          }}
+          onView={handleView}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onMoneyReceipt={handleMoneyReceipt}
         />
 
-        {/* Invoice Table */}
-        <div className="relative">
-          {loading && (
-            <div className="absolute inset-0 bg-white/50 z-10 flex items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-            </div>
-          )}
-          <InvoiceTable
-            invoices={invoices}
-            onView={handleView}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            onMoneyReceipt={handleMoneyReceipt}
-          />
-          
-          <PaginationWithLinks
-            totalCount={pagination.total}
-            pageSize={pagination.pageSize}
-            page={pagination.page}
-            setPage={(p) => loadInvoices(p)}
-            onPageSizeChange={(s) => loadInvoices(1, s)}
-          />
-        </div>
-
-        {/* Add Invoice Modal */}
-        <AddInvoiceModal 
-          isOpen={isModalOpen} 
-          onClose={() => { setIsModalOpen(false); setEditingInvoice(undefined) }}
-          onInvoiceAdded={handleAddInvoice}
+        <AddInvoiceModal
+          isOpen={isModalOpen}
+          onClose={() => {
+            setIsModalOpen(false)
+            setEditingInvoice(undefined)
+          }}
+          onInvoiceAdded={handleInvoiceSaved}
           initialInvoice={editingInvoice}
         />
 
@@ -214,22 +227,21 @@ export default function InvoicesPage() {
           open={moneyReceiptOpen}
           onClose={() => setMoneyReceiptOpen(false)}
           invoice={selectedInvoice}
-          onSubmit={() => loadInvoices(pagination.page)}
+          onSubmit={() => void fetchInvoices()}
         />
 
-        {/* Delete Confirmation */}
         <AlertDialog open={!!invoiceToDelete} onOpenChange={(open) => !open && setInvoiceToDelete(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
               <AlertDialogDescription>
-                This will soft-delete invoice <strong>{invoiceToDelete?.invoiceNo}</strong>. 
-                The client and vendor balances will be adjusted automatically to revert the financial impact.
+                This will soft-delete invoice <strong>{invoiceToDelete?.invoiceNo}</strong>. The client and
+                vendor balances will be adjusted automatically to revert the financial impact.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-              <AlertDialogAction 
+              <AlertDialogAction
                 onClick={(e) => {
                   e.preventDefault()
                   confirmDelete()
@@ -242,7 +254,9 @@ export default function InvoicesPage() {
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Deleting...
                   </>
-                ) : "Confirm Delete"}
+                ) : (
+                  "Confirm Delete"
+                )}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

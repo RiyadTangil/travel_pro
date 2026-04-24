@@ -151,26 +151,23 @@ export default function MoneyReceiptsPage() {
   return (
     <PageWrapper breadcrumbs={[{ label: "Money Receipts" }]}>
       <div className="space-y-4 px-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          
-          <FilterToolbar
-            showDateRange
-            dateRange={dateRange}
-            onDateRangeChange={setDateRange}
-            showSearch
-            search={search}
-            onSearchChange={setSearch}
-            searchPlaceholder="Search receipts..."
-            showRefresh
-            onRefresh={loadReceipts}
-          >
-            <Button onClick={() => setOpen(true)} >
-              <Plus className="h-4 w-4 mr-2" />
-              Create Money Receipt
-            </Button>
-          </FilterToolbar>
-      
-        </div>
+        <FilterToolbar
+          showDateRange
+          dateRange={dateRange}
+          onDateRangeChange={setDateRange}
+          showSearch
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search receipts..."
+          showRefresh
+          onRefresh={loadReceipts}
+        >
+          <Button onClick={() => setOpen(true)} >
+            <Plus className="h-4 w-4 mr-2" />
+            Create Money Receipt
+          </Button>
+        </FilterToolbar>
+
 
         {/* Table */}
         <ReceiptListTable rows={filteredRows} onView={onView} onEdit={onEdit} onDelete={onDelete} loading={loading} loadingRowId={loadingRowId} />

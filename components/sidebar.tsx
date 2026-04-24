@@ -125,16 +125,8 @@ export function Sidebar() {
         },
       ],
     },
-    {
-      title: "Client Categories",
-      icon: <FileText className="h-5 w-5" />,
-      href: "/dashboard/client-categories",
-    },
-    {
-      title: "Product",
-      icon: <FileText className="h-5 w-5" />,
-      href: "/dashboard/products",
-    },
+
+
     {
       title: "Vendors",
       icon: <Archive className="h-5 w-5" />,
@@ -197,11 +189,7 @@ export function Sidebar() {
     //   icon: <Building2 className="h-5 w-5" />,
     //   href: "/dashboard/b2b-clients",
     // },
-    {
-      title: "Company Profile",
-      icon: <Settings className="h-5 w-5" />,
-      href: "/dashboard/profile",
-    },
+
     {
       title: "Agent Profile",
       icon: <Users className="h-5 w-5" />,
@@ -212,6 +200,12 @@ export function Sidebar() {
       icon: <Settings className="h-5 w-5" />,
       children: [
         {
+          title: "Company Profile",
+          icon: <Settings className="h-5 w-5" />,
+          href: "/dashboard/profile",
+        },
+        
+        {
           title: "Companies",
           href: "/dashboard/configuration/companies",
         },
@@ -219,6 +213,16 @@ export function Sidebar() {
           title: "Employee",
           icon: <Users className="h-5 w-5" />,
           href: "/dashboard/employee",
+        },
+        {
+          title: "Product",
+          icon: <FileText className="h-5 w-5" />,
+          href: "/dashboard/products",
+        },
+        {
+          title: "Client Categories",
+          icon: <FileText className="h-5 w-5" />,
+          href: "/dashboard/client-categories",
         },
       ],
     },

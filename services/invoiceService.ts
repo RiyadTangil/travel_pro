@@ -454,6 +454,7 @@ export async function listInvoices(params: {
   dateFrom?: string
   dateTo?: string
   clientId?: string
+  salesBy?: string
   companyId: string
 }) {
   await connectMongoose()
@@ -469,8 +470,9 @@ export async function listInvoices(params: {
   if (params.status) filter.status = params.status
   if (params.invoiceType) {
     filter.invoiceType = params.invoiceType
-  } 
-  
+  }
+  if (params.salesBy) filter.salesByName = params.salesBy
+
   if (params.search) {
     filter.$or = [
       { invoiceNo: { $regex: params.search, $options: "i" } },
@@ -641,6 +643,7 @@ export async function listNonCommissionInvoices(params: {
   dateFrom?: string
   dateTo?: string
   clientId?: string
+  salesBy?: string
   companyId: string
 }) {
   await connectMongoose()
@@ -654,7 +657,8 @@ export async function listNonCommissionInvoices(params: {
   const filter: any = { isDeleted: { $ne: true }, invoiceType: "non_commission", companyId: companyIdObj }
   if (params.clientId) filter.clientId = new Types.ObjectId(params.clientId)
   if (params.status) filter.status = params.status
-  
+  if (params.salesBy) filter.salesByName = params.salesBy
+
   if (params.search) {
     filter.$or = [
       { invoiceNo: { $regex: params.search, $options: "i" } },

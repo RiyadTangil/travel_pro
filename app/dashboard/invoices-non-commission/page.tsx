@@ -4,12 +4,11 @@ import { useState, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Plus, Loader2 } from "lucide-react"
 import { NonCommissionTable } from "@/components/invoices/non-commission-table"
-import { PaginationWithLinks } from "@/components/ui/pagination-with-links"
 import { MoneyReceiptModal } from "@/components/invoices/money-receipt-modal"
 import { AddNonCommissionModal } from "@/components/invoices/add-non-commission-modal"
 import { useToast } from "@/hooks/use-toast"
 import { PageWrapper } from "@/components/shared/page-wrapper"
-import FilterBar from "@/components/money-receipts/FilterBar"
+import FilterToolbar from "@/components/shared/filter-toolbar"
 import { DateRange } from "react-day-picker"
 import {
   AlertDialog,
@@ -21,66 +20,82 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
 
 export default function NonCommissionInvoicesPage() {
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
   const [dateRange, setDateRange] = useState<DateRange | undefined>()
+  const [status, setStatus] = useState("")
+  const [salesBy, setSalesBy] = useState("")
   const [invoices, setInvoices] = useState<any[]>([])
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editInvoiceId, setEditInvoiceId] = useState<string | null>(null)
-  const [pagination, setPagination] = useState({
-    page: 1,
-    pageSize: 20,
-    total: 0,
-    totalPages: 1
-  })
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+  const [total, setTotal] = useState(0)
 
-  const fetchInvoices = useCallback(async (params = {}) => {
-    setLoading(true)
-    try {
-      const queryParams: any = {
-        page: String(pagination.page),
-        pageSize: String(pagination.pageSize),
-        search: search,
-        ...params
+  const fetchInvoices = useCallback(
+    async (overridePage?: number, overridePageSize?: number) => {
+      const p = overridePage ?? page
+      const ps = overridePageSize ?? pageSize
+      setLoading(true)
+      try {
+        const queryParams: Record<string, string> = {
+          page: String(p),
+          pageSize: String(ps),
+          search: debouncedSearch,
+        }
+        if (status) queryParams.status = status
+        if (salesBy) queryParams.salesBy = salesBy
+        if (dateRange?.from) queryParams.dateFrom = dateRange.from.toISOString().slice(0, 10)
+        if (dateRange?.to) queryParams.dateTo = dateRange.to.toISOString().slice(0, 10)
+
+        const qs = new URLSearchParams(queryParams).toString()
+
+        const res = await fetch(`/api/invoices/non-commission?${qs}`)
+        const data = await res.json()
+
+        if (res.ok) {
+          setInvoices(data.items || [])
+          setTotal(Number(data.pagination?.total ?? 0))
+        } else {
+          toast({ title: "Error", description: data?.error || "Failed to fetch invoices", variant: "destructive" })
+        }
+      } catch {
+        toast({ title: "Error", description: "Failed to fetch invoices", variant: "destructive" })
+      } finally {
+        setLoading(false)
       }
-
-      if (dateRange?.from) queryParams.startDate = dateRange.from.toISOString().slice(0, 10)
-      if (dateRange?.to) queryParams.endDate = dateRange.to.toISOString().slice(0, 10)
-
-      const qs = new URLSearchParams(queryParams).toString()
-      
-      const res = await fetch(`/api/invoices/non-commission?${qs}`)
-      const data = await res.json()
-      
-      if (res.ok) {
-        setInvoices(data.items || [])
-        setPagination(prev => ({
-          ...prev,
-          total: data.pagination.total,
-          totalPages: data.pagination.totalPages
-        }))
-      }
-    } catch (e) {
-      toast({ title: "Error", description: "Failed to fetch invoices", variant: "destructive" })
-    } finally {
-      setLoading(false)
-    }
-  }, [pagination.page, pagination.pageSize, search, dateRange, toast])
+    },
+    [page, pageSize, debouncedSearch, dateRange, status, salesBy, toast]
+  )
 
   useEffect(() => {
-    fetchInvoices()
+    const t = setTimeout(() => {
+      const next = search.trim()
+      setDebouncedSearch((prev) => {
+        if (next !== prev) setPage(1)
+        return next
+      })
+    }, 250)
+    return () => clearTimeout(t)
+  }, [search])
+
+  useEffect(() => {
+    void fetchInvoices()
   }, [fetchInvoices])
 
-  const handleRefresh = () => {
-    fetchInvoices()
-  }
-
-  const handlePageChange = (newPage: number) => {
-    setPagination(prev => ({ ...prev, page: newPage }))
-  }
+  const handleRefresh = () => void fetchInvoices()
 
   const handleEdit = useCallback((invoice: any) => {
     const id = String(invoice?.id || invoice?._id || "").trim()
@@ -105,11 +120,11 @@ export default function NonCommissionInvoicesPage() {
     if (!invoiceToDelete) return
     try {
       setIsDeleting(true)
-      const res = await fetch(`/api/invoices/${invoiceToDelete.id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/invoices/${invoiceToDelete.id}`, { method: "DELETE" })
       if (!res.ok) throw new Error("Delete failed")
       toast({ title: "Success", description: `Invoice ${invoiceToDelete.invoiceNo} deleted successfully` })
-      fetchInvoices()
-    } catch (e) {
+      await fetchInvoices()
+    } catch {
       toast({ title: "Error", description: "Failed to delete invoice", variant: "destructive" })
     } finally {
       setIsDeleting(false)
@@ -125,101 +140,150 @@ export default function NonCommissionInvoicesPage() {
     setMoneyReceiptOpen(true)
   }, [])
 
+  const salesByOptions = Array.from(
+    new Set(invoices.map((inv: any) => inv.salesBy).filter(Boolean))
+  ).sort() as string[]
+
+  const filterExtras = (
+    <div className="flex flex-wrap items-end gap-2">
+      <div className="space-y-1">
+        <Label className="text-xs text-muted-foreground">Status</Label>
+        <Select
+          value={status || "__all__"}
+          onValueChange={(v) => {
+            setStatus(v === "__all__" ? "" : v)
+            setPage(1)
+          }}
+        >
+          <SelectTrigger className="h-9 w-[130px]">
+            <SelectValue placeholder="All status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All status</SelectItem>
+            <SelectItem value="paid">Paid</SelectItem>
+            <SelectItem value="partial">Partial</SelectItem>
+            <SelectItem value="due">Due</SelectItem>
+            <SelectItem value="overdue">Overdue</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1">
+        <Label className="text-xs text-muted-foreground">Sales by</Label>
+        <Select
+          value={salesBy || "__all__"}
+          onValueChange={(v) => {
+            setSalesBy(v === "__all__" ? "" : v)
+            setPage(1)
+          }}
+        >
+          <SelectTrigger className="h-9 w-[160px]">
+            <SelectValue placeholder="All staff" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All staff</SelectItem>
+            {salesByOptions.map((staff) => (
+              <SelectItem key={staff} value={staff}>
+                {staff}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  )
+
   return (
     <PageWrapper breadcrumbs={[{ label: "Invoice" }, { label: "Non Commission" }]}>
-      <div className="space-y-6 px-4">
-        {/* Toolbar */}
-        <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-lg shadow-sm border">
-          <div className="flex items-center gap-3">
-            <Button 
-              onClick={handleCreateNew}
-              className="bg-sky-500 hover:bg-sky-600 text-white rounded-md h-10 px-6 flex items-center gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              Create
-            </Button>
-          </div>
+      <div className="mx-4 mb-4 space-y-4">
 
-          <FilterBar
-            dateRange={dateRange}
-            search={search}
-            onDateRangeChange={setDateRange}
-            onSearchChange={setSearch}
-            onRefresh={handleRefresh}
-          />
-        </div>
+        <FilterToolbar
+          showDateRange
+          dateRange={dateRange}
+          onDateRangeChange={(r) => {
+            setDateRange(r)
+            setPage(1)
+          }}
+          showSearch
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search invoice, client..."
+          showRefresh
+          onRefresh={handleRefresh}
+          className="flex-1 min-w-0"
+        >
+          <Button
+            onClick={handleCreateNew}
+            className=""
+          >
+            <Plus className="h-4 w-4" />
+            Create
+          </Button>
+        </FilterToolbar>
 
-        {/* Table Section */}
-        <div className="relative bg-white rounded-lg shadow-sm border p-4">
-          {loading && invoices.length === 0 ? (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="h-8 w-8 animate-spin text-sky-500" />
-            </div>
-          ) : (
-            <>
-              <NonCommissionTable
-                invoices={invoices}
-                onView={(inv) => console.log("View", inv)}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-                onMoneyReceipt={handleMoneyReceipt}
-                onPartialCost={(inv) => console.log("Partial Cost", inv)}
-              />
-              
-              <div className="mt-4">
-                <PaginationWithLinks
-                  totalCount={pagination.total}
-                  pageSize={pagination.pageSize}
-                  page={pagination.page}
-                  setPage={handlePageChange}
-                  onPageSizeChange={() => {}}
-                />
-              </div>
-            </>
-          )}
-        </div>
+
+        <NonCommissionTable
+          invoices={invoices}
+          loading={loading}
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={(newPage, newSize) => {
+            setPage(newPage)
+            setPageSize(newSize)
+          }}
+          onView={() => { }}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onMoneyReceipt={handleMoneyReceipt}
+          onPartialCost={() => { }}
+        />
+
+        <AddNonCommissionModal
+          isOpen={isModalOpen}
+          onClose={() => {
+            setIsModalOpen(false)
+            setEditInvoiceId(null)
+          }}
+          onInvoiceAdded={() => {
+            setPage(1)
+            void fetchInvoices(1)
+          }}
+          initialInvoiceId={editInvoiceId}
+        />
+
+        <MoneyReceiptModal
+          open={moneyReceiptOpen}
+          onClose={() => setMoneyReceiptOpen(false)}
+          invoice={selectedInvoiceForMR}
+          onSubmit={() => void fetchInvoices()}
+        />
+
+        <AlertDialog open={!!invoiceToDelete} onOpenChange={(open) => !open && setInvoiceToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will soft-delete invoice <strong>{invoiceToDelete?.invoiceNo}</strong>. The client and vendor
+                balances will be adjusted automatically to revert the financial impact.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => {
+                  e.preventDefault()
+                  confirmDelete()
+                }}
+                disabled={isDeleting}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Confirm Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
-
-      <AddNonCommissionModal 
-        isOpen={isModalOpen} 
-        onClose={() => { setIsModalOpen(false); setEditInvoiceId(null) }} 
-        onInvoiceAdded={() => fetchInvoices()}
-        initialInvoiceId={editInvoiceId}
-      />
-
-      <MoneyReceiptModal
-        open={moneyReceiptOpen}
-        onClose={() => setMoneyReceiptOpen(false)}
-        invoice={selectedInvoiceForMR}
-        onSubmit={() => fetchInvoices()}
-      />
-
-      {/* Delete Confirmation */}
-      <AlertDialog open={!!invoiceToDelete} onOpenChange={(open) => !open && setInvoiceToDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will soft-delete invoice <strong>{invoiceToDelete?.invoiceNo}</strong>. 
-              The client and vendor balances will be adjusted automatically to revert the financial impact.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={(e) => {
-                e.preventDefault()
-                confirmDelete()
-              }}
-              disabled={isDeleting}
-              className="bg-red-600 hover:bg-red-700 text-white"
-            >
-              {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Confirm Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </PageWrapper>
   )
 }
