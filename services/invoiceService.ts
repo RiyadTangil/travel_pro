@@ -102,6 +102,87 @@ async function applyVendorCostMap(
 }
 
 // ---------------------------------------------------------------------------
+// Advance payment auto-apply helper
+// ---------------------------------------------------------------------------
+
+/**
+ * When a new invoice is created, find any advance MoneyReceipt records with
+ * remainingAmount > 0 for this client and automatically allocate them against
+ * the new invoice.  This is the source-of-truth check: we look at the actual
+ * advance MR records, NOT the client's running presentBalance (which is a net
+ * figure affected by many things and is unreliable as an advance-availability
+ * signal).
+ *
+ * Returns the total amount auto-applied (0 if no advance MRs exist).
+ */
+async function autoApplyClientAdvanceToInvoice(opts: {
+  netTotal: number
+  invoiceId: Types.ObjectId
+  clientId: Types.ObjectId
+  companyId: Types.ObjectId
+  now: string
+  session: mongoose.ClientSession
+}): Promise<number> {
+  const { netTotal, invoiceId, clientId, companyId, now, session } = opts
+
+  // Source of truth: find advance MRs that still have unallocated balance
+  const advanceMRs = await MoneyReceipt.find({
+    clientId,
+    companyId,
+    paymentTo: "advance",
+    remainingAmount: { $gt: 0 },
+  }).sort({ createdAt: 1 }).session(session).lean()
+
+  if (!advanceMRs.length) return 0   // no advance to apply
+
+  // Calculate how much we can auto-apply (limited by invoice netTotal)
+  const totalAvailable = (advanceMRs as any[]).reduce((s: number, mr: any) => s + parseNumber(mr.remainingAmount, 0), 0)
+  const autoApply = Math.min(totalAvailable, netTotal)
+  if (autoApply <= 0) return 0
+
+  // Update the invoice to reflect the applied amount
+  const newStatus = autoApply >= netTotal ? "paid" : "partial"
+  await Invoice.updateOne(
+    { _id: invoiceId },
+    { $set: { receivedAmount: autoApply, status: newStatus, updatedAt: now } },
+    { session }
+  )
+
+  // Drain advance MRs (oldest first), creating allocation records so MR
+  // voucher numbers appear on the invoice list
+  let remaining = autoApply
+  for (const mr of advanceMRs as any[]) {
+    if (remaining <= 0) break
+    const mrRemaining = parseNumber(mr.remainingAmount, 0)
+    const toApply = Math.min(remaining, mrRemaining)
+
+    await MoneyReceiptAllocation.create([{
+      moneyReceiptId: mr._id,
+      invoiceId,
+      clientId,
+      companyId,
+      voucherNo: mr.voucherNo,
+      appliedAmount: toApply,
+      paymentDate: now.slice(0, 10),
+      createdAt: now,
+      updatedAt: now,
+    }], { session })
+
+    const newAllocated = parseNumber(mr.allocatedAmount, 0) + toApply
+    const newRemaining = Math.max(0, parseNumber(mr.amount, 0) - parseNumber(mr.discount, 0) - newAllocated)
+    await MoneyReceipt.updateOne(
+      { _id: mr._id },
+      { $set: { allocatedAmount: newAllocated, remainingAmount: newRemaining, updatedAt: now } },
+      { session }
+    )
+
+    remaining -= toApply
+  }
+
+  return autoApply
+}
+
+// ---------------------------------------------------------------------------
 // Invoice ledger helpers — ClientTransaction audit trail (isMonetoryTranseciton: false)
 // ---------------------------------------------------------------------------
 
@@ -382,7 +463,6 @@ export async function listInvoices(params: {
   await connectMongoose()
   if (!params.companyId) throw new AppError("Company ID is required", 401)
   
-  console.log("Params:", params)
   const page = Math.max(1, Number(params.page) || 1)
   const pageSize = Math.max(1, Math.min(100, Number(params.pageSize) || 20))
   const skip = (page - 1) * pageSize
@@ -440,10 +520,10 @@ export async function listInvoices(params: {
               as: "passports"
             }
           },
-          // Lookup MRs
+          // Lookup MRs via allocations (covers both "invoice" and "overall" payment types)
           {
             $lookup: {
-              from: "money_receipts",
+              from: "money_receipt_allocations",
               let: { invoiceId: "$_id" },
               pipeline: [
                 {
@@ -603,17 +683,20 @@ export async function listNonCommissionInvoices(params: {
 
   // Fetch all tickets for these invoices to get issue dates
   const invIds = docs.map((d: any) => d._id)
-  const allTickets = await InvoiceTicket.find({ invoiceId: { $in: invIds }, isDeleted: { $ne: true } }).lean()
-  const allMRs = await MoneyReceipt.find({ invoiceId: { $in: invIds } }).lean()
+  const [allTickets, allAllocations] = await Promise.all([
+    InvoiceTicket.find({ invoiceId: { $in: invIds }, isDeleted: { $ne: true } }).lean(),
+    // Use allocations (not money_receipts.invoiceId) so "overall" MRs also appear
+    MoneyReceiptAllocation.find({ invoiceId: { $in: invIds } }).lean(),
+  ])
 
   const invoices = docs.map((d: any) => {
     const invId = d._id
     const invTickets = allTickets.filter((t: any) => String(t.invoiceId) === String(invId))
     const issueDates = Array.from(new Set(invTickets.map((t: any) => t.issueDate || t.createdAt))).filter(Boolean)
 
-    // Get MRs for this invoice
-    const invMRs = allMRs.filter((m: any) => String(m.invoiceId) === String(invId))
-    const mrNos = invMRs.map((m: any) => m.voucherNo).filter(Boolean).join(", ")
+    // Collect distinct voucher numbers via allocations (covers overall + invoice + tickets payment types)
+    const invAllocs = allAllocations.filter((a: any) => String(a.invoiceId) === String(invId))
+    const mrNos = Array.from(new Set(invAllocs.map((a: any) => a.voucherNo).filter(Boolean))).join(", ")
 
     return {
       id: String(invId),
@@ -836,6 +919,16 @@ export async function createNonCommissionInvoice(body: any, companyId: string) {
         { $inc: { presentBalance: -netTotal }, $set: { updatedAt: now } },
         { session }
       )
+
+      // 6b. Auto-apply any existing advance MRs (remainingAmount > 0) to this invoice
+      await autoApplyClientAdvanceToInvoice({
+        netTotal,
+        invoiceId: new Types.ObjectId(createdId),
+        clientId: new Types.ObjectId(clientDoc._id),
+        companyId: companyIdObj,
+        now,
+        session,
+      })
 
       // 7. Create invoice ledger transactions (audit trail — client debit only)
       await createInvoiceLedgerTxns({
@@ -1361,9 +1454,19 @@ export async function createInvoice(body: any, companyId: string) {
       // c. Update Client Balance
       await Client.updateOne({ _id: clientDoc._id, companyId: companyIdObj }, { $inc: { presentBalance: -summary.netTotal }, $set: { updatedAt: now } }, { session })
 
+      // c2. Auto-apply any existing advance MRs (remainingAmount > 0) to this invoice
+      const advanceApplied = await autoApplyClientAdvanceToInvoice({
+        netTotal: summary.netTotal,
+        invoiceId: new Types.ObjectId(createdId),
+        clientId: new Types.ObjectId(clientDoc._id),
+        companyId: companyIdObj,
+        now,
+        session,
+      })
+
       // d. Money Receipt Logic
       let moneyReceiptNo = ""
-      let receivedSoFar = 0
+      let receivedSoFar = advanceApplied
       const moneyReceipt = payload.moneyReceipt
       if (moneyReceipt?.paymentMethod && moneyReceipt?.amount > 0) {
         const mrResult = await createMoneyReceipt({
@@ -1375,7 +1478,7 @@ export async function createInvoice(body: any, companyId: string) {
         }, companyId)
         if (mrResult.ok) {
           moneyReceiptNo = mrResult.created.receipt_vouchar_no
-          receivedSoFar = parseNumber(moneyReceipt.amount, 0)
+          receivedSoFar += parseNumber(moneyReceipt.amount, 0)
         }
       }
 

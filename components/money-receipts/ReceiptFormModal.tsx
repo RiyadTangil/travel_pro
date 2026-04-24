@@ -1,10 +1,11 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useCallback } from "react"
 import { useSession } from "next-auth/react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
+import { Plus, Minus } from "lucide-react"
 
 import { SharedModal } from "@/components/shared/shared-modal"
 import { Button } from "@/components/ui/button"
@@ -82,16 +83,50 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
     id: string
     clientId: string
     invoiceNo: string
+    invoiceType?: string
     salesDate: string
     salesPrice: number
     receivedAmount: number
     dueAmount: number
   }
+
+  type InvoiceRow = {
+    invoiceId: string
+    amount: number
+  }
+
+  type TicketItem = {
+    id: string          // InvoiceItem _id
+    invoiceId: string
+    invoiceNo: string
+    ticketNo: string
+    paxName: string
+    salesDate: string
+    totalSales: number
+    receivedAmount: number
+    dueAmount: number
+  }
+
+  type TicketRow = {
+    ticketId: string    // InvoiceItem _id
+    invoiceId: string
+    amount: number
+  }
+
   const [invoiceItems, setInvoiceItems] = useState<InvoiceListItem[]>([])
   const [invoiceLoading, setInvoiceLoading] = useState(false)
-  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>(mode === "edit" && defaults?.paymentTo === "invoice" && defaults?.invoiceId ? String(defaults.invoiceId) : "")
+  // Multi-row support for specific invoice
+  const [invoiceRows, setInvoiceRows] = useState<InvoiceRow[]>([{ invoiceId: "", amount: 0 }])
+  // Multi-row support for specific tickets
+  const [ticketItems, setTicketItems] = useState<TicketItem[]>([])
+  const [ticketLoading, setTicketLoading] = useState(false)
+  const [ticketRows, setTicketRows] = useState<TicketRow[]>([{ ticketId: "", invoiceId: "", amount: 0 }])
+
   const [submitting, setSubmitting] = useState(false)
   const [paymentMethodOptions, setPaymentMethodOptions] = useState<AccountType[]>([])
+
+  // Kept for backward compat (edit mode)
+  const [selectedInvoiceId] = useState<string>(mode === "edit" && defaults?.paymentTo === "invoice" && defaults?.invoiceId ? String(defaults.invoiceId) : "")
 
   const filteredAccounts = useMemo(() => {
     if (!accountsPreloaded || !paymentMethod) return []
@@ -159,15 +194,18 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
       ; (async () => {
         try {
           setInvoiceLoading(true)
-          const res = await fetch(`/api/invoices?page=1&pageSize=50&clientId=${encodeURIComponent(selectedClientId)}`, { signal: ctrl.signal })
+          const res = await fetch(`/api/invoices?page=1&pageSize=100&clientId=${encodeURIComponent(selectedClientId)}`, { signal: ctrl.signal })
           if (!res.ok) return
           const data = await res.json()
           const items = Array.isArray(data?.items) ? data.items : (Array.isArray(data?.data?.items) ? data.data.items : [])
           setInvoiceItems(items as InvoiceListItem[])
-          if (!selectedInvoiceId && items && items.length) {
-            const desired = defaults?.invoiceId ? String(defaults.invoiceId) : ""
-            const found = desired && items.find((i: any) => String(i.id) === desired)
-            setSelectedInvoiceId(String(found?.id || items[0].id))
+          // Seed first row if in edit mode
+          if (defaults?.invoiceId && mode === "edit") {
+            const desired = String(defaults.invoiceId)
+            const found = items.find((i: any) => String(i.id) === desired)
+            if (found) {
+              setInvoiceRows([{ invoiceId: desired, amount: Number(found.dueAmount ?? 0) }])
+            }
           }
         } catch (e) {
           // ignore
@@ -179,23 +217,58 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
   }, [selectedClientId, paymentToVal])
 
   useEffect(() => {
-    // When switching to edit mode with an invoice, set selected invoice
-    if (mode === "edit" && defaults?.paymentTo === "invoice" && defaults?.invoiceId) {
-      setSelectedInvoiceId(String(defaults.invoiceId))
-    }
-  }, [mode, defaults?.invoiceId, defaults?.paymentTo, open])
+    // Load non-commission invoices (tickets) for selected client
+    if (paymentToVal !== "tickets" || !selectedClientId) { setTicketItems([]); return }
+    const ctrl = new AbortController()
+      ; (async () => {
+        try {
+          setTicketLoading(true)
+          const res = await fetch(`/api/invoices?page=1&pageSize=100&clientId=${encodeURIComponent(selectedClientId)}&invoiceType=non_commission`, { signal: ctrl.signal })
+          if (!res.ok) return
+          const data = await res.json()
+          const invoices: InvoiceListItem[] = Array.isArray(data?.items) ? data.items : (Array.isArray(data?.data?.items) ? data.data.items : [])
+          // Build flat ticket list from invoices (each non-commission invoice = one "ticket" row)
+          const tickets: TicketItem[] = invoices.map((inv) => ({
+            id: inv.id,
+            invoiceId: inv.id,
+            invoiceNo: inv.invoiceNo,
+            ticketNo: inv.invoiceNo,
+            paxName: "",
+            salesDate: inv.salesDate,
+            totalSales: inv.salesPrice,
+            receivedAmount: inv.receivedAmount,
+            dueAmount: inv.dueAmount,
+          }))
+          setTicketItems(tickets)
+        } catch {
+          // ignore
+        } finally {
+          setTicketLoading(false)
+        }
+      })()
+    return () => ctrl.abort()
+  }, [selectedClientId, paymentToVal])
 
-  const selectedInvoice = useMemo(() => invoiceItems.find(i => i.id === selectedInvoiceId), [invoiceItems, selectedInvoiceId])
+  // Helper: get invoice from list by id
+  const getInvoiceById = useCallback((id: string) => invoiceItems.find(i => i.id === id), [invoiceItems])
+
+  // Sync total amount field with sum of invoice rows
+  const invoiceRowsTotal = useMemo(() => invoiceRows.reduce((s, r) => s + Number(r.amount || 0), 0), [invoiceRows])
+  const ticketRowsTotal = useMemo(() => ticketRows.reduce((s, r) => s + Number(r.amount || 0), 0), [ticketRows])
 
   useEffect(() => {
-    // Default amount to selected invoice due when switching
-    if (paymentToVal === "invoice") {
-      const current = form.getValues("amount")
-      if ((!current || Number(current) === 0) && selectedInvoice && typeof selectedInvoice.dueAmount === "number") {
-        form.setValue("amount", Number(selectedInvoice.dueAmount) || 0)
-      }
-    }
-  }, [selectedInvoiceId])
+    if (paymentToVal === "invoice") form.setValue("amount", invoiceRowsTotal)
+  }, [invoiceRowsTotal, paymentToVal])
+
+  useEffect(() => {
+    if (paymentToVal === "tickets") form.setValue("amount", ticketRowsTotal)
+  }, [ticketRowsTotal, paymentToVal])
+
+  // Reset rows when payment type changes
+  useEffect(() => {
+    if (paymentToVal === "invoice") setInvoiceRows([{ invoiceId: "", amount: 0 }])
+    if (paymentToVal === "tickets") setTicketRows([{ ticketId: "", invoiceId: "", amount: 0 }])
+  }, [paymentToVal])
 
   const handleSubmit = async (values: FormValues) => {
     const client = clients.find(c => c.id === values.clientId)
@@ -214,7 +287,25 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
       note: values.note,
       docOneName: docOne?.name,
       docTwoName: docTwo?.name,
-      invoiceId: values.paymentTo === "invoice" ? selectedInvoiceId : undefined,
+    }
+
+    if (values.paymentTo === "invoice") {
+      const validRows = invoiceRows.filter(r => r.invoiceId && r.amount > 0)
+      if (validRows.length === 1) {
+        // backward-compatible single invoice
+        payload.invoiceId = validRows[0].invoiceId
+      } else if (validRows.length > 1) {
+        payload.invoiceAllocations = validRows.map(r => ({ invoiceId: r.invoiceId, amount: r.amount }))
+      } else {
+        payload.invoiceId = invoiceRows[0]?.invoiceId || undefined
+      }
+    }
+
+    if (values.paymentTo === "tickets") {
+      const validRows = ticketRows.filter(r => r.invoiceId && r.amount > 0)
+      if (validRows.length > 0) {
+        payload.invoiceAllocations = validRows.map(r => ({ invoiceId: r.invoiceId, amount: r.amount }))
+      }
     }
 
     try {
@@ -239,7 +330,9 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
       const created = data?.created || {}
       const updated = data?.updated || {}
 
-      const invoiceType: MoneyReceipt["invoiceType"] = String(created?.receipt_payment_to || values.paymentTo).toUpperCase()
+      const rawType = String(created?.receipt_payment_to || values.paymentTo).toUpperCase()
+      const validTypes: MoneyReceipt["invoiceType"][] = ["OVERALL", "INVOICE", "ADVANCE", "TICKETS", "ADJUST"]
+      const invoiceType: MoneyReceipt["invoiceType"] = validTypes.includes(rawType as any) ? (rawType as MoneyReceipt["invoiceType"]) : "OVERALL"
       const receipt: MoneyReceipt = {
         id: isEdit ? String(editId) : String(created?.doc_id || ''),
         paymentDate: String(created?.receipt_payment_date || values.paymentDate),
@@ -268,6 +361,8 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
       form.reset()
       setDocOne(undefined)
       setDocTwo(undefined)
+      setInvoiceRows([{ invoiceId: "", amount: 0 }])
+      setTicketRows([{ ticketId: "", invoiceId: "", amount: 0 }])
     } catch (e) {
       console.error(e)
     } finally {
@@ -357,79 +452,194 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
               />
 
               {/* Dynamic sections based on Payment To */}
+
+              {/* ── Specific Invoice: multi-row ── */}
               {form.watch("paymentTo") === "invoice" && (
                 <div className="rounded-md border bg-gray-50 p-4 space-y-3">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label>Invoice No.</Label>
-                      <Select value={selectedInvoiceId} onValueChange={(v) => setSelectedInvoiceId(v)} disabled={invoiceLoading || !invoiceItems.length}>
-                        <SelectTrigger>
-                          <SelectValue placeholder={invoiceLoading ? "Loading..." : "Select Invoice No."} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {invoiceItems.map(i => (
-                            <SelectItem key={i.id} value={i.id}>{i.invoiceNo}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Invoice Date</Label>
-                      <Input disabled placeholder="Invoice Date" value={selectedInvoice?.salesDate ? String(selectedInvoice.salesDate).slice(0, 10) : ""} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Net Total</Label>
-                      <Input disabled placeholder="Net Total" value={selectedInvoice ? String(selectedInvoice.salesPrice ?? 0) : ""} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Paid</Label>
-                      <Input disabled placeholder="Paid" value={selectedInvoice ? String(selectedInvoice.receivedAmount ?? 0) : ""} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Due</Label>
-                      <Input disabled placeholder="0" value={selectedInvoice ? String(selectedInvoice.dueAmount ?? 0) : ""} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label><span className="text-destructive mr-1">*</span> Amount</Label>
-                      <Input type="number" step="0.01" placeholder="Amount" value={form.watch("amount") ?? 0} onChange={(e) => form.setValue("amount", Number(e.target.value || 0))} />
-                    </div>
+                  {/* Column headers */}
+                  <div className="hidden md:grid grid-cols-12 gap-2 text-xs font-medium text-muted-foreground px-1">
+                    <div className="col-span-3">Invoice No.</div>
+                    <div className="col-span-2">Date</div>
+                    <div className="col-span-2">Net Total</div>
+                    <div className="col-span-2">Paid</div>
+                    <div className="col-span-1">Due</div>
+                    <div className="col-span-1">Amount</div>
+                    <div className="col-span-1" />
                   </div>
-                  <Button type="button" variant="secondary">Add field</Button>
+
+                  {invoiceRows.map((row, idx) => {
+                    const inv = getInvoiceById(row.invoiceId)
+                    return (
+                      <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                        <div className="col-span-12 md:col-span-3">
+                          <Select
+                            value={row.invoiceId}
+                            onValueChange={(v) => {
+                              const found = invoiceItems.find(i => i.id === v)
+                              setInvoiceRows(prev => prev.map((r, i) => i === idx ? { ...r, invoiceId: v, amount: Number(found?.dueAmount ?? 0) } : r))
+                            }}
+                            disabled={invoiceLoading || !invoiceItems.length}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder={invoiceLoading ? "Loading..." : "Select Invoice"} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {invoiceItems.map(i => (
+                                <SelectItem key={i.id} value={i.id}>{i.invoiceNo}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="col-span-6 md:col-span-2">
+                          <Input readOnly placeholder="Date" value={inv?.salesDate ? String(inv.salesDate).slice(0, 10) : ""} className="bg-muted text-xs" />
+                        </div>
+                        <div className="col-span-6 md:col-span-2">
+                          <Input readOnly placeholder="Net Total" value={inv ? String(inv.salesPrice ?? 0) : ""} className="bg-muted text-xs" />
+                        </div>
+                        <div className="col-span-6 md:col-span-2">
+                          <Input readOnly placeholder="Paid" value={inv ? String(inv.receivedAmount ?? 0) : ""} className="bg-muted text-xs" />
+                        </div>
+                        <div className="col-span-6 md:col-span-1">
+                          <Input readOnly placeholder="Due" value={inv ? String(inv.dueAmount ?? 0) : ""} className="bg-muted text-xs" />
+                        </div>
+                        <div className="col-span-10 md:col-span-1">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="Amount"
+                            value={row.amount ?? 0}
+                            onChange={(e) => {
+                              const val = Number(e.target.value || 0)
+                              const capped = inv ? Math.min(val, inv.dueAmount ?? val) : val
+                              setInvoiceRows(prev => prev.map((r, i) => i === idx ? { ...r, amount: capped } : r))
+                            }}
+                          />
+                        </div>
+                        <div className="col-span-2 md:col-span-1 flex justify-center">
+                          {idx === invoiceRows.length - 1 ? (
+                            <Button
+                              type="button"
+                              size="icon"
+                              className="h-8 w-8 bg-cyan-500 hover:bg-cyan-600"
+                              onClick={() => setInvoiceRows(prev => [...prev, { invoiceId: "", amount: 0 }])}
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                          ) : (
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="destructive"
+                              className="h-8 w-8"
+                              onClick={() => setInvoiceRows(prev => prev.filter((_, i) => i !== idx))}
+                            >
+                              <Minus className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+
+                  <div className="flex justify-end text-sm font-medium pt-1">
+                    Total: {invoiceRowsTotal.toFixed(2)}
+                  </div>
                 </div>
               )}
+
+              {/* ── Specific Tickets: multi-row (non-commission invoices) ── */}
               {form.watch("paymentTo") === "tickets" && (
                 <div className="rounded-md border bg-gray-50 p-4 space-y-3">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label>Ticket No.</Label>
-                      <Select onValueChange={() => { }}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select Ticket" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="tk-1001">TK-1001</SelectItem>
-                          <SelectItem value="tk-1002">TK-1002</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Net Total</Label>
-                      <Input disabled placeholder="Net Total" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Paid</Label>
-                      <Input disabled placeholder="Paid" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Due</Label>
-                      <Input disabled placeholder="Due" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label><span className="text-destructive mr-1">*</span> Amount</Label>
-                      <Input type="number" step="0.01" placeholder="Amount" />
-                    </div>
+                  {/* Column headers */}
+                  <div className="hidden md:grid grid-cols-12 gap-2 text-xs font-medium text-muted-foreground px-1">
+                    <div className="col-span-3">Invoice / Ticket No.</div>
+                    <div className="col-span-2">Date</div>
+                    <div className="col-span-2">Net Total</div>
+                    <div className="col-span-2">Paid</div>
+                    <div className="col-span-1">Due</div>
+                    <div className="col-span-1">Amount</div>
+                    <div className="col-span-1" />
                   </div>
-                  <Button type="button" variant="secondary">Add field</Button>
+
+                  {ticketRows.map((row, idx) => {
+                    const ticket = ticketItems.find(t => t.id === row.ticketId)
+                    return (
+                      <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                        <div className="col-span-12 md:col-span-3">
+                          <Select
+                            value={row.ticketId}
+                            onValueChange={(v) => {
+                              const found = ticketItems.find(t => t.id === v)
+                              setTicketRows(prev => prev.map((r, i) => i === idx
+                                ? { ...r, ticketId: v, invoiceId: found?.invoiceId ?? v, amount: Number(found?.dueAmount ?? 0) }
+                                : r))
+                            }}
+                            disabled={ticketLoading || !ticketItems.length}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder={ticketLoading ? "Loading..." : "Select Ticket / Invoice"} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {ticketItems.map(t => (
+                                <SelectItem key={t.id} value={t.id}>{t.invoiceNo}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="col-span-6 md:col-span-2">
+                          <Input readOnly placeholder="Date" value={ticket?.salesDate ? String(ticket.salesDate).slice(0, 10) : ""} className="bg-muted text-xs" />
+                        </div>
+                        <div className="col-span-6 md:col-span-2">
+                          <Input readOnly placeholder="Net Total" value={ticket ? String(ticket.totalSales ?? 0) : ""} className="bg-muted text-xs" />
+                        </div>
+                        <div className="col-span-6 md:col-span-2">
+                          <Input readOnly placeholder="Paid" value={ticket ? String(ticket.receivedAmount ?? 0) : ""} className="bg-muted text-xs" />
+                        </div>
+                        <div className="col-span-6 md:col-span-1">
+                          <Input readOnly placeholder="Due" value={ticket ? String(ticket.dueAmount ?? 0) : ""} className="bg-muted text-xs" />
+                        </div>
+                        <div className="col-span-10 md:col-span-1">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="Amount"
+                            value={row.amount ?? 0}
+                            onChange={(e) => {
+                              const val = Number(e.target.value || 0)
+                              const capped = ticket ? Math.min(val, ticket.dueAmount ?? val) : val
+                              setTicketRows(prev => prev.map((r, i) => i === idx ? { ...r, amount: capped } : r))
+                            }}
+                          />
+                        </div>
+                        <div className="col-span-2 md:col-span-1 flex justify-center">
+                          {idx === ticketRows.length - 1 ? (
+                            <Button
+                              type="button"
+                              size="icon"
+                              className="h-8 w-8 bg-cyan-500 hover:bg-cyan-600"
+                              onClick={() => setTicketRows(prev => [...prev, { ticketId: "", invoiceId: "", amount: 0 }])}
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                          ) : (
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="destructive"
+                              className="h-8 w-8"
+                              onClick={() => setTicketRows(prev => prev.filter((_, i) => i !== idx))}
+                            >
+                              <Minus className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+
+                  <div className="flex justify-end text-sm font-medium pt-1">
+                    Total: {ticketRowsTotal.toFixed(2)}
+                  </div>
                 </div>
               )}
 
@@ -488,21 +698,32 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Amount */}
+                {/* Amount — read-only when driven by invoice/ticket row totals */}
                 <FormField
                   control={form.control}
                   name="amount"
-                  render={({ field, fieldState }) => (
-                    <FormItem>
-                      <FormLabel>
-                        <span className="text-destructive mr-1">*</span> Amount:
-                      </FormLabel>
-                      <FormControl>
-                        <Input type="number" step="0.01" placeholder="Amount:" {...field} className={fieldState.error ? "border-red-500" : undefined} />
-                      </FormControl>
-                      <FormMessage className="text-xs text-red-500" />
-                    </FormItem>
-                  )}
+                  render={({ field, fieldState }) => {
+                    const isRowDriven = paymentToVal === "invoice" || paymentToVal === "tickets"
+                    return (
+                      <FormItem>
+                        <FormLabel>
+                          <span className="text-destructive mr-1">*</span> Amount:
+                          {isRowDriven && <span className="ml-2 text-xs text-muted-foreground">(auto-calculated from rows)</span>}
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="Amount:"
+                            {...field}
+                            readOnly={isRowDriven}
+                            className={[fieldState.error ? "border-red-500" : "", isRowDriven ? "bg-muted" : ""].join(" ").trim()}
+                          />
+                        </FormControl>
+                        <FormMessage className="text-xs text-red-500" />
+                      </FormItem>
+                    )
+                  }}
                 />
 
                 {/* Discount */}

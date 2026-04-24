@@ -40,6 +40,10 @@ export async function createMoneyReceipt(body: any, companyId: string) {
   const invoiceIdRaw = String(body.invoiceId || body.invoice_id || "").trim()
   const invoiceId = Types.ObjectId.isValid(invoiceIdRaw) ? new Types.ObjectId(invoiceIdRaw) : undefined
 
+  // Multi-invoice allocations (from specific invoice / tickets multi-row UI)
+  const rawAllocations: Array<{ invoiceId: string; amount: number }> = Array.isArray(body.invoiceAllocations) ? body.invoiceAllocations : []
+  const hasMultiAllocations = rawAllocations.length > 0 && (paymentTo === "invoice" || paymentTo === "tickets")
+
   const amount = parseNumber(body.amount ?? body.receipt_total_amount, 0)
   const discount = parseNumber(body.discount ?? body.receipt_discount_amount, 0)
   const paidAmount = Math.max(0, amount - discount)
@@ -63,11 +67,30 @@ export async function createMoneyReceipt(body: any, companyId: string) {
   const clientDoc = await Client.findOne({ _id: clientId, companyId: companyObjectId }).lean()
   if (!clientDoc) throw new AppError("Client not found", 404)
 
-  // If invoice selected, validate and compute constraints
+  // Validate multi-allocations if provided
+  let validatedAllocations: Array<{ invoiceId: Types.ObjectId; amount: number }> = []
+  if (hasMultiAllocations) {
+    let totalAlloc = 0
+    for (const row of rawAllocations) {
+      if (!Types.ObjectId.isValid(String(row.invoiceId || ""))) throw new AppError("Invalid invoiceId in allocations", 400)
+      const invOid = new Types.ObjectId(String(row.invoiceId))
+      const inv = await Invoice.findOne({ _id: invOid, companyId: companyObjectId, isDeleted: { $ne: true } }).lean()
+      if (!inv) throw new AppError("Invoice not found or has been deleted", 404)
+      if (String((inv as any).clientId || "") !== String(clientId)) throw new AppError("Invoice does not belong to client", 400)
+      const due = Math.max(0, parseNumber((inv as any).netTotal, 0) - parseNumber((inv as any).receivedAmount, 0))
+      const rowAmount = Math.max(0, parseNumber(row.amount, 0))
+      if (rowAmount > due + 0.0001) throw new AppError(`Allocation for invoice ${(inv as any).invoiceNo} exceeds due`, 400)
+      validatedAllocations.push({ invoiceId: invOid, amount: rowAmount })
+      totalAlloc += rowAmount
+    }
+    if (Math.abs(totalAlloc - paidAmount) > 0.01) throw new AppError("Allocations total does not match paid amount", 400)
+  }
+
+  // If single invoice selected (and no multi-allocations), validate and compute constraints
   let invDoc: any = null
-  if (invoiceId) {
-    invDoc = await Invoice.findOne({ _id: invoiceId, companyId: companyObjectId }).lean()
-    if (!invDoc) throw new AppError("Invoice not found", 404)
+  if (!hasMultiAllocations && invoiceId) {
+    invDoc = await Invoice.findOne({ _id: invoiceId, companyId: companyObjectId, isDeleted: { $ne: true } }).lean()
+    if (!invDoc) throw new AppError("Invoice not found or has been deleted", 404)
     if (String(invDoc.clientId || "") !== String(clientId)) throw new AppError("Invoice does not belong to client", 400)
     const due = Math.max(0, parseNumber(invDoc.netTotal, 0) - parseNumber(invDoc.receivedAmount, 0))
     if (paidAmount > due + 0.0001) throw new AppError("Paid amount exceeds invoice due", 400)
@@ -112,7 +135,23 @@ export async function createMoneyReceipt(body: any, companyId: string) {
     let newReceived = undefined as number | undefined
     let newStatus = undefined as string | undefined
     const allocated: Array<{ invoiceId: any; applied: number }> = []
-    if (invDoc) {
+    if (hasMultiAllocations && validatedAllocations.length) {
+      // Multi-invoice allocation (specific invoice / tickets with multiple rows)
+      for (const row of validatedAllocations) {
+        const inv = await Invoice.findOne({ _id: row.invoiceId, companyId: companyObjectId, isDeleted: { $ne: true } }).lean()
+        if (!inv) continue
+        const oldRecv = parseNumber((inv as any).receivedAmount, 0)
+        const net = parseNumber((inv as any).netTotal, 0)
+        const newRecv = oldRecv + row.amount
+        const status = newRecv >= net ? "paid" : newRecv > 0 ? "partial" : "due"
+        await Invoice.updateOne(
+          { _id: row.invoiceId },
+          { $set: { receivedAmount: newRecv, status, updatedAt: now } },
+          sess ? { session: sess } : undefined
+        )
+        allocated.push({ invoiceId: row.invoiceId, applied: row.amount })
+      }
+    } else if (invDoc) {
       const oldReceived = parseNumber(invDoc.receivedAmount, 0)
       const net = parseNumber(invDoc.netTotal, 0)
       newReceived = oldReceived + paidAmount
@@ -124,8 +163,8 @@ export async function createMoneyReceipt(body: any, companyId: string) {
       )
       allocated.push({ invoiceId, applied: paidAmount })
     } else if (paymentTo === "overall") {
-      // Distribute overall payment to most recent due invoices of the client
-      const invs = await Invoice.find({ clientId, companyId: companyObjectId }).sort({ createdAt: -1 }).lean()
+      // Distribute overall payment to most recent due invoices of the client (skip deleted)
+      const invs = await Invoice.find({ clientId, companyId: companyObjectId, isDeleted: { $ne: true } }).sort({ createdAt: -1 }).lean()
       let remaining = paidAmount
       for (const inv of invs) {
         if (remaining <= 0) break
@@ -163,8 +202,8 @@ export async function createMoneyReceipt(body: any, companyId: string) {
     }
 
     // Create Client Transaction (receive)
-    // Create Client Transaction entries
-    if (allocated.length && paymentTo === "overall" && !invoiceId) {
+    const isMultiAllocPayout = allocated.length > 0 && (paymentTo === "overall" || hasMultiAllocations)
+    if (isMultiAllocPayout && !invoiceId) {
       // Create one transaction per affected invoice using the same voucher
       let appliedTotal = 0
       for (const a of allocated) {
@@ -175,7 +214,7 @@ export async function createMoneyReceipt(body: any, companyId: string) {
           clientId,
           clientName: clientDoc.name || "",
           companyId: companyObjectId,
-          invoiceType: "Sales Collection",
+          invoiceType: paymentTo === "overall" ? "Sales Collection" : paymentTo.toUpperCase(),
           paymentTypeId: accId,
           accountName,
           payType: paymentMethod || undefined,
@@ -196,7 +235,7 @@ export async function createMoneyReceipt(body: any, companyId: string) {
           clientId,
           clientName: clientDoc.name || "",
           companyId: companyObjectId,
-          invoiceType: "OVERALL",
+          invoiceType: paymentTo === "overall" ? "OVERALL" : paymentTo.toUpperCase(),
           paymentTypeId: accId,
           accountName,
           payType: paymentMethod || undefined,
@@ -524,15 +563,16 @@ export async function deleteMoneyReceipt(id: string, companyId: string) {
     const newClientPresent = parseNumber(clientDoc.presentBalance, 0) - paid
     await Client.updateOne({ _id: clientId, companyId: companyObjectId }, { $set: { presentBalance: newClientPresent, updatedAt: now } }, sess ? { session: sess } : undefined)
 
-    // If invoice linked, subtract received
+    // If invoice linked, subtract received (skip if invoice was deleted)
     if (mr.invoiceId) {
-      const invDoc = await Invoice.findOne({ _id: mr.invoiceId, companyId: companyObjectId }).lean()
-      if (!invDoc) throw new AppError("Invoice not found", 404)
-      const net = parseNumber(invDoc.netTotal, 0)
-      const currentReceived = parseNumber(invDoc.receivedAmount, 0)
-      const newReceived = Math.max(0, currentReceived - paid)
-      const newStatus = newReceived >= net ? "paid" : newReceived > 0 ? "partial" : "due"
-      await Invoice.updateOne({ _id: mr.invoiceId, companyId: companyObjectId }, { $set: { receivedAmount: newReceived, status: newStatus, updatedAt: now } }, sess ? { session: sess } : undefined)
+      const invDoc = await Invoice.findOne({ _id: mr.invoiceId, companyId: companyObjectId, isDeleted: { $ne: true } }).lean()
+      if (invDoc) {
+        const net = parseNumber(invDoc.netTotal, 0)
+        const currentReceived = parseNumber(invDoc.receivedAmount, 0)
+        const newReceived = Math.max(0, currentReceived - paid)
+        const newStatus = newReceived >= net ? "paid" : newReceived > 0 ? "partial" : "due"
+        await Invoice.updateOne({ _id: mr.invoiceId, companyId: companyObjectId, isDeleted: { $ne: true } }, { $set: { receivedAmount: newReceived, status: newStatus, updatedAt: now } }, sess ? { session: sess } : undefined)
+      }
     }
 
     // Adjust account balance (reverse receipt amount)
@@ -543,10 +583,10 @@ export async function deleteMoneyReceipt(id: string, companyId: string) {
       sess ? { session: sess } : undefined
     )
 
-    // Reverse allocations recorded for this receipt
+    // Reverse allocations recorded for this receipt (skip deleted invoices)
     const allocs = await MoneyReceiptAllocation.find({ moneyReceiptId: idObj, companyId: companyObjectId }).lean()
     for (const a of (allocs || [])) {
-      const invDoc = a.invoiceId ? await Invoice.findOne({ _id: a.invoiceId, companyId: companyObjectId }).lean() : null
+      const invDoc = a.invoiceId ? await Invoice.findOne({ _id: a.invoiceId, companyId: companyObjectId, isDeleted: { $ne: true } }).lean() : null
       if (invDoc) {
         const net = parseNumber(invDoc.netTotal, 0)
         const currentReceived = parseNumber(invDoc.receivedAmount, 0)
@@ -608,8 +648,8 @@ export async function createReceiptAllocations(receiptId: string, allocations: A
       const invIdStr = String(row.invoiceId || "").trim()
       if (!Types.ObjectId.isValid(invIdStr)) throw new AppError("Invalid invoiceId", 400)
       const invId = new Types.ObjectId(invIdStr)
-      const inv = await Invoice.findOne({ _id: invId, companyId: companyObjectId }).lean()
-      if (!inv) throw new AppError("Invoice not found", 404)
+      const inv = await Invoice.findOne({ _id: invId, companyId: companyObjectId, isDeleted: { $ne: true } }).lean()
+      if (!inv) throw new AppError("Invoice not found or has been deleted", 404)
       if (String(inv.clientId || "") !== String(clientId)) throw new AppError("Invoice does not belong to this client", 400)
       const net = parseNumber(inv.netTotal, 0)
       const recv = parseNumber(inv.receivedAmount, 0)
@@ -636,13 +676,13 @@ export async function createReceiptAllocations(receiptId: string, allocations: A
       }
       await new MoneyReceiptAllocation(allocDoc).save(sess ? { session: sess } : undefined)
 
-      const inv = await Invoice.findOne({ _id: v.invoiceId, companyId: companyObjectId }).lean()
+      const inv = await Invoice.findOne({ _id: v.invoiceId, companyId: companyObjectId, isDeleted: { $ne: true } }).lean()
       if (inv) {
         const net = parseNumber(inv.netTotal, 0)
         const recv = parseNumber(inv.receivedAmount, 0)
         const newRecv = recv + v.amount
         const status = newRecv >= net ? "paid" : (newRecv > 0 ? "partial" : "due")
-        await Invoice.updateOne({ _id: v.invoiceId, companyId: companyObjectId }, { $set: { receivedAmount: newRecv, status, updatedAt: now } }, sess ? { session: sess } : undefined)
+        await Invoice.updateOne({ _id: v.invoiceId, companyId: companyObjectId, isDeleted: { $ne: true } }, { $set: { receivedAmount: newRecv, status, updatedAt: now } }, sess ? { session: sess } : undefined)
       }
 
       // Per-invoice client transaction reflecting allocation
@@ -738,14 +778,14 @@ export async function deleteReceiptAllocation(receiptId: string, allocId: string
     const apply = Math.max(0, parseNumber((alloc as any).appliedAmount, 0))
     const clientId = new Types.ObjectId(String(mr.clientId))
 
-    // Reverse invoice receivedAmount
-    const inv = alloc.invoiceId ? await Invoice.findOne({ _id: alloc.invoiceId, companyId: companyObjectId }).lean() : null
+    // Reverse invoice receivedAmount (skip if invoice was deleted)
+    const inv = alloc.invoiceId ? await Invoice.findOne({ _id: alloc.invoiceId, companyId: companyObjectId, isDeleted: { $ne: true } }).lean() : null
     if (inv) {
       const net = parseNumber(inv.netTotal, 0)
       const recv = parseNumber(inv.receivedAmount, 0)
       const newRecv = Math.max(0, recv - apply)
       const status = newRecv >= net ? "paid" : (newRecv > 0 ? "partial" : "due")
-      await Invoice.updateOne({ _id: inv._id, companyId: companyObjectId }, { $set: { receivedAmount: newRecv, status, updatedAt: now } }, sess ? { session: sess } : undefined)
+      await Invoice.updateOne({ _id: inv._id, companyId: companyObjectId, isDeleted: { $ne: true } }, { $set: { receivedAmount: newRecv, status, updatedAt: now } }, sess ? { session: sess } : undefined)
     }
 
     // Delete allocation row
