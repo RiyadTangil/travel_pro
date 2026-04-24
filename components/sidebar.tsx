@@ -18,6 +18,7 @@ import {
   BarChart2,
   ChevronRight,
   ChevronDown,
+  UserPlus,
 } from "lucide-react"
 import { useState } from "react"
 import { cn } from "@/lib/utils"
@@ -208,6 +209,11 @@ export function Sidebar() {
         {
           title: "Companies",
           href: "/dashboard/configuration/companies",
+        },
+        {
+          title: "Users",
+          icon: <UserPlus className="h-5 w-5" />,
+          href: "/dashboard/configuration/users",
         },
         {
           title: "Employee",
