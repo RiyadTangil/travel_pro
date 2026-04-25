@@ -1,16 +1,20 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { PageWrapper } from "@/components/shared/page-wrapper"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import ClientsManagerToolbar from "@/components/clients/clients-manager-toolbar"
+import FilterToolbar from "@/components/shared/filter-toolbar"
+import { Button } from "@/components/ui/button"
+import { Download, Plus } from "lucide-react"
+import { ClearableSelect } from "@/components/shared/clearable-select"
 import ClientsManagerTable from "@/components/clients/clients-manager-table"
 import AddClientModal from "@/components/clients/add-client-modal"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { toast } from "@/components/ui/use-toast"
-import Loader from "@/components/ui/loader"
+
+type Category = { id: string; name: string }
+type User = { id: string; name: string }
 
 export default function ClientsManagerPage() {
   const { data: session } = useSession()
@@ -27,7 +31,37 @@ export default function ClientsManagerPage() {
   const [editBusyIds, setEditBusyIds] = useState<string[]>([])
   const router = useRouter()
 
-  const fetchClients = async () => {
+  const [categories, setCategories] = useState<Category[]>([])
+  const [users, setUsers] = useState<User[]>([])
+  const [categoryId, setCategoryId] = useState<string | undefined>()
+  const [userId, setUserId] = useState<string | undefined>()
+  const [status, setStatus] = useState<string | undefined>()
+  const [search, setSearch] = useState("")
+
+  useEffect(() => {
+    fetch(`/api/clients/client-categories?page=1&pageSize=100`)
+      .then((r) => r.json())
+      .then((data) => setCategories(data.data || []))
+      .catch(() => setCategories([]))
+    fetch(`/api/users`)
+      .then((r) => r.json())
+      .then((data) => setUsers(data.data || []))
+      .catch(() => setUsers([]))
+  }, [])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFilters({
+        categoryId,
+        userId,
+        search: search.trim(),
+        status,
+      })
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [categoryId, userId, search, status])
+
+  const fetchClients = useCallback(async () => {
     try {
       setLoading(true)
       const params = new URLSearchParams()
@@ -43,28 +77,31 @@ export default function ClientsManagerPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filters])
 
-  useEffect(() => { fetchClients() }, [filters])
+  useEffect(() => {
+    void fetchClients()
+  }, [fetchClients])
 
   const viewClient = (id: string) => {
     router.push(`/dashboard/clients-manager/${id}`)
   }
+
   const editClient = async (id: string) => {
     try {
       setEditBusyIds((prev) => [...prev, id])
       const res = await fetch(`/api/clients-manager/${id}`)
       const data = await res.json()
-      if (!data?.data || data.error ) {
+      if (!data?.data || data.error) {
         toast({ title: "Edit", description: data?.error || data?.message || `Client ${id} not found` })
         setEditBusyIds((prev) => prev.filter((x) => x !== id))
         return
       }
       const clientData = data.data
       setEditingClientId(id)
-      
+
       const phoneValue = clientData.phone || clientData.mobile || ""
-      
+
       setInitialValues({
         categoryId: clientData.categoryId ? String(clientData.categoryId) : "",
         clientType: clientData.clientType || "Individual",
@@ -94,6 +131,7 @@ export default function ClientsManagerPage() {
     setInitialValues(undefined)
     setModalOpen(true)
   }
+
   const deleteClient = (id: string) => {
     setDeletingId(id)
     setConfirmOpen(true)
@@ -121,6 +159,7 @@ export default function ClientsManagerPage() {
   const mapped = useMemo(() => {
     return (clients || []).map((c: any, idx: number) => ({
       id: c.id || c._id || String(idx),
+      uniqueId: c.uniqueId != null ? String(c.uniqueId) : undefined,
       name: c.name,
       type: c.clientType === "Corporate" ? "Corporate" : "Individual",
       phone: c.mobile || c.phone || "",
@@ -131,18 +170,25 @@ export default function ClientsManagerPage() {
     }))
   }, [clients])
 
+  const categoryOptions = useMemo(() => categories.map((c) => ({ label: c.name, value: c.id })), [categories])
+  const userOptions = useMemo(() => users.map((u) => ({ label: u.name, value: u.id })), [users])
+  const statusOptions = [
+    { label: "Active", value: "active" },
+    { label: "Inactive", value: "inactive" },
+  ]
+
   const handleCreate = async (payload: Record<string, any>) => {
     try {
       setSaving(true)
       const res = await fetch(`/api/clients-manager`, {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
-          ...(session?.user?.companyId ? { "x-company-id": String(session.user.companyId) } : {})
+          ...(session?.user?.companyId ? { "x-company-id": String(session.user.companyId) } : {}),
         },
         body: JSON.stringify({
           ...payload,
-          ...(session?.user?.companyId ? { companyId: String(session.user.companyId) } : {})
+          ...(session?.user?.companyId ? { companyId: String(session.user.companyId) } : {}),
         }),
       })
       const data = await res.json()
@@ -180,31 +226,77 @@ export default function ClientsManagerPage() {
   }
 
   return (
-    <PageWrapper breadcrumbs={[{ label: "Clients" }]}>
-        <Card className="mx-auto mx-2">
-          <CardHeader className="space-y-3">
-            <CardTitle className="text-base">Clients Manager</CardTitle>
-            <ClientsManagerToolbar onAddClient={handleOpenAddModal} onFilterChange={setFilters} />
-          </CardHeader>
-          <CardContent>
-              <ClientsManagerTable 
-                rows={mapped} 
-                onView={viewClient} 
-                onEdit={editClient} 
-                onDelete={deleteClient}
-                onToggleStatus={toggleStatus}
-                statusIds={statusBusyIds}
-                editingIds={editBusyIds}
-                loading={loading}
-              />
-          </CardContent>
-        </Card>
+    <PageWrapper breadcrumbs={[{ label: "Clients Manager" }]}>
+      <div className="mx-4 mb-4 min-w-0 space-y-4">
+        <FilterToolbar
+          showSearch
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search clients..."
+          showRefresh
+          onRefresh={() => void fetchClients()}
+          filterExtrasBefore={
+            <>
+              <div className="w-52 shrink-0">
+                <ClearableSelect
+                  options={categoryOptions}
+                  value={categoryId}
+                  onChange={(val) => setCategoryId(val || undefined)}
+                  placeholder="Select Category"
+                />
+              </div>
+              <div className="w-48 shrink-0">
+                <ClearableSelect
+                  options={userOptions}
+                  value={userId}
+                  onChange={(val) => setUserId(val || undefined)}
+                  placeholder="Select User"
+                />
+              </div>
+              <div className="w-40 shrink-0">
+                <ClearableSelect
+                  options={statusOptions}
+                  value={status}
+                  onChange={(val) => setStatus(val || undefined)}
+                  placeholder="Select Status"
+                />
+              </div>
+            </>
+          }
+          className="flex-1 min-w-0"
+        >
+          <div className="flex shrink-0 gap-2">
+            <Button type="button" onClick={handleOpenAddModal} className="whitespace-nowrap bg-blue-600 hover:bg-blue-700">
+              <Plus className="mr-2 h-4 w-4" />
+              Add Client
+            </Button>
+            <Button type="button" variant="outline" className="whitespace-nowrap">
+              <Download className="mr-2 h-4 w-4" />
+              Excel Report
+            </Button>
+          </div>
+        </FilterToolbar>
 
-      <AddClientModal 
-        open={modalOpen} 
-        onOpenChange={(v) => { if (!v) setEditingClientId(null); setModalOpen(v) }} 
-        onSubmit={editingClientId ? handleEdit : handleCreate} 
-        loading={saving} 
+        <ClientsManagerTable
+          rows={mapped}
+          onView={viewClient}
+          onEdit={editClient}
+          onDelete={deleteClient}
+          onToggleStatus={toggleStatus}
+          statusIds={statusBusyIds}
+          editingIds={editBusyIds}
+          loading={loading}
+        />
+      </div>
+
+      <AddClientModal
+        open={modalOpen}
+        onOpenChange={(v) => {
+          if (!v) setEditingClientId(null)
+          setModalOpen(v)
+        }}
+        onSubmit={editingClientId ? handleEdit : handleCreate}
+        loading={saving}
         initialValues={initialValues}
         mode={editingClientId ? "edit" : "add"}
       />
@@ -222,7 +314,6 @@ export default function ClientsManagerPage() {
             const res = await fetch(`/api/clients-manager/${deletingId}`, { method: "DELETE" })
             const data = await res.json()
             if (!res.ok) {
-              // Extract the message from the backend response if available
               const errorMsg = data.message || data.error || "Failed to delete client"
               toast({ title: "Error", description: errorMsg })
               return
