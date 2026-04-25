@@ -3,5 +3,6 @@ import { listForAccountHistory } from "@/controllers/clientTransactionController
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
-  return listForAccountHistory(searchParams)
+  const companyId = request.headers.get("x-company-id") || undefined
+  return listForAccountHistory(searchParams, companyId)
 }

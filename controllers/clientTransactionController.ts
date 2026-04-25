@@ -1,4 +1,5 @@
-import { ok, fail } from "@/utils/api-response"
+import { Types } from "mongoose"
+import { ok, fail, badRequest } from "@/utils/api-response"
 import { listClientTransactionsForAccountHistory } from "@/services/clientTransactionService"
 
 function parseNumber(n: any, def = 0): number {
@@ -6,8 +7,16 @@ function parseNumber(n: any, def = 0): number {
   return isFinite(x) ? x : def
 }
 
-export async function listForAccountHistory(searchParams: URLSearchParams) {
+export async function listForAccountHistory(
+  searchParams: URLSearchParams,
+  companyIdHeader?: string | null,
+) {
   try {
+    const companyId = (companyIdHeader || "").trim()
+    if (!companyId || !Types.ObjectId.isValid(companyId)) {
+      return badRequest("Valid x-company-id header is required")
+    }
+
     const page = parseNumber(searchParams.get("page"), 1)
     const pageSize = parseNumber(searchParams.get("pageSize"), 20)
     const accountIdRaw = (searchParams.get("accountId") || "").trim()
@@ -18,6 +27,7 @@ export async function listForAccountHistory(searchParams: URLSearchParams) {
     const data = await listClientTransactionsForAccountHistory({
       page,
       pageSize,
+      companyId,
       accountId: accountIdRaw && accountIdRaw !== "all" ? accountIdRaw : undefined,
       clientId: clientIdRaw || undefined,
       dateFrom,
@@ -25,6 +35,9 @@ export async function listForAccountHistory(searchParams: URLSearchParams) {
     })
     return ok(data)
   } catch (e: any) {
+    if (e?.statusCode === 400) {
+      return badRequest(e?.message || "Bad request")
+    }
     console.error("clientTransactionController.listForAccountHistory error:", e)
     return fail("Internal server error", 500)
   }

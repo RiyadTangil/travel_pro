@@ -22,6 +22,8 @@ export function accountTransactionListVisibilityFilter(): Record<string, unknown
 export async function listClientTransactionsForAccountHistory(params: {
   page: number
   pageSize: number
+  /** Required — `client_transactions` are always scoped to a company */
+  companyId: string
   accountId?: string
   clientId?: string
   dateFrom?: string
@@ -32,7 +34,17 @@ export async function listClientTransactionsForAccountHistory(params: {
   const page = Math.max(1, parseNumber(params.page, 1))
   const pageSize = Math.max(1, parseNumber(params.pageSize, 20))
 
-  const filter: Record<string, unknown> = accountTransactionListVisibilityFilter()
+  const companyIdRaw = (params.companyId || "").trim()
+  if (!companyIdRaw || !Types.ObjectId.isValid(companyIdRaw)) {
+    const err = new Error("Valid companyId is required") as Error & { statusCode?: number }
+    err.statusCode = 400
+    throw err
+  }
+
+  const filter: Record<string, unknown> = {
+    ...accountTransactionListVisibilityFilter(),
+    companyId: new Types.ObjectId(companyIdRaw),
+  }
 
   const accountIdRaw = (params.accountId || "").trim()
   const clientIdRaw = (params.clientId || "").trim()

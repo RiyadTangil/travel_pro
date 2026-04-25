@@ -368,7 +368,7 @@ export function Sidebar() {
           <div className="flex items-center justify-between h-16 px-4 border-b">
             <Link href="/" className="flex items-center gap-2 font-semibold">
               <Plane className="h-6 w-6 text-primary" />
-              {expanded && <span className="text-lg font-bold">TravelPro</span>}
+              {expanded && <span className="text-lg font-bold"></span>}
             </Link>
             <Button variant="ghost" size="icon" className="hidden lg:flex" onClick={() => setExpanded(!expanded)}>
               <Menu className="h-5 w-5" />
@@ -431,7 +431,6 @@ export function Sidebar() {
                           isParentActive ? "bg-primary/10 text-primary font-medium" : "text-gray-600 hover:bg-gray-100",
                           !expanded && "justify-center",
                         )}
-                        onClick={() => setMobileOpen(false)}
                       >
                         {(item as any).icon}
                         {expanded && (

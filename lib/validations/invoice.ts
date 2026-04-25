@@ -13,6 +13,12 @@ const NonNegative = z.number({ invalid_type_error: "Must be a number" }).min(0).
 const DateString = z.string().trim().min(1, "Date is required")
 
 // ─── Money Receipt sub-schema (inline with invoice creation) ─────────────────
+//
+// Inline receipt is optional: the UI may still send a `moneyReceipt` object with
+// display-only fields (e.g. accountName, transNo) or invoice-level flags wrongly
+// nested (showPrevDue, showDiscount).  We strip to known keys and only validate
+// the full schema when the payload would actually create a receipt — same gate
+// as `invoiceService` (`paymentMethod` truthy and `amount > 0`).
 
 export const InlineMoneyReceiptSchema = z.object({
   amount: z.number().positive("Amount must be positive"),
@@ -23,6 +29,38 @@ export const InlineMoneyReceiptSchema = z.object({
   note: z.string().optional().default(""),
   receiptNo: z.string().optional().default(""),
 }).strict()
+
+function normalizeOptionalInlineMoneyReceipt(raw: unknown): unknown {
+  if (raw == null || raw === "") return undefined
+  if (typeof raw !== "object" || Array.isArray(raw)) return undefined
+  const o = raw as Record<string, unknown>
+  const stripped = {
+    amount: o.amount,
+    paymentMethod: o.paymentMethod,
+    accountId: o.accountId,
+    paymentDate: o.paymentDate,
+    discount: o.discount,
+    note: o.note,
+    receiptNo: o.receiptNo,
+  }
+  const method = typeof stripped.paymentMethod === "string" ? stripped.paymentMethod.trim() : ""
+  const rawAmt = stripped.amount
+  const amtNum =
+    typeof rawAmt === "number"
+      ? rawAmt
+      : rawAmt !== undefined && rawAmt !== null && rawAmt !== ""
+        ? Number(rawAmt)
+        : NaN
+  const willCreateReceipt = method.length > 0 && Number.isFinite(amtNum) && amtNum > 0
+  if (!willCreateReceipt) return undefined
+  return stripped
+}
+
+/** Use on invoice payloads; omits or validates inline money receipt. */
+export const OptionalInlineMoneyReceiptSchema = z.preprocess(
+  normalizeOptionalInlineMoneyReceipt,
+  InlineMoneyReceiptSchema.optional(),
+)
 
 // ─── Billing item — standard / visa ──────────────────────────────────────────
 
@@ -127,7 +165,7 @@ export const StandardInvoiceSchema = z.object({
   ticket: z.array(TicketEntrySchema).optional().default([]),
   hotel: z.array(HotelEntrySchema).optional().default([]),
   transport: z.array(TransportEntrySchema).optional().default([]),
-  moneyReceipt: InlineMoneyReceiptSchema.optional(),
+  moneyReceipt: OptionalInlineMoneyReceiptSchema,
   showPrevDue: z.boolean().optional().default(false),
   showDiscount: z.boolean().optional().default(false),
   agentCommission: NonNegative,

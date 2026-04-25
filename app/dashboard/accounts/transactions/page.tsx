@@ -92,8 +92,12 @@ export default function TransactionHistoryPage() {
 
   useEffect(() => {
     const fetchAccounts = async () => {
+      const companyId = session?.user?.companyId
+      if (!companyId) return
       try {
-        const res = await client.get("/api/accounts?page=1&pageSize=100")
+        const res = await client.get("/api/accounts?page=1&pageSize=100", {
+          headers: { "x-company-id": String(companyId) },
+        })
         const items = res.data?.items || []
         setAccounts(
           items.map((i: any) => ({
@@ -104,9 +108,15 @@ export default function TransactionHistoryPage() {
       } catch {}
     }
     fetchAccounts()
-  }, [session])
+  }, [session?.user?.companyId])
 
   const load = useCallback(async () => {
+    const companyId = session?.user?.companyId
+    if (!companyId) {
+      setRows([])
+      setTotal(0)
+      return
+    }
     setLoading(true)
     try {
       const params = new URLSearchParams()
@@ -116,7 +126,9 @@ export default function TransactionHistoryPage() {
       if (dateRange?.from) params.set("dateFrom", dateRange.from.toISOString().slice(0, 10))
       if (dateRange?.to) params.set("dateTo", dateRange.to.toISOString().slice(0, 10))
 
-      const res = await client.get(`/api/client-transactions?${params.toString()}`)
+      const res = await client.get(`/api/client-transactions?${params.toString()}`, {
+        headers: { "x-company-id": String(companyId) },
+      })
       const data = res.data
       const items = (data?.items || []) as ClientTransactionApiItem[]
       const pag = data?.pagination || {}
