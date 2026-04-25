@@ -10,10 +10,6 @@ export function DashboardHeader() {
     <div className="flex items-center justify-between p-4 bg-white border-b border-gray-200">
       {/* Left side - Menu and Search */}
       <div className="flex items-center space-x-4">
-        <Button variant="ghost" size="sm" className="p-2">
-          <Menu className="h-5 w-5" />
-        </Button>
-        
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input

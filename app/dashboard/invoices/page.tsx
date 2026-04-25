@@ -169,8 +169,7 @@ export default function InvoicesPage() {
 
   return (
     <PageWrapper breadcrumbs={[{ label: "Invoices" }]}>
-      <div className="mx-4 mb-4 space-y-4">
-
+      <div className="mx-4 mb-4 min-w-0 space-y-4">
           <FilterToolbar
             showDateRange
             dateRange={dateRange}
@@ -185,17 +184,16 @@ export default function InvoicesPage() {
             showRefresh
             onRefresh={() => void fetchInvoices()}
             className="flex-1 min-w-0"
-          > 
+          >
               <Button
+                type="button"
                 onClick={() => setIsModalOpen(true)}
-                className="bg-sky-500 hover:bg-sky-600 text-white shrink-0"
+                className="shrink-0 whitespace-nowrap"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Add Invoice
               </Button>
-
           </FilterToolbar>
-       
 
         <InvoiceTable
           invoices={invoices}

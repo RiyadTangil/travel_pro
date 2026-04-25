@@ -53,31 +53,45 @@ export default function FilterToolbar({
   if (!hasAny) return null
 
   return (
-    <div className="flex min-w-0 max-w-full flex-wrap items-center justify-between gap-2 bg-white p-3 rounded-md border shadow-sm">
-      {children}
+    <div
+      className={cn(
+        "flex max-w-full items-center gap-2 rounded-md border bg-white p-3 shadow-sm",
+        /* Narrow: single horizontal row + scroll (same idea as wide Ant tables) */
+        "min-w-0 flex-nowrap overflow-x-auto overflow-y-visible [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]",
+        "sm:flex-wrap sm:justify-between sm:overflow-x-visible",
+      )}
+    >
+      {children != null && children !== false && (
+        <div className="flex shrink-0 items-center">{children}</div>
+      )}
       <div
         className={cn(
-          "flex min-w-0 flex-wrap items-center justify-end gap-2",
-          className
+          "flex min-w-0 shrink-0 flex-nowrap items-center gap-2",
+          "sm:w-auto sm:flex-1 sm:flex-wrap sm:justify-end",
+          className,
         )}
       >
         {filterExtrasBefore}
 
         {showDateRange && onDateRangeChange && (
-          <DateRangePickerWithPresets
-            date={dateRange}
-            onDateChange={onDateRangeChange}
-            className="w-[300px]"
-          />
+          <div className="shrink-0">
+            <DateRangePickerWithPresets
+              date={dateRange}
+              onDateChange={onDateRangeChange}
+              className="w-[min(280px,calc(100vw-5rem))] sm:w-[300px]"
+            />
+          </div>
         )}
 
         {showSearch && onSearchChange && (
-          <SearchInput
-            value={search}
-            onChange={onSearchChange}
-            placeholder={searchPlaceholder}
-            className="max-w-sm"
-          />
+          <div className="w-[min(18rem,calc(100vw-6rem))] shrink-0 sm:min-w-[12rem] sm:max-w-sm sm:flex-1">
+            <SearchInput
+              value={search}
+              onChange={onSearchChange}
+              placeholder={searchPlaceholder}
+              className="max-w-none"
+            />
+          </div>
         )}
 
         {filterExtras}

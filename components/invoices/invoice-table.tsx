@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useEffect, useState } from "react"
 import { Table } from "antd"
 import type { ColumnsType } from "antd/es/table"
 import { Card, CardContent } from "@/components/ui/card"
@@ -45,6 +45,8 @@ export interface InvoiceTableProps {
   onAssignBy?: (invoice: Invoice) => void
 }
 
+const NARROW_MAX = 768
+
 export function InvoiceTable({
   invoices,
   loading = false,
@@ -58,6 +60,16 @@ export function InvoiceTable({
   onMoneyReceipt,
   onAssignBy,
 }: InvoiceTableProps) {
+  const [narrowViewport, setNarrowViewport] = useState(false)
+
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${NARROW_MAX}px)`)
+    const apply = () => setNarrowViewport(mq.matches)
+    apply()
+    mq.addEventListener("change", apply)
+    return () => mq.removeEventListener("change", apply)
+  }, [])
+
   const columns: ColumnsType<Row> = useMemo(
     () => [
       {
@@ -184,7 +196,9 @@ export function InvoiceTable({
         title: "Action",
         key: "action",
         fixed: "right",
-        width: 280,
+        // ...(narrowViewport ? {} : { fixed: "right" as const }),
+        width: narrowViewport ? 64 : 280,
+        align: narrowViewport ? "center" : undefined,
         render: (_: unknown, record: Row) => (
           <InvoiceActions
             status={record.status}
@@ -193,17 +207,18 @@ export function InvoiceTable({
             onEdit={onEdit}
             onDelete={onDelete}
             onMoneyReceipt={onMoneyReceipt}
+            compact={narrowViewport}
           />
         ),
       },
     ],
-    [page, pageSize, onView, onEdit, onDelete, onMoneyReceipt, onAssignBy]
+    [page, pageSize, narrowViewport, onView, onEdit, onDelete, onMoneyReceipt, onAssignBy]
   )
 
   return (
     <Card className="border-none shadow-none bg-transparent">
       <CardContent className="p-0">
-        <div className="bg-white rounded-md border shadow-sm overflow-hidden">
+        <div className="min-w-0 overflow-hidden rounded-md border bg-white shadow-sm">
           <Table<Row>
             rowKey="id"
             columns={columns}

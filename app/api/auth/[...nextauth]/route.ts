@@ -3,7 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import { MongoDBAdapter } from "@auth/mongodb-adapter";
 import clientPromise from "@/lib/mongodb";
-import { verifyPassword } from "@/lib/auth";
+import { verifyPassword, normalizeEmail, emailEqualsNormalized } from "@/lib/auth";
 
 // Hardcode the secret as a temporary workaround
 const NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET || "your_secret_key";
@@ -27,8 +27,9 @@ export const authOptions = {
           const db = client.db("manage_agency");
           const users = db.collection("users");
 
-          // Find user
-          const user = await users.findOne({ email: credentials.email });
+          const emailNorm = normalizeEmail(credentials.email);
+          // Find user (case-insensitive vs stored email)
+          const user = await users.findOne(emailEqualsNormalized(emailNorm));
           if (!user) {
             return null;
           }

@@ -1,7 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { ObjectId } from "mongodb"
 import clientPromise from "@/lib/mongodb"
-import { hashPassword, generateVerificationToken } from "@/lib/auth"
+import { hashPassword, generateVerificationToken, normalizeEmail, emailEqualsNormalized } from "@/lib/auth"
 import { sendVerificationEmail } from "@/lib/email"
 import { SubscriptionStatus } from "@/lib/models"
 
@@ -48,7 +47,7 @@ export async function POST(request: NextRequest) {
 
     // Create user with company role
     const user = {
-      email,
+      email: emailNorm,
       password: hashedPassword,
       name,
       role: "company", // Role is now "company" for travel agency owners
@@ -81,7 +80,7 @@ export async function POST(request: NextRequest) {
     // Create company record
     const company = {
       name: companyName,
-      email: companyEmail,
+      email: companyEmailNorm,
       mobileNumber: companyMobile,
       address: companyAddress,
       logoUrl,
@@ -106,7 +105,7 @@ export async function POST(request: NextRequest) {
 
     // Send verification email
     try {
-      await sendVerificationEmail(email, verificationToken)
+      await sendVerificationEmail(emailNorm, verificationToken)
     } catch (emailError) {
       console.error("Failed to send verification email:", emailError)
       // Continue with signup even if email fails

@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
-import { generateResetToken } from "@/lib/auth"
+import { generateResetToken, normalizeEmail, emailEqualsNormalized } from "@/lib/auth"
 import { sendPasswordResetEmail } from "@/lib/email"
 
 export async function POST(request: NextRequest) {
@@ -11,12 +11,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 })
     }
 
+    const emailNorm = normalizeEmail(email)
+    if (!emailNorm) {
+      return NextResponse.json({ error: "Email is required" }, { status: 400 })
+    }
+
     const client = await clientPromise
     const db = client.db("manage_agency")
     const users = db.collection("users")
 
-    // Find user
-    const user = await users.findOne({ email })
+    // Find user (case-insensitive vs stored email)
+    const user = await users.findOne(emailEqualsNormalized(emailNorm))
     if (!user) {
       // Don't reveal if user exists or not
       return NextResponse.json({
@@ -42,7 +47,7 @@ export async function POST(request: NextRequest) {
 
     // Send reset email
     try {
-      await sendPasswordResetEmail(email, resetToken)
+      await sendPasswordResetEmail(user.email ?? emailNorm, resetToken)
     } catch (emailError) {
       console.error("Failed to send reset email:", emailError)
     }

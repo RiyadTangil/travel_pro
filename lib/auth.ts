@@ -4,6 +4,16 @@ import { randomBytes } from "crypto"
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key"
 
+/** Trim + ASCII lower case for storage and duplicate detection (same identity as RFC 5321 domain rules in practice). */
+export function normalizeEmail(email: string): string {
+  return String(email).trim().toLowerCase()
+}
+
+/** Mongo filter: match user/company row whose email equals `normalized` ignoring stored casing. */
+export function emailEqualsNormalized(normalized: string): Record<string, unknown> {
+  return { $expr: { $eq: [{ $toLower: "$email" }, normalized] } }
+}
+
 export interface User {
   _id?: string
   email: string
