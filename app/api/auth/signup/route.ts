@@ -1,3 +1,4 @@
+import { MONGODB_DB_NAME } from "@/lib/database-config"
 import { type NextRequest, NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 import { hashPassword, generateVerificationToken, normalizeEmail, emailEqualsNormalized } from "@/lib/auth"
@@ -24,19 +25,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
+    const emailNorm = normalizeEmail(email)
+    const companyEmailNorm = normalizeEmail(companyEmail)
+    if (!emailNorm || !companyEmailNorm) {
+      return NextResponse.json({ error: "Valid email addresses are required" }, { status: 400 })
+    }
+
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const users = db.collection("users")
     const companies = db.collection("companies")
 
-    // Check if user already exists
-    const existingUser = await users.findOne({ email })
+    // Check if user already exists (case-insensitive vs DB)
+    const existingUser = await users.findOne(emailEqualsNormalized(emailNorm))
     if (existingUser) {
       return NextResponse.json({ error: "User already exists" }, { status: 400 })
     }
 
-    // Check if company email already exists
-    const existingCompany = await companies.findOne({ email: companyEmail })
+    // Check if company email already exists (case-insensitive vs DB)
+    const existingCompany = await companies.findOne(emailEqualsNormalized(companyEmailNorm))
     if (existingCompany) {
       return NextResponse.json({ error: "Company with this email already exists" }, { status: 400 })
     }

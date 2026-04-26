@@ -1,3 +1,4 @@
+import { MONGODB_DB_NAME } from "@/lib/database-config"
 import { type NextRequest, NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
     const companyId = request.headers.get('x-company-id')
 
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const agents = db.collection("agents")
 
     const filter: any = {}
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest) {
     }
 
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const agents = db.collection("agents")
 
     const doc = {

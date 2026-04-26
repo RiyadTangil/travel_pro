@@ -1,3 +1,4 @@
+import { MONGODB_DB_NAME } from "@/lib/database-config"
 import { NextResponse, type NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import clientPromise from "@/lib/mongodb";
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
 
     // Connect to the database
     const client = await clientPromise;
-    const db = client.db("manage_agency");
+    const db = client.db(MONGODB_DB_NAME);
     const companies = db.collection("companies");
 
     // Find company by ID
@@ -110,7 +111,7 @@ export async function PATCH(request: NextRequest) {
 
     // Connect to the database
     const client = await clientPromise;
-    const db = client.db("manage_agency");
+    const db = client.db(MONGODB_DB_NAME);
     const companies = db.collection("companies");
 
     // Update company

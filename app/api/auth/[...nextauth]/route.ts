@@ -1,3 +1,4 @@
+import { MONGODB_DB_NAME } from "@/lib/database-config"
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
@@ -24,7 +25,7 @@ export const authOptions = {
 
         try {
           const client = await clientPromise;
-          const db = client.db("manage_agency");
+          const db = client.db(MONGODB_DB_NAME);
           const users = db.collection("users");
 
           const emailNorm = normalizeEmail(credentials.email);

@@ -1,3 +1,4 @@
+import { MONGODB_DB_NAME } from "@/lib/database-config"
 import { type NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import clientPromise from "@/lib/mongodb";
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
 
     // Connect to the database
     const client = await clientPromise;
-    const db = client.db("manage_agency");
+    const db = client.db(MONGODB_DB_NAME);
     const companies = db.collection("companies");
     const b2bClients = db.collection("b2b_clients");
     const b2cClients = db.collection("b2c_clients");

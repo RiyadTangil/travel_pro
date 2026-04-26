@@ -2,11 +2,19 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
-import { Loader2 } from "lucide-react"
+import { Loader2, MoreVertical } from "lucide-react"
 
 export type TableRowActionsProps = {
   className?: string
+  /** Narrow tables: single ⋯ menu instead of multiple buttons */
+  compact?: boolean
   /** When false, the View button is not rendered (e.g. expense heads). Default true. */
   showView?: boolean
   onView?: () => void
@@ -28,6 +36,7 @@ export type TableRowActionsProps = {
  */
 export function TableRowActions({
   className = "",
+  compact = false,
   showView = true,
   onView,
   onEdit,
@@ -48,6 +57,59 @@ export function TableRowActions({
     setConfirmOpen(false)
     setInternalLoading(true)
     Promise.resolve(onDelete()).finally(() => setInternalLoading(false))
+  }
+
+  if (compact) {
+    return (
+      <>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 shrink-0"
+              aria-label="Row actions"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            {showView && onView && (
+              <DropdownMenuItem onSelect={() => onView()}>View</DropdownMenuItem>
+            )}
+            {onEdit && (
+              <DropdownMenuItem disabled={editDisabled || editLoading} onSelect={() => !editDisabled && !editLoading && onEdit()}>
+                Edit
+              </DropdownMenuItem>
+            )}
+            {onDelete && (
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                disabled={deleteDisabled || busy}
+                onSelect={() => !deleteDisabled && !busy && setConfirmOpen(true)}
+              >
+                Delete
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {onDelete && (
+          <ConfirmationDialog
+            open={confirmOpen}
+            onOpenChange={setConfirmOpen}
+            title={deleteTitle}
+            description={deleteDescription}
+            confirmText="Delete"
+            onConfirm={handleConfirmDelete}
+            isLoading={busy}
+            loadingText="Deleting..."
+            variant="destructive"
+          />
+        )}
+      </>
+    )
   }
 
   return (

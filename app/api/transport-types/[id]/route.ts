@@ -1,3 +1,4 @@
+import { MONGODB_DB_NAME } from "@/lib/database-config"
 import { NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
@@ -13,7 +14,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     update.updatedAt = new Date()
 
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const collection = db.collection("transport_types")
     const res = await collection.updateOne({ _id: new ObjectId(id) }, { $set: update })
     if (!res.matchedCount) return NextResponse.json({ error: "Not found" }, { status: 404 })
@@ -29,7 +30,7 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     const { id } = params
     if (!ObjectId.isValid(id)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 })
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const collection = db.collection("transport_types")
     const res = await collection.deleteOne({ _id: new ObjectId(id) })
     if (!res.deletedCount) return NextResponse.json({ error: "Not found" }, { status: 404 })
@@ -46,7 +47,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     if (!ObjectId.isValid(id)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 })
     const body = await request.json()
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const collection = db.collection("transport_types")
     const res = await collection.updateOne({ _id: new ObjectId(id) }, { $set: { active: !!body.active, updatedAt: new Date() } })
     if (!res.matchedCount) return NextResponse.json({ error: "Not found" }, { status: 404 })

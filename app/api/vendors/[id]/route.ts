@@ -1,3 +1,4 @@
+import { MONGODB_DB_NAME } from "@/lib/database-config"
 import { NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
@@ -9,7 +10,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
     if (!ObjectId.isValid(id)) return NextResponse.json({ error: "Invalid vendor ID" }, { status: 400 })
 
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const collection = db.collection("vendors")
 
     const doc = await collection.findOne({ _id: new ObjectId(id) })
@@ -59,7 +60,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     update.updatedAt = new Date()
 
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const collection = db.collection("vendors")
 
     const result = await collection.updateOne({ _id: new ObjectId(id) }, { $set: update })
@@ -77,7 +78,7 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     if (!ObjectId.isValid(id)) return NextResponse.json({ error: "Invalid vendor ID" }, { status: 400 })
 
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const collection = db.collection("vendors")
 
     const result = await collection.deleteOne({ _id: new ObjectId(id) })
@@ -98,7 +99,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     const active = !!body?.active
 
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const collection = db.collection("vendors")
 
     const result = await collection.updateOne({ _id: new ObjectId(id) }, { $set: { active, updatedAt: new Date() } })

@@ -1,3 +1,4 @@
+import { MONGODB_DB_NAME } from "@/lib/database-config"
 import { type NextRequest, NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
     }
 
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const directTransactions = db.collection("direct_transactions")
 
     // Build filter query
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
     }
 
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const b2bClients = db.collection("b2b_clients")
     const directTransactions = db.collection("direct_transactions")
 

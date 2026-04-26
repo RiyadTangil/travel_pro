@@ -15,6 +15,6 @@ const InvoicePassportSchema = new Schema({
   isDeleted: { type: Boolean, default: false, index: true },
   createdAt: { type: String },
   updatedAt: { type: String },
-}, { collection: "invoice_passports" })
+}, { collection: "invoice_passports", strict: false })
 
 export const InvoicePassport = models.InvoicePassport || model("InvoicePassport", InvoicePassportSchema)

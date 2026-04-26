@@ -1,3 +1,4 @@
+import { MONGODB_DB_NAME } from "@/lib/database-config"
 import { NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 
@@ -15,7 +16,7 @@ export async function GET(request: Request) {
     const skip = (page - 1) * pageSize
 
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const collection = db.collection("transport_types")
 
     const query: any = {}
@@ -44,7 +45,7 @@ export async function POST(request: Request) {
     if (!name) return NextResponse.json({ error: "Name is required" }, { status: 400 })
 
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const collection = db.collection("transport_types")
 
     const doc = { name, active: body.active !== false, createdAt: new Date(), updatedAt: new Date() }

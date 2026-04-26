@@ -1,5 +1,6 @@
 import { ObjectId } from 'mongodb'
 import clientPromise from '@/lib/mongodb'
+import { MONGODB_DB_NAME } from '@/lib/database-config'
 import { TransactionError } from '@/lib/errors/TransactionError'
 
 export interface ReconciliationResult {
@@ -23,7 +24,7 @@ export interface ReconciliationSummary {
 export class ReconciliationService {
   private async getDb() {
     const client = await clientPromise
-    return client.db("manage_agency")
+    return client.db(MONGODB_DB_NAME)
   }
 
   async reconcileClientBalance(clientId: string): Promise<ReconciliationResult> {

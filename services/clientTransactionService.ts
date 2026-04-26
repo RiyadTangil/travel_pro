@@ -22,7 +22,6 @@ export function accountTransactionListVisibilityFilter(): Record<string, unknown
 export async function listClientTransactionsForAccountHistory(params: {
   page: number
   pageSize: number
-  /** Required — `client_transactions` are always scoped to a company */
   companyId: string
   accountId?: string
   clientId?: string

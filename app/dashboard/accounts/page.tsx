@@ -205,7 +205,6 @@ export default function AccountsPage() {
   return (
     <PageWrapper breadcrumbs={[{ label: "Accounts" }]}>
       <div className="mx-4 mb-4 space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 
           <FilterToolbar
             showSearch
@@ -220,9 +219,6 @@ export default function AccountsPage() {
               <Plus className="h-4 w-4 mr-2" /> Add Account
             </Button>
           </FilterToolbar>
-
-        </div>
-
         <Card className="border-none shadow-none bg-transparent">
           <CardContent className="p-0">
             <div className="bg-white rounded-md border shadow-sm overflow-hidden">

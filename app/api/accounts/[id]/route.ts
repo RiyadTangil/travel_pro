@@ -1,3 +1,4 @@
+import { MONGODB_DB_NAME } from "@/lib/database-config"
 import { NextResponse } from 'next/server'
 import clientPromise from '@/lib/mongodb'
 import { ObjectId } from 'mongodb'
@@ -22,7 +23,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     const _id = new ObjectId(id)
 
     const client = await clientPromise
-    const db = client.db('manage_agency')
+    const db = client.db(MONGODB_DB_NAME)
     const col = db.collection('accounts')
 
     const update: any = { $set: { updatedAt: new Date() } }
@@ -51,7 +52,7 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     const _id = new ObjectId(id)
 
     const client = await clientPromise
-    const db = client.db('manage_agency')
+    const db = client.db(MONGODB_DB_NAME)
     const col = db.collection('accounts')
 
     const doc = await col.findOne({ _id })

@@ -1,3 +1,4 @@
+import { MONGODB_DB_NAME } from "@/lib/database-config"
 import { NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
@@ -40,7 +41,7 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
     const session = await getServerSession(authOptions as any)
     const companyId = session?.user?.companyId || null
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const col = db.collection("employees")
     const query: any = { _id: new ObjectId(id) }
     if (companyId) query.companyId = companyId
@@ -80,7 +81,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     const session = await getServerSession(authOptions as any)
     const companyId = session?.user?.companyId || null
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const col = db.collection("employees")
     const query: any = { _id: new ObjectId(params.id) }
     if (companyId) query.companyId = companyId
@@ -139,7 +140,7 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
     const session = await getServerSession(authOptions as any)
     const companyId = session?.user?.companyId || null
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const col = db.collection("employees")
     const query: any = { _id: new ObjectId(params.id) }
     if (companyId) query.companyId = companyId

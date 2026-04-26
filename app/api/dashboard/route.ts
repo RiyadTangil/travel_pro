@@ -1,3 +1,4 @@
+import { MONGODB_DB_NAME } from "@/lib/database-config"
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../auth/[...nextauth]/route";
@@ -14,7 +15,7 @@ export async function GET() {
 
     // Connect to MongoDB
     const client = await clientPromise;
-    const db = client.db("manage_agency");
+    const db = client.db(MONGODB_DB_NAME);
     
     // Get collections
     const b2cClients = db.collection("b2c_clients");

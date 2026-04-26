@@ -1,3 +1,4 @@
+import { MONGODB_DB_NAME } from "@/lib/database-config"
 import { NextResponse } from "next/server"
 import { Types } from "mongoose"
 import mongoose from "mongoose"
@@ -17,7 +18,7 @@ export async function GET(request: Request) {
     const companyId = request.headers.get("x-company-id") || null
 
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const collection = db.collection("vendors")
 
     const query: any = {}
@@ -73,7 +74,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Name is required" }, { status: 400 })
     }
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const collection = db.collection("vendors")
 
     const pb =

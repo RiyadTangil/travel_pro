@@ -1,3 +1,4 @@
+import { MONGODB_DB_NAME } from "@/lib/database-config"
 import { type NextRequest, NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
@@ -12,7 +13,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }
 
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const directTransactions = db.collection("direct_transactions")
 
     const transaction = await directTransactions.findOne({ _id: new ObjectId(id) })
@@ -54,7 +55,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     }
 
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const b2bClients = db.collection("b2b_clients")
     const directTransactions = db.collection("direct_transactions")
 
@@ -144,7 +145,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     }
 
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const b2bClients = db.collection("b2b_clients")
     const directTransactions = db.collection("direct_transactions")
 

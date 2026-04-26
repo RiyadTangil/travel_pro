@@ -1,3 +1,4 @@
+import { MONGODB_DB_NAME } from "@/lib/database-config"
 import { NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 import { getServerSession } from "next-auth"
@@ -28,7 +29,7 @@ export async function GET(req: Request) {
     if (!companyId) return NextResponse.json({ error: "Unauthorized: Company ID required" }, { status: 401 })
 
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const col = db.collection("invoices")
 
     const filter: any = { invoiceType: type }

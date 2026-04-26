@@ -18,11 +18,14 @@ function vendorNetFromDoc(v: any): number {
   return Number(v.presentBalance || 0)
 }
 
-async function getNextBillAdjustmentVoucherNo(session?: mongoose.ClientSession) {
+async function getNextBillAdjustmentVoucherNo(companyId: string, session?: mongoose.ClientSession) {
+  const cid = String(companyId || "").trim()
+  if (!cid) throw new Error("companyId is required for bill adjustment voucher")
+  const key = `bill_adjustment_voucher:${cid}`
   const opts: any = { new: true, upsert: true }
   if (session) opts.session = session
   const counter = await Counter.findOneAndUpdate(
-    { key: "bill_adjustment_voucher" },
+    { key },
     { $inc: { seq: 1 } },
     opts
   )
@@ -44,7 +47,7 @@ async function persistBillAdjustmentLedger(
   companyId: string,
   ledgerOpts: BillAdjustmentLedgerOpts
 ) {
-  const voucherNo = await getNextBillAdjustmentVoucherNo(session)
+  const voucherNo = await getNextBillAdjustmentVoucherNo(companyId, session)
   const now = new Date().toISOString()
   const adjustment = new BillAdjustment({
     ...data,
@@ -59,7 +62,9 @@ async function persistBillAdjustmentLedger(
   const amount = Number(data.amount)
   const isDebit = data.transactionType === "DEBIT"
   const ledgerTransactionType = ledgerOpts.clientLedgerTransactionType
-  const isMonetoryTranseciton = false
+  const isMonetoryTranseciton =
+    data.type === "Account" &&
+    !!data.accountId
 
   // Opening-balance callers may pass an explicit ledgerDirection to override the default
   // isDebit→"payout" / !isDebit→"receiv" mapping, because for opening balances the balance

@@ -1,5 +1,6 @@
 import { ObjectId } from 'mongodb'
 import clientPromise from '@/lib/mongodb'
+import { MONGODB_DB_NAME } from '@/lib/database-config'
 import { TransactionError } from '@/lib/errors/TransactionError'
 
 export interface CreateTransactionDTO {
@@ -22,7 +23,7 @@ export interface UpdateTransactionDTO {
 export class TransactionService {
   private async getDb() {
     const client = await clientPromise
-    return client.db("manage_agency")
+    return client.db(MONGODB_DB_NAME)
   }
 
   async createTransaction(data: CreateTransactionDTO) {

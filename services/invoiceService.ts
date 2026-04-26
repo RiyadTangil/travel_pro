@@ -8,6 +8,8 @@ import { InvoiceHotel } from "@/models/invoice-hotel"
 import { InvoiceTransport } from "@/models/invoice-transport"
 import { InvoicePassport } from "@/models/invoice-passport"
 import { Vendor } from "@/models/vendor"
+import { Agent } from "@/models/agent"
+import { Product } from "@/models/product"
 import { Employee } from "@/models/employee"
 import { Client } from "@/models/client"
 import { MoneyReceipt } from "@/models/money-receipt"
@@ -365,14 +367,15 @@ export async function getInvoiceById(id: string, companyId: string) {
   const vendorIds = Array.from(new Set((items || []).map(i => String((i as any).vendorId || "")).filter(Boolean)))
   const vendorObjectIds = vendorIds.filter(Types.ObjectId.isValid).map((s) => new Types.ObjectId(s))
   const productIds = Array.from(new Set((items || []).map(i => String((i as any).product || "")).filter(p => Types.ObjectId.isValid(p))))
-  const db = mongoose.connection?.db
 
   const [vendorDocs, productDocsRaw, employeeDoc, clientDoc, agentDoc] = await Promise.all([
     vendorObjectIds.length
       ? Vendor.find({ _id: { $in: vendorObjectIds }, companyId: companyIdObj }).lean()
       : Promise.resolve([]),
-    productIds.length && db
-      ? db.collection("products").find({ _id: { $in: productIds.map(pid => new Types.ObjectId(pid)) } }).toArray()
+    productIds.length
+      ? Product.find({ _id: { $in: productIds.map((pid) => new Types.ObjectId(pid)) } })
+          .lean()
+          .exec()
       : Promise.resolve([]),
     (inv.employeeId && Types.ObjectId.isValid(String(inv.employeeId)))
       ? Employee.findOne({ _id: inv.employeeId, companyId: companyIdObj }).lean()
@@ -380,8 +383,8 @@ export async function getInvoiceById(id: string, companyId: string) {
     (inv.clientId && Types.ObjectId.isValid(String(inv.clientId)))
       ? Client.findOne({ _id: inv.clientId, companyId: companyIdObj }).lean()
       : Promise.resolve(null),
-    (inv.agentId && Types.ObjectId.isValid(String(inv.agentId)) && db)
-      ? db.collection("agents").findOne({ _id: new Types.ObjectId(String(inv.agentId)), companyId: companyIdObj })
+    (inv.agentId && Types.ObjectId.isValid(String(inv.agentId)))
+      ? Agent.findOne({ _id: new Types.ObjectId(String(inv.agentId)), companyId: companyIdObj }).lean()
       : Promise.resolve(null),
   ])
 
@@ -837,11 +840,8 @@ export async function createNonCommissionInvoice(body: any, companyId: string) {
   // Look up "Air Ticket(Non-commission)" product for productId linkage
   let nonCommProductId: Types.ObjectId | undefined
   try {
-    const prodCol = mongoose.connection?.db?.collection("products")
-    if (prodCol) {
-      const prodDoc = await prodCol.findOne({ nameLower: "air ticket(non-commission)", deleted: { $ne: true } })
-      if (prodDoc) nonCommProductId = new Types.ObjectId(prodDoc._id)
-    }
+    const prodDoc = await Product.findOne({ nameLower: "air ticket(non-commission)", deleted: { $ne: true } }).lean()
+    if (prodDoc?._id) nonCommProductId = new Types.ObjectId(String((prodDoc as any)._id))
   } catch { /* ignore — productId is optional */ }
 
   const session = await mongoose.startSession()
@@ -1100,11 +1100,8 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
   // Look up "Air Ticket(Non-commission)" product for productId linkage
   let nonCommProductId: Types.ObjectId | undefined
   try {
-    const prodCol = mongoose.connection?.db?.collection("products")
-    if (prodCol) {
-      const prodDoc = await prodCol.findOne({ nameLower: "air ticket(non-commission)", deleted: { $ne: true } })
-      if (prodDoc) nonCommProductId = new Types.ObjectId(prodDoc._id)
-    }
+    const prodDoc = await Product.findOne({ nameLower: "air ticket(non-commission)", deleted: { $ne: true } }).lean()
+    if (prodDoc?._id) nonCommProductId = new Types.ObjectId(String((prodDoc as any)._id))
   } catch { /* ignore — productId is optional */ }
 
   const session = await mongoose.startSession()
@@ -1477,24 +1474,26 @@ export async function createInvoice(body: any, companyId: string) {
       if (hotels.length) await InvoiceHotel.insertMany(hotels.map((h: any) => ({ ...h, invoiceId, companyId: companyIdObj, createdAt: now, updatedAt: now })), { session })
       if (transports.length) await InvoiceTransport.insertMany(transports.map((tr: any) => ({ ...tr, invoiceId, companyId: companyIdObj, createdAt: now, updatedAt: now })), { session })
       if (passports.length) {
-        const col = mongoose.connection?.db?.collection("invoice_passports")
-        if (col) await col.insertMany(passports.map((p: any, idx: number) => ({
-          ...p,
-          id: p.id || String(Date.now() + idx), 
-          invoiceId, 
-          companyId: companyIdObj,
-          passportNo: p.passportNo || p.passport_no || "", 
-          name: p.name || "", 
-          email: p.email || "",
-          dateOfIssue: p.dateOfIssue || p.date_of_issue || "", 
-          dateOfExpire: p.dateOfExpire || p.date_of_expire || "",
-          paxType: p.paxType || p.pax_type || "", 
-          contactNo: p.contactNo || p.mobile || "",
-          dateOfBirth: p.dateOfBirth || p.dob || "", 
-          passportId: p.passportId || p.passport_id || "",
-          createdAt: now, 
-          updatedAt: now
-        })), { session })
+        await InvoicePassport.insertMany(
+          passports.map((p: any, idx: number) => ({
+            ...p,
+            id: p.id || String(Date.now() + idx),
+            invoiceId,
+            companyId: companyIdObj,
+            passportNo: p.passportNo || p.passport_no || "",
+            name: p.name || "",
+            email: p.email || "",
+            dateOfIssue: p.dateOfIssue || p.date_of_issue || "",
+            dateOfExpire: p.dateOfExpire || p.date_of_expire || "",
+            paxType: p.paxType || p.pax_type || "",
+            contactNo: p.contactNo || p.mobile || "",
+            dateOfBirth: p.dateOfBirth || p.dob || "",
+            passportId: p.passportId || p.passport_id || "",
+            createdAt: now,
+            updatedAt: now,
+          })),
+          { session },
+        )
       }
 
       // c. Update Client Balance
@@ -1645,24 +1644,26 @@ export async function updateInvoiceById(id: string, body: any, companyId: string
       if (hotels.length) await InvoiceHotel.insertMany(hotels.map((h: any) => ({ ...h, invoiceId: idObj, companyId: companyIdObj, createdAt: now, updatedAt: now })), { session })
       if (transports.length) await InvoiceTransport.insertMany(transports.map((tr: any) => ({ ...tr, invoiceId: idObj, companyId: companyIdObj, createdAt: now, updatedAt: now })), { session })
       if (passports.length) {
-        const col = mongoose.connection?.db?.collection("invoice_passports")
-        if (col) await col.insertMany(passports.map((p: any, idx: number) => ({
-          ...p,
-          id: p.id || String(Date.now() + idx), 
-          invoiceId: idObj, 
-          companyId: companyIdObj,
-          passportNo: p.passportNo || p.passport_no || "", 
-          name: p.name || "", 
-          email: p.email || "",
-          dateOfIssue: p.dateOfIssue || p.date_of_issue || "", 
-          dateOfExpire: p.dateOfExpire || p.date_of_expire || "",
-          paxType: p.paxType || p.pax_type || "", 
-          contactNo: p.contactNo || p.mobile || "",
-          dateOfBirth: p.dateOfBirth || p.dob || "", 
-          passportId: p.passportId || p.passport_id || "",
-          createdAt: now, 
-          updatedAt: now
-        })), { session })
+        await InvoicePassport.insertMany(
+          passports.map((p: any, idx: number) => ({
+            ...p,
+            id: p.id || String(Date.now() + idx),
+            invoiceId: idObj,
+            companyId: companyIdObj,
+            passportNo: p.passportNo || p.passport_no || "",
+            name: p.name || "",
+            email: p.email || "",
+            dateOfIssue: p.dateOfIssue || p.date_of_issue || "",
+            dateOfExpire: p.dateOfExpire || p.date_of_expire || "",
+            paxType: p.paxType || p.pax_type || "",
+            contactNo: p.contactNo || p.mobile || "",
+            dateOfBirth: p.dateOfBirth || p.dob || "",
+            passportId: p.passportId || p.passport_id || "",
+            createdAt: now,
+            updatedAt: now,
+          })),
+          { session },
+        )
       }
 
       // 4. Update Client Balance

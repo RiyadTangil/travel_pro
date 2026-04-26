@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
+import type { ColumnsType } from "antd/es/table"
 import axios from "axios"
 import { useSession } from "next-auth/react"
 import { PageWrapper } from "@/components/shared/page-wrapper"
@@ -26,6 +27,8 @@ type NonInvoiceIncomeRow = {
   note: string
 }
 
+const NARROW_MAX = 768
+
 export default function NonInvoiceIncomePage() {
   const { data: session } = useSession()
   const [rows, setRows] = useState<NonInvoiceIncomeRow[]>([])
@@ -41,6 +44,7 @@ export default function NonInvoiceIncomePage() {
   const [modalMode, setModalMode] = useState<"add" | "edit">("add")
   const [editingRow, setEditingRow] = useState<NonInvoiceIncomeRow | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [narrowViewport, setNarrowViewport] = useState(false)
 
   const client = axios.create({
     baseURL: "",
@@ -82,6 +86,14 @@ export default function NonInvoiceIncomePage() {
   useEffect(() => {
     if (session) load()
   }, [load, session])
+
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${NARROW_MAX}px)`)
+    const apply = () => setNarrowViewport(mq.matches)
+    apply()
+    mq.addEventListener("change", apply)
+    return () => mq.removeEventListener("change", apply)
+  }, [])
 
   const handleAdd = () => {
     setEditingRow(null)
@@ -148,44 +160,51 @@ export default function NonInvoiceIncomePage() {
       }
     : undefined
 
-  const columns = [
+  const columns: ColumnsType<NonInvoiceIncomeRow> = [
     {
       title: "SL.",
       key: "sl",
-      width: 60,
+      width: 56,
+      align: "center",
       render: (_: unknown, __: NonInvoiceIncomeRow, index: number) => (page - 1) * pageSize + index + 1,
     },
     {
       title: "Date",
       dataIndex: "date",
       key: "date",
+      width: 120,
       render: (date: string) =>
         new Date(date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
     },
-    { title: "Voucher No", dataIndex: "voucherNo", key: "voucherNo" },
-    { title: "Company", dataIndex: "companyName", key: "companyName" },
-    { title: "Transaction Type", dataIndex: "paymentMethod", key: "paymentMethod" },
-    { title: "Transaction Details", dataIndex: "accountName", key: "accountName" },
+    { title: "Voucher No", dataIndex: "voucherNo", key: "voucherNo", width: 120 },
+    { title: "Company", dataIndex: "companyName", key: "companyName", width: 160 },
+    { title: "Transaction Type", dataIndex: "paymentMethod", key: "paymentMethod", width: 140 },
+    { title: "Transaction Details", dataIndex: "accountName", key: "accountName", width: 180 },
     {
       title: "Amount",
       dataIndex: "amount",
       key: "amount",
-      align: "right" as const,
+      align: "right",
+      width: 110,
       render: (v: number) => <span className="font-semibold">{Number(v).toLocaleString()}</span>,
     },
     {
       title: "Note",
       dataIndex: "note",
       key: "note",
+      width: 160,
       ellipsis: true,
       render: (text: string) => <span title={text}>{text || "—"}</span>,
     },
     {
       title: "Action",
       key: "action",
-      width: 260,
+      ...(narrowViewport ? {} : { fixed: "right" as const }),
+      width: narrowViewport ? 64 : 260,
+      align: narrowViewport ? "center" : undefined,
       render: (_: unknown, r: NonInvoiceIncomeRow) => (
         <TableRowActions
+          compact={narrowViewport}
           showView
           onView={() => {}}
           onEdit={() => handleEdit(r)}
@@ -200,34 +219,37 @@ export default function NonInvoiceIncomePage() {
 
   return (
     <PageWrapper breadcrumbs={[{ label: "Accounts", href: "/dashboard/accounts" }, { label: "Non-Invoice Income" }]}>
-      <div className="mx-4 mb-4 space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mx-4 mb-4 min-w-0 space-y-4">
+
           <FilterToolbar
             showDateRange
             dateRange={dateRange}
-            onDateRangeChange={setDateRange}
+            onDateRangeChange={(r) => {
+              setDateRange(r)
+              setPage(1)
+            }}
             showSearch
             search={search}
             onSearchChange={setSearch}
             searchPlaceholder="Search voucher, company, account, note..."
             showRefresh
             onRefresh={load}
-            className="flex-1"
+            className="flex-1 min-w-0"
           >
-            <Button className="bg-sky-500 hover:bg-sky-600 shrink-0" onClick={handleAdd}>
+            <Button type="button" onClick={handleAdd} className="shrink-0 whitespace-nowrap">
               <Plus className="w-4 h-4 mr-2" /> Add Non-Invoice Income
             </Button>
           </FilterToolbar>
-        </div>
 
         <Card className="border-none shadow-none bg-transparent">
           <CardContent className="p-0">
-            <div className="bg-white rounded-md border shadow-sm overflow-hidden">
+            <div className="min-w-0 overflow-hidden rounded-md border bg-white shadow-sm">
               <Table<NonInvoiceIncomeRow>
                 columns={columns}
                 dataSource={rows}
                 rowKey="id"
                 loading={loading}
+                scroll={{ x: "max-content" }}
                 pagination={{
                   current: page,
                   pageSize,
@@ -235,12 +257,18 @@ export default function NonInvoiceIncomePage() {
                   showSizeChanger: true,
                   onChange: (p, ps) => {
                     setPage(p)
-                    setPageSize(ps)
+                    setPageSize(ps ?? pageSize)
                   },
                   showTotal: (t) => `Total ${t} items`,
                 }}
                 className="border-none"
-                locale={{ emptyText: loading ? "Loading..." : "No records found." }}
+                locale={{
+                  emptyText: (
+                    <div className="py-12 text-center text-gray-500">
+                      <p className="text-sm">{loading ? "Loading..." : "No records found."}</p>
+                    </div>
+                  ),
+                }}
               />
             </div>
           </CardContent>

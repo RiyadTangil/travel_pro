@@ -1,3 +1,4 @@
+import { MONGODB_DB_NAME } from "@/lib/database-config"
 import { NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
@@ -42,7 +43,7 @@ export async function GET(request: Request) {
     const dateTo = (searchParams.get("dateTo") || "").trim()
 
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const collection = db.collection<ProductDoc>("products")
 
     const query: any = { deleted: { $ne: true } }
@@ -80,7 +81,7 @@ export async function POST(request: Request) {
     }
 
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const collection = db.collection<ProductDoc>("products")
 
     // Prevent duplicate name per company (case-insensitive, non-deleted)

@@ -1,3 +1,4 @@
+import { MONGODB_DB_NAME } from "@/lib/database-config"
 import { type NextRequest, NextResponse } from "next/server"
 import { ObjectId } from "mongodb"
 import clientPromise from "@/lib/mongodb"
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }
 
     const client = await clientPromise
-    const db = client.db("manage_agency")
+    const db = client.db(MONGODB_DB_NAME)
     const transactions = db.collection("transactions")
 
     const transaction = await transactions.findOne({ _id: new ObjectId(id) })

@@ -1,4 +1,5 @@
 import { MongoClient, type Db } from "mongodb"
+import { MONGODB_DB_NAME } from "@/lib/database-config"
 
 if (!process.env.MONGODB_URI) {
   throw new Error('Invalid/Missing environment variable: "MONGODB_URI"')
@@ -32,7 +33,7 @@ if (process.env.NODE_ENV === "development") {
 export async function connectToDatabase(): Promise<{ client: MongoClient; db: Db }> {
   try {
     const client = await clientPromise
-    const db = client.db("travel_agency")
+    const db = client.db(MONGODB_DB_NAME)
     return { client, db }
   } catch (error) {
     console.error("Failed to connect to database:", error)

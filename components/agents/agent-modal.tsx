@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { DateInput } from "@/components/ui/date-input"
+import { parseYmdLocal, toYmd } from "@/components/invoices/add-invoice-modal"
 
 type Props = {
   open: boolean
@@ -147,7 +149,12 @@ export function AgentModal({ open, onClose, mode = "add", initialData, onSubmit 
 
           <div className="space-y-2">
             <Label>Date of birth</Label>
-            <Input type="date" value={dob} onChange={(e) => setDob(e.target.value)} disabled={disabled} />
+            <DateInput
+              value={parseYmdLocal(dob)}
+              onChange={(d) => setDob(d ? toYmd(d) : "")}
+              disabled={disabled}
+              placeholder="Pick a date"
+            />
           </div>
 
           <div className="space-y-2">

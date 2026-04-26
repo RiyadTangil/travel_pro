@@ -1,3 +1,4 @@
+import { MONGODB_DB_NAME } from "@/lib/database-config"
 import { type NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getServerSession } from "next-auth";
@@ -17,7 +18,7 @@ export async function GET(
 
     // Connect to the database
     const client = await clientPromise;
-    const db = client.db("manage_agency");
+    const db = client.db(MONGODB_DB_NAME);
     const companies = db.collection("companies");
 
     // Validate companyId

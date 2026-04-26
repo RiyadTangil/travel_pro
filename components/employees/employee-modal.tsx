@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { DateInput } from "@/components/ui/date-input"
+import { parseYmdLocal, toYmd } from "@/components/invoices/add-invoice-modal"
 
 type Props = {
   open: boolean
@@ -206,17 +208,32 @@ export function EmployeeModal({ open, onClose, onSubmit, mode = "add", initialDa
 
           <div className="space-y-2">
             <Label>Birth Date</Label>
-            <Input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} disabled={disabled} />
+            <DateInput
+              value={parseYmdLocal(birthDate)}
+              onChange={(d) => setBirthDate(d ? toYmd(d) : "")}
+              disabled={disabled}
+              placeholder="Pick a date"
+            />
           </div>
 
           <div className="space-y-2">
             <Label>Appointment Date</Label>
-            <Input type="date" value={appointmentDate} onChange={(e) => setAppointmentDate(e.target.value)} disabled={disabled} />
+            <DateInput
+              value={parseYmdLocal(appointmentDate)}
+              onChange={(d) => setAppointmentDate(d ? toYmd(d) : "")}
+              disabled={disabled}
+              placeholder="Pick a date"
+            />
           </div>
 
           <div className="space-y-2">
             <Label>Joining Date</Label>
-            <Input type="date" value={joiningDate} onChange={(e) => setJoiningDate(e.target.value)} disabled={disabled} />
+            <DateInput
+              value={parseYmdLocal(joiningDate)}
+              onChange={(d) => setJoiningDate(d ? toYmd(d) : "")}
+              disabled={disabled}
+              placeholder="Pick a date"
+            />
           </div>
 
           <div className="space-y-2 md:col-span-2">
