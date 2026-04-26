@@ -17,16 +17,16 @@ interface PageWrapperProps {
 
 export function PageWrapper({ children, breadcrumbs }: PageWrapperProps) {
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white shadow-sm">
-        <div className="mx-auto px-4 py-4">
+    <div className="flex min-h-screen min-w-0 flex-col overflow-x-hidden bg-gray-50">
+      <header className="w-full min-w-0 max-w-full bg-white shadow-sm">
+        <div className="mx-auto w-full min-w-0 max-w-full px-2 py-2 sm:px-4 sm:py-3">
           <DashboardHeader />
         </div>
       </header>
 
-      <main className="min-w-0 flex-grow py-6">
-        <div className="mb-4 px-4">
-          <Breadcrumb>
+      <main className="min-w-0 flex-1 py-4 sm:py-6">
+        <div className="mb-4 min-w-0 px-2 sm:px-4">
+          <Breadcrumb className="min-w-0">
             <BreadcrumbList>
               <BreadcrumbItem>
                 <BreadcrumbLink href="/dashboard">Dashboard</BreadcrumbLink>

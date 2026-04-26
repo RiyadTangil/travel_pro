@@ -1,9 +1,11 @@
 "use client"
 
-import { Table, Tag, Button as AntButton } from "antd"
-import { Button } from "@/components/ui/button"
+import { useMemo, useEffect, useState } from "react"
+import { Table, Tag } from "antd"
+import type { ColumnsType } from "antd/es/table"
+import { Card, CardContent } from "@/components/ui/card"
+import { TableRowActions } from "@/components/shared/table-row-actions"
 import type { MoneyReceipt } from "./types"
-import { DeleteButton } from "@/components/shared/delete-button"
 
 type Props = {
   rows: MoneyReceipt[]
@@ -14,120 +16,154 @@ type Props = {
   loadingRowId?: string | null
 }
 
-export default function ReceiptListTable({ rows, onView, onEdit, onDelete, loading = false, loadingRowId = null }: Props) {
-  const columns = [
-    {
-      title: "SL.",
-      key: "sl",
-      width: 60,
-      render: (_: any, __: any, index: number) => index + 1,
-    },
-    {
-      title: "Payment Date",
-      dataIndex: "paymentDate",
-      key: "paymentDate",
-      render: (date: string) => new Date(date).toLocaleDateString("en-GB"),
-    },
-    {
-      title: "Voucher No",
-      dataIndex: "voucherNo",
-      key: "voucherNo",
-      render: (text: string) => <Tag color="blue">{text}</Tag>,
-    },
-    {
-      title: "Client Name",
-      dataIndex: "clientName",
-      key: "clientName",
-      render: (text: string) => <span className="font-medium">{text}</span>,
-    },
-    {
-      title: "Payment To",
-      dataIndex: "paymentTo",
-      key: "paymentTo",
-      render: (text: string) => <Tag color="cyan">{text.toUpperCase()}</Tag>,
-    },
-    {
-      title: "Payment Type",
-      dataIndex: "paymentMethod",
-      key: "paymentMethod",
-    },
-    {
-      title: "Account Name",
-      dataIndex: "accountName",
-      key: "accountName",
-    },
-    {
-      title: "Manual Receipt No",
-      dataIndex: "manualReceiptNo",
-      key: "manualReceiptNo",
-      render: (text: string) => text || "-",
-    },
-    {
-      title: "Paid Amount",
-      dataIndex: "paidAmount",
-      key: "paidAmount",
-      align: "right" as const,
-      render: (amount: number) => <span className="font-semibold text-green-600">{amount.toLocaleString()}</span>,
-    },
-    {
-      title: "Doc One",
-      dataIndex: "docOneName",
-      key: "docOneName",
-      render: (text: string) => text || "-",
-    },
-    {
-      title: "Doc Two",
-      dataIndex: "docTwoName",
-      key: "docTwoName",
-      render: (text: string) => text || "-",
-    },
-    {
-      title: "Action",
-      key: "action",
-      width: 220,
-      render: (_: any, r: MoneyReceipt) => (
-        <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => onView(r.id)}
-            disabled={loadingRowId === r.id}
-          >
-            View
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onEdit(r.id)}
-            disabled={loadingRowId === r.id}
-          >
-            Edit
-          </Button>
-          <DeleteButton
+const NARROW_MAX = 768
+
+export default function ReceiptListTable({
+  rows,
+  onView,
+  onEdit,
+  onDelete,
+  loading = false,
+  loadingRowId = null,
+}: Props) {
+  const [narrowViewport, setNarrowViewport] = useState(false)
+
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${NARROW_MAX}px)`)
+    const apply = () => setNarrowViewport(mq.matches)
+    apply()
+    mq.addEventListener("change", apply)
+    return () => mq.removeEventListener("change", apply)
+  }, [])
+
+  const columns: ColumnsType<MoneyReceipt> = useMemo(
+    () => [
+      {
+        title: "SL.",
+        key: "sl",
+        width: 56,
+        align: "center",
+        render: (_: unknown, __: MoneyReceipt, index: number) => index + 1,
+      },
+      {
+        title: "Payment Date",
+        dataIndex: "paymentDate",
+        key: "paymentDate",
+        width: 120,
+        render: (date: string) => new Date(date).toLocaleDateString("en-GB"),
+      },
+      {
+        title: "Voucher No",
+        dataIndex: "voucherNo",
+        key: "voucherNo",
+        width: 120,
+        render: (text: string) => <Tag color="blue">{text}</Tag>,
+      },
+      {
+        title: "Client Name",
+        dataIndex: "clientName",
+        key: "clientName",
+        width: 180,
+        render: (text: string) => <span className="font-medium">{text}</span>,
+      },
+      {
+        title: "Payment To",
+        dataIndex: "paymentTo",
+        key: "paymentTo",
+        width: 120,
+        render: (text: string) => <Tag color="cyan">{text.toUpperCase()}</Tag>,
+      },
+      {
+        title: "Payment Type",
+        dataIndex: "paymentMethod",
+        key: "paymentMethod",
+        width: 130,
+      },
+      {
+        title: "Account Name",
+        dataIndex: "accountName",
+        key: "accountName",
+        width: 160,
+      },
+      {
+        title: "Manual Receipt No",
+        dataIndex: "manualReceiptNo",
+        key: "manualReceiptNo",
+        width: 130,
+        render: (text: string) => text || "-",
+      },
+      {
+        title: "Paid Amount",
+        dataIndex: "paidAmount",
+        key: "paidAmount",
+        align: "right",
+        width: 110,
+        render: (amount: number) => <span className="font-semibold text-green-600">{amount.toLocaleString()}</span>,
+      },
+      {
+        title: "Doc One",
+        dataIndex: "docOneName",
+        key: "docOneName",
+        width: 100,
+        render: (text: string) => text || "-",
+      },
+      {
+        title: "Doc Two",
+        dataIndex: "docTwoName",
+        key: "docTwoName",
+        width: 100,
+        render: (text: string) => text || "-",
+      },
+      {
+        title: "Action",
+        key: "action",
+        fixed: "right",
+        width: narrowViewport ? 64 : 220,
+        align: narrowViewport ? "center" : undefined,
+        render: (_: unknown, r: MoneyReceipt) => (
+          <TableRowActions
+            compact={narrowViewport}
+            onView={() => onView(r.id)}
+            onEdit={() => onEdit(r.id)}
             onDelete={() => onDelete(r.id)}
-            isLoading={loadingRowId === r.id}
-            title="Delete Money Receipt"
-            description={`Are you sure you want to delete money receipt ${r.voucherNo}?`}
+            deleteTitle="Delete Money Receipt"
+            deleteDescription={`Are you sure you want to delete money receipt ${r.voucherNo}?`}
+            deleteLoading={loadingRowId === r.id}
+            editDisabled={loadingRowId === r.id}
           />
-        </div>
-      ),
-    },
-  ]
+        ),
+      },
+    ],
+    [narrowViewport, loadingRowId, onView, onEdit, onDelete]
+  )
 
   return (
-    <div className="rounded-md border bg-white shadow-sm overflow-hidden">
-      <Table
-        columns={columns}
-        dataSource={rows}
-        rowKey="id"
-        loading={loading}
-        pagination={{
-          pageSize: 10,
-          showSizeChanger: true,
-          showTotal: (total) => `Total ${total} items`,
-        }}
-        className="border-none"
-      />
-    </div>
+    <Card className="border-none bg-transparent shadow-none">
+      <CardContent className="p-0">
+        <div className="min-w-0 overflow-hidden rounded-md border bg-white shadow-sm">
+          <Table<MoneyReceipt>
+            columns={columns}
+            dataSource={rows}
+            rowKey="id"
+            loading={loading}
+            scroll={{ x: "max-content" }}
+            pagination={{
+              pageSize: 10,
+              showSizeChanger: true,
+              showTotal: (total) => `Total ${total} items`,
+            }}
+            className="border-none"
+            locale={{
+              emptyText: (
+                <div className="py-12 text-center text-gray-500">
+                  <div className="mb-2 text-lg font-medium">No receipts found</div>
+                  <p className="text-sm">Create a money receipt or adjust filters</p>
+                </div>
+              ),
+            }}
+          />
+        </div>
+      </CardContent>
+    </Card>
   )
 }

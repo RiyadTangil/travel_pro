@@ -1,11 +1,11 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useEffect, useState } from "react"
 import { Table } from "antd"
 import type { ColumnsType } from "antd/es/table"
 import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { InvoiceStatusBadge } from "./invoice-status-badge"
+import { NonCommissionInvoiceActions } from "./non-commission-invoice-actions"
 import { format } from "date-fns"
 
 function formatCurrency(amount: number) {
@@ -39,6 +39,8 @@ export interface NonCommissionTableProps {
   onPartialCost?: (invoice: any) => void
 }
 
+const NARROW_MAX = 768
+
 export function NonCommissionTable({
   invoices,
   loading = false,
@@ -52,6 +54,16 @@ export function NonCommissionTable({
   onMoneyReceipt,
   onPartialCost,
 }: NonCommissionTableProps) {
+  const [narrowViewport, setNarrowViewport] = useState(false)
+
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${NARROW_MAX}px)`)
+    const apply = () => setNarrowViewport(mq.matches)
+    apply()
+    mq.addEventListener("change", apply)
+    return () => mq.removeEventListener("change", apply)
+  }, [])
+
   const columns: ColumnsType<any> = useMemo(
     () => [
       {
@@ -144,64 +156,28 @@ export function NonCommissionTable({
         title: "Action",
         key: "action",
         fixed: "right",
-        width: 320,
+        width: narrowViewport ? 64 : 280,
+        align: narrowViewport ? "center" : undefined,
         render: (_: unknown, record: any) => (
-          <div className="flex flex-wrap items-center gap-1.5 justify-center">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => onView?.(record)}
-              className="h-7 px-2 text-[11px] bg-sky-500 hover:bg-sky-600 text-white border-none"
-            >
-              View
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => onEdit?.(record)}
-              className="h-7 px-2 text-[11px] bg-sky-400 hover:bg-sky-500 text-white border-none"
-            >
-              Edit
-            </Button>
-            {record.dueAmount > 0 && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => onDelete?.(record)}
-                className="h-7 px-2 text-[11px] bg-red-500 hover:bg-red-600 text-white border-none"
-              >
-                Delete
-              </Button>
-            )}
-            {record.dueAmount > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onMoneyReceipt?.(record)}
-                className="h-7 px-2 text-[11px] bg-sky-400 hover:bg-sky-500 text-white border-none"
-              >
-                Money Receipt
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onPartialCost?.(record)}
-              className="h-7 px-2 text-[11px] bg-sky-500 hover:bg-sky-600 text-white border-none"
-            >
-              Partial Cost
-            </Button>
-          </div>
+          <NonCommissionInvoiceActions
+            invoice={record}
+            onView={onView}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            onMoneyReceipt={onMoneyReceipt}
+            onPartialCost={onPartialCost}
+            compact={narrowViewport}
+          />
         ),
       },
     ],
-    [page, pageSize, onView, onEdit, onDelete, onMoneyReceipt, onPartialCost]
+    [page, pageSize, narrowViewport, onView, onEdit, onDelete, onMoneyReceipt, onPartialCost]
   )
 
   return (
     <Card className="border-none shadow-none bg-transparent">
       <CardContent className="p-0">
-        <div className="bg-white rounded-md border shadow-sm overflow-hidden">
+        <div className="min-w-0 overflow-hidden rounded-md border bg-white shadow-sm">
           <Table<any>
             rowKey={(r) => r.id ?? r._id}
             columns={columns}

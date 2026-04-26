@@ -150,7 +150,7 @@ export default function MoneyReceiptsPage() {
 
   return (
     <PageWrapper breadcrumbs={[{ label: "Money Receipts" }]}>
-      <div className="space-y-4 px-4">
+      <div className="min-w-0 space-y-4 px-2 sm:px-4">
         <FilterToolbar
           showDateRange
           dateRange={dateRange}
