@@ -12,8 +12,11 @@ import { Account } from "@/models/account"
 
 function parseNumber(n: any, def = 0): number { const x = Number(n); return isFinite(x) ? x : def }
 
-async function nextVoucher(prefix: "MR" | "EX") {
-  const key = prefix === "MR" ? "voucher_mr" : "voucher_ex"
+async function nextVoucher(prefix: "MR" | "EX", companyId: string) {
+  const companyKey = String(companyId || "").trim()
+  if (!companyKey) throw new AppError("Company ID is required", 401)
+  const baseKey = prefix === "MR" ? "voucher_mr" : "voucher_ex"
+  const key = `${baseKey}:${companyKey}`
   const doc = await Counter.findOneAndUpdate(
     { key },
     { $inc: { seq: 1 }, $set: { updatedAt: new Date().toISOString() } },
@@ -97,7 +100,7 @@ export async function createMoneyReceipt(body: any, companyId: string) {
   }
 
   const perform = async (sess?: any) => {
-    const voucherNo = await nextVoucher("MR")
+    const voucherNo = await nextVoucher("MR", companyId)
     const newAccountBalance = parseNumber(accountDoc.lastBalance, 0) + paidAmount
 
     // Create Money Receipt
@@ -379,7 +382,7 @@ export async function createMoneyReceiptInSession(
 
   // Reuse the shared perform logic by constructing a minimal call
   // We pass the external session so all writes join the same transaction
-  const voucherNo = await nextVoucher("MR")
+  const voucherNo = await nextVoucher("MR", companyId)
   const newAccountBalance = parseNumber((accountDoc as any).lastBalance, 0) + paidAmount
 
   const mrDoc: any = {
