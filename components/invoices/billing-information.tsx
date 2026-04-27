@@ -79,7 +79,7 @@ const initialItem: Omit<BillingItem, 'id'> = {
 }
 
 interface BillingInformationProps {
-  invoiceType?: "standard" | "visa" | "non_commission"
+  invoiceType?: "other" | "visa" | "non_commission"
   onRequestAddVendor?: () => void
   onChange?: (payload: {
     items: BillingItem[]
@@ -92,7 +92,7 @@ interface BillingInformationProps {
   errors?: Record<string, string>
 }
 
-export function BillingInformation({ invoiceType = "standard", onRequestAddVendor, onChange, initialItems, initialTotals, vendorPreloaded, productOptionsExternal, errors = {} }: BillingInformationProps) {
+export function BillingInformation({ invoiceType = "other", onRequestAddVendor, onChange, initialItems, initialTotals, vendorPreloaded, productOptionsExternal, errors = {} }: BillingInformationProps) {
   // Always call hooks in a consistent order; avoid conditional hook calls.
   const productOptionsInternal = useProductOptions()
   const productOptions = (productOptionsExternal && productOptionsExternal.length)
@@ -107,7 +107,7 @@ export function BillingInformation({ invoiceType = "standard", onRequestAddVendo
       const otherProduct = productOptions.find(p => p.name === "OTHER")
       const defaultProduct = invoiceType === "visa"
         ? (visaProduct?.id || "Invoice(Visa)")
-        : invoiceType === "standard"
+        : invoiceType === "other"
           ? (otherProduct?.id || "")
           : ""
       setItems([{ id: "1", ...initialItem, product: defaultProduct }])
@@ -123,7 +123,7 @@ export function BillingInformation({ invoiceType = "standard", onRequestAddVendo
     const otherProduct = productOptions.find(p => p.name === "OTHER")
     const defaultProduct = invoiceType === "visa"
       ? (visaProduct?.id || "Invoice(Visa)")
-      : invoiceType === "standard"
+      : invoiceType === "other"
         ? (otherProduct?.id || "")
         : ""
     const newItem: BillingItem = { id: Date.now().toString(), ...initialItem, product: defaultProduct }
@@ -287,7 +287,7 @@ type BillingItemRowProps = {
   item: BillingItem
   index: number
   canRemove: boolean
-  invoiceType?: "standard" | "visa" | "non_commission"
+  invoiceType?: "other" | "visa" | "non_commission"
   productOptions: Array<{ id: string; name: string }>
   vendorPreloaded?: Array<{ id: string; name: string; email?: string; mobile?: string }>
   onUpdate: (id: string, field: keyof Omit<BillingItem, 'id'>, rawValue: any) => void
@@ -420,7 +420,7 @@ const BillingItemRow = memo(function BillingItemRow({ item, index, canRemove, in
             </div>
           )}
 
-          {invoiceType === "standard" && (
+          {invoiceType === "other" && (
             <div className="space-y-2">
               <Label className="text-xs font-semibold">Product <span className="text-red-500">*</span></Label>
               <CustomDropdown

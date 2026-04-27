@@ -147,10 +147,10 @@ const TransportEntrySchema = z.object({
   dropOffPlace: z.string().optional().default(""),
 }).passthrough()
 
-// ─── Standard / Visa invoice payload ─────────────────────────────────────────
+// ─── other / Visa invoice payload ─────────────────────────────────────────
 
 export const StandardInvoiceSchema = z.object({
-  invoiceType: z.enum(["standard", "visa"]).default("standard"),
+  invoiceType: z.enum(["other", "visa"]).default("other"),
   general: z.object({
     invoiceNo: z.string().trim().min(1, "Invoice number is required"),
     salesDate: DateString,

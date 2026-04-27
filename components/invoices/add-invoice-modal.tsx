@@ -280,7 +280,7 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
     let active = true
     ;(async () => {
       try {
-        const res = await fetch('/api/invoices/next-no?type=standard')
+        const res = await fetch('/api/invoices/next-no?type=other')
         if (!res.ok) return
         const data = await res.json()
         if (!active) return
@@ -364,7 +364,7 @@ export function AddInvoiceModal({ isOpen, onClose, onInvoiceAdded, initialInvoic
         hotel: hotelData,
         transport: transportData,
         moneyReceipt: moneyReceiptData,
-        invoiceType: "standard"
+        invoiceType: "other"
       }
       const url = initialInvoice?.id ? `/api/invoices/${initialInvoice.id}` : `/api/invoices`
       const method = initialInvoice?.id ? "PUT" : "POST"

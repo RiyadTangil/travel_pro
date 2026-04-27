@@ -247,7 +247,7 @@ function pickVendorIdFromItem(i: any): any {
 }
 
 function normalizePayload(body: any) {
-  const invoiceType = body.invoiceType || "standard"
+  const invoiceType = body.invoiceType || "other"
   const general = body.general || body
   const now = new Date().toISOString()
 
@@ -472,7 +472,14 @@ export async function listInvoices(params: {
   if (params.clientId) filter.clientId = new Types.ObjectId(params.clientId)
   if (params.status) filter.status = params.status
   if (params.invoiceType) {
-    filter.invoiceType = params.invoiceType
+    // Backward compatibility during rename: treat legacy "standard" as "other".
+    if (params.invoiceType === "other") {
+      filter.invoiceType = { $in: ["other", "standard"] }
+    } else if (params.invoiceType === "standard") {
+      filter.invoiceType = { $in: ["other", "standard"] }
+    } else {
+      filter.invoiceType = params.invoiceType
+    }
   }
   if (params.salesBy) filter.salesByName = params.salesBy
 
@@ -593,7 +600,7 @@ export async function listInvoices(params: {
               },
               salesBy: { $ifNull: ["$salesByName", ""] },
               status: { $ifNull: ["$status", "due"] },
-              invoiceType: { $ifNull: ["$invoiceType", "standard"] },
+              invoiceType: { $ifNull: ["$invoiceType", "other"] },
               createdAt: { $ifNull: ["$createdAt", { $toString: "$$NOW" }] },
               updatedAt: { $ifNull: ["$updatedAt", { $toString: "$$NOW" }] },
               country: {
@@ -1588,7 +1595,7 @@ export async function updateInvoiceById(id: string, body: any, companyId: string
     employeeId,
     agentId: Types.ObjectId.isValid(general.agentId) ? new Types.ObjectId(general.agentId) : inv.agentId,
     ...names,
-    invoiceType: payload.invoiceType || inv.invoiceType || "standard",
+    invoiceType: payload.invoiceType || inv.invoiceType || "other",
     billing: summary,
     showPrevDue: payload.showPrevDue,
     showDiscount: payload.showDiscount,

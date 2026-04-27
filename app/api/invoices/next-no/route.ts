@@ -5,25 +5,34 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import { ObjectId } from "mongodb"
 
-function computeNextInvoiceNo(prev?: string | null, type: string = "standard"): string {
-  const DEFAULT = type === "non_commission" ? "ANC-0001" : (type === "visa" ? "IV-0001" : "INV-0001")
-  if (!prev || !prev.trim()) return DEFAULT
-  const s = prev.trim()
-  // Capture prefix and numeric tail, allow optional hyphen/space
-  const m = s.match(/^(.+?)([-\s]?)(\d+)$/)
-  if (!m) return DEFAULT
-  const prefix = m[1]
-  const sep = m[2] || (s.includes("-") ? "-" : "")
-  const numStr = m[3]
-  const nextNum = (parseInt(numStr, 10) || 0) + 1
-  const padded = numStr.length > 1 ? String(nextNum).padStart(numStr.length, "0") : String(nextNum)
-  return `${prefix}${sep}${padded}`
+function normalizeType(type?: string | null): "other" | "visa" | "non_commission" {
+  const t = String(type || "other").trim().toLowerCase()
+  if (t === "standard") return "other"
+  if (t === "visa") return "visa"
+  if (t === "non_commission") return "non_commission"
+  return "other"
+}
+
+function prefixForType(type: "other" | "visa" | "non_commission"): string {
+  if (type === "non_commission") return "ANC"
+  if (type === "visa") return "IV"
+  return "IO"
+}
+
+function computeNextInvoiceNo(prev: string | null | undefined, type: "other" | "visa" | "non_commission"): string {
+  const prefix = prefixForType(type)
+  const s = String(prev || "").trim()
+  const m = s.match(/(\d+)$/)
+  const prevNum = m ? parseInt(m[1], 10) || 0 : 0
+  const nextNum = prevNum + 1
+  return `${prefix}-${String(nextNum).padStart(4, "0")}`
 }
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
-    const type = searchParams.get("type") || "standard"
+    const requestedType = searchParams.get("type")
+    const type = normalizeType(requestedType)
     const session = await getServerSession(authOptions as any)
     const companyId = session?.user?.companyId
     if (!companyId) return NextResponse.json({ error: "Unauthorized: Company ID required" }, { status: 401 })
@@ -32,7 +41,10 @@ export async function GET(req: Request) {
     const db = client.db(MONGODB_DB_NAME)
     const col = db.collection("invoices")
 
-    const filter: any = { invoiceType: type }
+    const filter: any =
+      type === "other"
+        ? { invoiceType: { $in: ["other", "standard"] } }
+        : { invoiceType: type }
     if (companyId) {
       // Support both ObjectId and string-typed companyId in stored documents
       filter.$or = [
