@@ -2,6 +2,7 @@ import { MONGODB_DB_NAME } from "@/lib/database-config"
 import { NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
+import { Client } from "@/models/client"
 
 // Aggregated lookups for Add Invoice modal (all DB lists scoped by x-company-id).
 // Static: airlines, airports. Requires x-company-id for tenant collections.
@@ -107,12 +108,11 @@ export async function GET(request: Request) {
       .toArray()
     const transportTypes = ttDocs.map((t: any) => ({ id: String(t._id), name: t.name, active: t.active !== false }))
 
-    const clientsDocs = await db
-      .collection("clients_manager")
-      .find(andCompany({ isDeleted: { $ne: true } }, companyIdHeader))
+    const clientsDocs = await
+      Client.find(andCompany({ isDeleted: { $ne: true } }, companyIdHeader))
       .sort({ createdAt: -1 })
       .limit(50)
-      .toArray()
+      .lean();
     const clients = clientsDocs.map((c: any) => ({
       id: String(c._id),
       name: c.name || "",
