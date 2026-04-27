@@ -471,16 +471,7 @@ export async function listInvoices(params: {
   const filter: any = { isDeleted: { $ne: true }, companyId: companyIdObj }
   if (params.clientId) filter.clientId = new Types.ObjectId(params.clientId)
   if (params.status) filter.status = params.status
-  if (params.invoiceType) {
-    // Backward compatibility during rename: treat legacy "standard" as "other".
-    if (params.invoiceType === "other") {
-      filter.invoiceType = { $in: ["other", "standard"] }
-    } else if (params.invoiceType === "standard") {
-      filter.invoiceType = { $in: ["other", "standard"] }
-    } else {
-      filter.invoiceType = params.invoiceType
-    }
-  }
+  if (params.invoiceType) filter.invoiceType = params.invoiceType
   if (params.salesBy) filter.salesByName = params.salesBy
 
   if (params.search) {

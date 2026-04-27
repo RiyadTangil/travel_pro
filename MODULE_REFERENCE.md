@@ -657,13 +657,18 @@ Client **CL** has `presentBalance` high enough to represent **25,000** advance. 
 
 ## 15. Invoices (three `invoiceType` values)
 
-**Purpose:** Sales documents that increase client due, store line economics, and (for types with vendor lines) increase vendor due. All types share collection **`invoices`** with discriminator field **`invoiceType`:** `"standard"` | `"visa"` | `"non_commission"`.
+**Purpose:** Sales documents that increase client due, store line economics, and (for types with vendor lines) increase vendor due. All types share collection **`invoices`** with discriminator field **`invoiceType`:** `"other"` | `"visa"` | `"non_commission"`.
 
 | Type | UI / list route | Typical create API | Child collections (in addition to `invoices` + `invoice_items`) |
 |------|-----------------|--------------------|-----------------------------------|
-| **A — Standard** | `app/dashboard/invoices/page.tsx` | `POST /api/invoices` | `invoice_items`, optional `invoice_tickets`, `invoice_hotels`, `invoice_transports`, `invoice_passports` |
+| **A — Other** | `app/dashboard/invoices/page.tsx` | `POST /api/invoices` | `invoice_items`, optional `invoice_tickets`, `invoice_hotels`, `invoice_transports`, `invoice_passports` |
 | **B — Visa** | `app/dashboard/invoices-visa/page.tsx` | `POST /api/invoices/visa` (forces `invoiceType: visa`) | `invoice_items` (visa-shaped lines), `invoice_passports`, … |
 | **C — Non-commission** | `app/dashboard/invoices-non-commission/page.tsx` | `POST /api/invoices/non-commission` | `invoice_tickets`, `invoice_items` (`product: non_commission_ticket`), `invoice_passports`, `invoice_transports` per ticket |
+
+**Invoice number prefixes by type (next-no API):**
+- **Other:** `IO-####`
+- **Visa:** `IV-####`
+- **Non-commission:** `ANC-####`
 
 **Shared financial effects on create (high level):**
 
@@ -680,11 +685,11 @@ Client **CL** has `presentBalance` high enough to represent **25,000** advance. 
 
 | Type | List query |
 |------|------------|
-| Standard | `GET /api/invoices?invoiceType=standard&page&pageSize&search&status&dateFrom&dateTo` |
+| Other | `GET /api/invoices?invoiceType=other&page&pageSize&search&status&dateFrom&dateTo` |
 | Visa | `GET /api/invoices?invoiceType=visa&…` (visa page uses this) |
 | Non-commission | `GET /api/invoices/non-commission?…` (dedicated route; service expects **`dateFrom`** / **`dateTo`** on `salesDate`; map from UI if you use other param names) |
 
-**Example (standard):** User raises INV-0100 for client **CL** net **15,000** with two billing lines and one vendor cost **9,000**:
+**Example (other):** User raises IO-0100 for client **CL** net **15,000** with two billing lines and one vendor cost **9,000**:
 
 - `invoices` +1; `invoice_items` +2; vendor balance +9,000 cost; client due +15,000 (`presentBalance` convention); `client_transactions` invoice row; optional MR if payment captured on same submit.
 

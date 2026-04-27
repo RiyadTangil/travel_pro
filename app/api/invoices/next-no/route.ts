@@ -7,7 +7,6 @@ import { ObjectId } from "mongodb"
 
 function normalizeType(type?: string | null): "other" | "visa" | "non_commission" {
   const t = String(type || "other").trim().toLowerCase()
-  if (t === "standard") return "other"
   if (t === "visa") return "visa"
   if (t === "non_commission") return "non_commission"
   return "other"
@@ -41,10 +40,7 @@ export async function GET(req: Request) {
     const db = client.db(MONGODB_DB_NAME)
     const col = db.collection("invoices")
 
-    const filter: any =
-      type === "other"
-        ? { invoiceType: { $in: ["other", "standard"] } }
-        : { invoiceType: type }
+    const filter: any = { invoiceType: type }
     if (companyId) {
       // Support both ObjectId and string-typed companyId in stored documents
       filter.$or = [
