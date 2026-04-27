@@ -58,7 +58,7 @@ export default function FilterToolbar({
         "flex max-w-full items-center gap-2 rounded-md border bg-white p-3 shadow-sm",
         /* Narrow: single horizontal row + scroll (same idea as wide Ant tables) */
         "min-w-0 flex-nowrap overflow-x-auto overflow-y-visible [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]",
-        "sm:flex-wrap sm:justify-between sm:overflow-x-visible",
+        "md:flex-wrap md:justify-between md:overflow-x-visible",
       )}
     >
       {children != null && children !== false && (
@@ -67,7 +67,7 @@ export default function FilterToolbar({
       <div
         className={cn(
           "flex min-w-0 shrink-0 flex-nowrap items-center gap-2",
-          "sm:w-auto sm:flex-1 sm:flex-wrap sm:justify-end",
+          "md:w-auto md:flex-1 md:flex-wrap md:justify-end",
           className,
         )}
       >
@@ -78,13 +78,13 @@ export default function FilterToolbar({
             <DateRangePickerWithPresets
               date={dateRange}
               onDateChange={onDateRangeChange}
-              className="w-[min(280px,calc(100vw-5rem))] sm:w-[300px]"
+              className="w-[min(280px,calc(100vw-5rem))] md:w-[300px]"
             />
           </div>
         )}
 
         {showSearch && onSearchChange && (
-          <div className="w-[min(18rem,calc(100vw-6rem))] shrink-0 sm:min-w-[12rem] sm:max-w-sm sm:flex-1">
+          <div className="w-[min(18rem,calc(100vw-6rem))] shrink-0 md:min-w-[12rem] md:max-w-sm md:flex-1">
             <SearchInput
               value={search}
               onChange={onSearchChange}
