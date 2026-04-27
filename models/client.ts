@@ -29,6 +29,6 @@ const ClientSchema = new Schema({
   },
   createdAt: { type: String },
   updatedAt: { type: String },
-}, { collection: "clients_manager" })
+}, { collection: "clients" })
 
 export const Client = models.Client || model("Client", ClientSchema)
