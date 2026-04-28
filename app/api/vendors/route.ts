@@ -77,6 +77,19 @@ export async function POST(request: Request) {
     const db = client.db(MONGODB_DB_NAME)
     const collection = db.collection("vendors")
 
+    if (body.mobile && String(body.mobile).trim()) {
+      const existingMobile = await collection.findOne({
+        mobile: String(body.mobile).trim(),
+        companyId: body.companyId || null,
+      })
+      if (existingMobile) {
+        return NextResponse.json(
+          { error: `Vendor with mobile number ${body.mobile} already exists` },
+          { status: 400 }
+        )
+      }
+    }
+
     const pb =
       body.presentBalance && typeof body.presentBalance === "object"
         ? body.presentBalance

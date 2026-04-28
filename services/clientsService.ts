@@ -43,6 +43,17 @@ export async function listClients(params: { page?: number; limit?: number; searc
 
 export async function createClient(body: any) {
   await connectMongoose()
+
+  if (body.phone && String(body.phone).trim()) {
+    const existingPhone = await Client.findOne({
+      phone: String(body.phone).trim(),
+      companyId: body.companyId,
+    })
+    if (existingPhone) {
+      throw new Error(`Client with phone number ${body.phone} already exists`)
+    }
+  }
+
   const last = await Client.find({}).sort({ uniqueId: -1 }).limit(1).lean()
   const nextUniqueId = last.length > 0 && typeof last[0].uniqueId === "number" ? (last[0].uniqueId as number) + 1 : 1
 
