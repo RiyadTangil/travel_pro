@@ -1,9 +1,11 @@
 import { isValidObjectId, Types } from "mongoose"
 import mongoose from "mongoose"
 import connectMongoose from "@/lib/mongoose"
+import { AppError } from "@/errors/AppError"
 import { Client } from "@/models/client"
 import { createClientOpeningBillAdjustment } from "@/services/billAdjustmentService"
-
+import { Invoice } from "@/models/invoice"
+import { ClientTransaction } from "@/models/client-transaction"
 export async function listClients(params: { page?: number; limit?: number; search?: string; categoryId?: string; userId?: string; status?: string; companyId?: string }) {
   await connectMongoose()
   const page = Math.max(1, Number(params.page) || 1)
@@ -50,12 +52,19 @@ export async function createClient(body: any) {
       companyId: body.companyId,
     })
     if (existingPhone) {
-      throw new Error(`Client with phone number ${body.phone} already exists`)
+      throw new AppError(`Client with phone number ${body.phone} already exists`, 400, "duplicate_phone")
     }
   }
 
   const last = await Client.find({}).sort({ uniqueId: -1 }).limit(1).lean()
   const nextUniqueId = last.length > 0 && typeof last[0].uniqueId === "number" ? (last[0].uniqueId as number) + 1 : 1
+
+  // Ensure uniqueId is actually unique
+  const existingId = await Client.findOne({ uniqueId: nextUniqueId })
+  if (existingId) {
+    // This shouldn't happen with the increment logic above, but just in case of race conditions
+    throw new AppError(`Client with unique ID ${nextUniqueId} already exists`, 400, "duplicate_id")
+  }
 
   const now = new Date().toISOString()
   const openingBalanceType: string = body.openingBalanceType || ""
@@ -104,7 +113,7 @@ export async function createClient(body: any) {
   session.startTransaction()
   try {
     const [created] = await Client.create([doc], { session })
-    if (!created) throw new Error("Client create failed")
+    if (!created) throw new AppError("Client create failed", 500)
     if (hasOpening) {
       await createClientOpeningBillAdjustment(session, {
         clientId: created._id as Types.ObjectId,
@@ -161,9 +170,7 @@ export async function updateClientById(id: string, body: any) {
   return { ...updated, id: String(updated._id) }
 }
 
-import { Invoice } from "@/models/invoice"
-import { ClientTransaction } from "@/models/client-transaction"
-import { AppError } from "@/errors/AppError"
+
 
 export async function deleteClientById(id: string) {
   await connectMongoose()

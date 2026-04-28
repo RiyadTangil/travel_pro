@@ -84,7 +84,7 @@ export async function POST(request: Request) {
       })
       if (existingMobile) {
         return NextResponse.json(
-          { error: `Vendor with mobile number ${body.mobile} already exists` },
+          { error: "duplicate_mobile", message: `Vendor with mobile number ${body.mobile} already exists` },
           { status: 400 }
         )
       }

@@ -85,7 +85,7 @@ export default function VendorsPage() {
       const res = await fetch(url, { method, headers, body: JSON.stringify(payload) })
       const errBody = await res.json().catch(() => ({}))
       if (!res.ok) {
-        toast.error(typeof errBody?.error === "string" ? errBody.error : "Failed to save vendor")
+        toast.error(errBody?.message || (typeof errBody?.error === "string" ? errBody.error : "Failed to save vendor"))
         return
       }
       toast.success(editVendor?.id ? "Vendor updated" : "Vendor created")
@@ -134,7 +134,7 @@ export default function VendorsPage() {
         body: JSON.stringify({ active }),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(typeof data?.error === "string" ? data.error : "Failed to update status")
+      if (!res.ok) throw new Error(data?.message || (typeof data?.error === "string" ? data.error : "Failed to update status"))
       setVendors((prev) => prev.map((x) => (x.id === v.id ? { ...x, active } : x)))
       toast.success(`Vendor is now ${active ? "Active" : "Inactive"}`)
     } catch (e) {

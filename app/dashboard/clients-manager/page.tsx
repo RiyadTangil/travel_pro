@@ -192,11 +192,12 @@ export default function ClientsManagerPage() {
         }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || "Failed to add client")
+      if (!res.ok) throw new Error(data.message || data.error || "Failed to add client")
       toast({ title: "Client added" })
       setModalOpen(false)
       fetchClients()
     } catch (e) {
+ 
       toast({ title: "Failed to add", description: e instanceof Error ? e.message : "Unknown error" })
     } finally {
       setSaving(false)
@@ -213,7 +214,7 @@ export default function ClientsManagerPage() {
         body: JSON.stringify(payload),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || "Failed to update client")
+      if (!res.ok) throw new Error(data.message || data.error || "Failed to update client")
       toast({ title: "Client updated" })
       setModalOpen(false)
       setEditingClientId(null)
