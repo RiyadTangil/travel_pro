@@ -9,11 +9,10 @@ import { LedgerEntityCard } from "@/components/shared/ledger-entity-card"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import type { DateRange } from "react-day-picker"
-import { ClearableSelect } from "@/components/shared/clearable-select"
+import { ClientSelection } from "@/components/shared/client-selection"
 import FilterToolbar from "@/components/shared/filter-toolbar"
 import { Button } from "@/components/ui/button"
 import { Search } from "lucide-react"
-import { useInvoiceLookups } from "@/hooks/useInvoiceLookups"
 
 interface LedgerEntry {
   id: string
@@ -68,23 +67,21 @@ export default function ClientLedgerPage() {
   const searchParams   = useSearchParams()
   const urlClientId    = searchParams.get("clientId") ?? ""
 
-  const { lookups } = useInvoiceLookups()
   const [clientId,   setClientId]   = useState(urlClientId)
   const [dateRange,  setDateRange]  = useState<DateRange | undefined>()
   const [loading,    setLoading]    = useState(false)
   const [ledgerData, setLedgerData] = useState<LedgerData | null>(null)
 
-  const clientOptions  = (lookups?.clients ?? []).map((c) => ({ value: c.id, label: c.name }))
   const autoFetchedRef = useRef(false)
 
-  // Auto-fetch once options have loaded when the page was opened via URL with a clientId
+  // Auto-fetch once when the page was opened via URL with a clientId
   useEffect(() => {
-    if (urlClientId && clientOptions.length > 0 && !autoFetchedRef.current) {
+    if (urlClientId && !autoFetchedRef.current) {
       autoFetchedRef.current = true
       fetchLedger()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientOptions.length])
+  }, [urlClientId])
 
   const fetchLedger = async () => {
     if (!clientId) return
@@ -240,8 +237,7 @@ export default function ClientLedgerPage() {
           showRefresh={false}
           onRefresh={fetchLedger}
           filterExtrasBefore={
-            <ClearableSelect
-              options={clientOptions}
+            <ClientSelection
               value={clientId}
               onChange={setClientId}
               placeholder="Filter by Client"

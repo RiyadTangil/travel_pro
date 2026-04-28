@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import clientPromise from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
 import { Client } from "@/models/client"
+import connectMongoose from "@/lib/mongoose"
 
 // Aggregated lookups for Add Invoice modal (all DB lists scoped by x-company-id).
 // Static: airlines, airports. Requires x-company-id for tenant collections.
@@ -34,6 +35,7 @@ export async function GET(request: Request) {
 
     const client = await clientPromise
     const db = client.db(MONGODB_DB_NAME)
+    await connectMongoose()
 
     // Employees (same collection as /api/employees)
     const employeeDocs = await db
