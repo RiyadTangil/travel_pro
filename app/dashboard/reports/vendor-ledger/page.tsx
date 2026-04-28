@@ -9,11 +9,10 @@ import { LedgerEntityCard } from "@/components/shared/ledger-entity-card"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
 import type { DateRange } from "react-day-picker"
-import { ClearableSelect } from "@/components/shared/clearable-select"
+import { VendorSelection } from "@/components/shared/vendor-selection"
 import FilterToolbar from "@/components/shared/filter-toolbar"
 import { Button } from "@/components/ui/button"
 import { Search } from "lucide-react"
-import { useInvoiceLookups } from "@/hooks/useInvoiceLookups"
 
 
 interface LedgerEntry {
@@ -69,23 +68,21 @@ export default function VendorLedgerPage() {
   const searchParams  = useSearchParams()
   const urlVendorId   = searchParams.get("vendorId") ?? ""
 
-  const { lookups } = useInvoiceLookups()
   const [vendorId,   setVendorId]   = useState(urlVendorId)
   const [dateRange,  setDateRange]  = useState<DateRange | undefined>()
   const [loading,    setLoading]    = useState(false)
   const [ledgerData, setLedgerData] = useState<LedgerData | null>(null)
 
-  const vendorOptions  = (lookups?.vendors ?? []).map((v) => ({ value: v.id, label: v.name }))
   const autoFetchedRef = useRef(false)
 
-  // Auto-fetch once options have loaded when the page was opened via URL with a vendorId
+  // Auto-fetch once when the page was opened via URL with a vendorId
   useEffect(() => {
-    if (urlVendorId && vendorOptions.length > 0 && !autoFetchedRef.current) {
+    if (urlVendorId && !autoFetchedRef.current) {
       autoFetchedRef.current = true
       fetchLedger()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vendorOptions.length])
+  }, [urlVendorId])
 
   const fetchLedger = async () => {
     if (!vendorId) return
@@ -241,8 +238,7 @@ export default function VendorLedgerPage() {
           showRefresh={false}
           onRefresh={fetchLedger}
           filterExtrasBefore={
-            <ClearableSelect
-              options={vendorOptions}
+            <VendorSelection
               value={vendorId}
               onChange={setVendorId}
               placeholder="Filter by Vendor"
