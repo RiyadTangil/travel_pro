@@ -389,12 +389,16 @@ export async function getInvoiceById(id: string, companyId: string) {
   ])
 
   const vendors = (vendorDocs as any[]).map(v => ({ id: String(v._id), name: v.name || "", email: v.email || "", mobile: v.mobile || "" }))
+  const vendorMap = new Map<string, string>();
+  vendors.forEach(v => vendorMap.set(v.id, v.name));
+
   const productMap = new Map<string, string>();
   (productDocsRaw as any[]).forEach((p: any) => productMap.set(String(p._id), p.product_name))
 
   const normalizedItems = (items || []).map((i: any) => ({
     ...i,
-    productName: productMap.get(String(i.product)) || i.product
+    productName: productMap.get(String(i.product)) || i.product,
+    vendorName: vendorMap.get(String(i.vendorId)) || ""
   }))
 
   const employees = employeeDoc
@@ -417,6 +421,7 @@ export async function getInvoiceById(id: string, companyId: string) {
     journeyDate: t.journeyDate || t.flightDate || "",
     returnDate: t.returnDate || "",
     airline: t.airline || "",
+    isRefund: t.isRefund || false,
   }))
   const mapHotels = (hotels || []).map((h: any, idx: number) => ({
     id: h.id || String(h._id || Date.now() + idx),
@@ -459,6 +464,8 @@ export async function listInvoices(params: {
   clientId?: string
   salesBy?: string
   companyId: string
+  isRefund?:boolean
+
 }) {
   await connectMongoose()
   if (!params.companyId) throw new AppError("Company ID is required", 401)
@@ -473,6 +480,10 @@ export async function listInvoices(params: {
   if (params.status) filter.status = params.status
   if (params.invoiceType) filter.invoiceType = params.invoiceType
   if (params.salesBy) filter.salesByName = params.salesBy
+  
+  if (params.isRefund !== undefined) {
+    filter.isRefund = params.isRefund === "true" || params.isRefund === true
+  }
 
   if (params.search) {
     filter.$or = [
@@ -592,6 +603,7 @@ export async function listInvoices(params: {
               salesBy: { $ifNull: ["$salesByName", ""] },
               status: { $ifNull: ["$status", "due"] },
               invoiceType: { $ifNull: ["$invoiceType", "other"] },
+              isRefund: { $ifNull: ["$isRefund", false] },
               createdAt: { $ifNull: ["$createdAt", { $toString: "$$NOW" }] },
               updatedAt: { $ifNull: ["$updatedAt", { $toString: "$$NOW" }] },
               country: {
@@ -659,6 +671,10 @@ export async function listNonCommissionInvoices(params: {
   if (params.clientId) filter.clientId = new Types.ObjectId(params.clientId)
   if (params.status) filter.status = params.status
   if (params.salesBy) filter.salesByName = params.salesBy
+
+  if ((params as any).isRefund !== undefined) {
+    filter.isRefund = (params as any).isRefund === "true" || (params as any).isRefund === true
+  }
 
   if (params.search) {
     filter.$or = [
@@ -747,6 +763,7 @@ export async function listNonCommissionInvoices(params: {
               salesBy: { $ifNull: ["$salesByName", ""] },
               status: { $ifNull: ["$status", "due"] },
               invoiceType: { $literal: "non_commission" },
+              isRefund: { $ifNull: ["$isRefund", false] },
               createdAt: { $ifNull: ["$createdAt", { $toString: "$$NOW" }] },
               updatedAt: { $ifNull: ["$updatedAt", { $toString: "$$NOW" }] },
             }
@@ -892,6 +909,18 @@ export async function createNonCommissionInvoice(body: any, companyId: string) {
           profit: parseNumber(item.profit, 0),
           vendorId: ticketDetails.vendor ? new Types.ObjectId(ticketDetails.vendor) : null,
           companyId: companyIdObj,
+          ticketMetadata: {
+            ticketNo: ticketDetails.ticketNo,
+            pnr: ticketDetails.pnr,
+            gdsPnr: ticketDetails.gdsPnr,
+            route: ticketDetails.route,
+            journeyDate: ticketDetails.journeyDate,
+            returnDate: ticketDetails.returnDate,
+            airline: ticketDetails.airline,
+            ticketType: ticketDetails.ticketType,
+            airbusClass: ticketDetails.airbusClass,
+            issueDate: ticketDetails.issueDate,
+          },
           createdAt: now,
           updatedAt: now
         }], { session })
@@ -1215,6 +1244,18 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
           profit: parseNumber(item.profit, 0),
           vendorId: ticketDetails.vendor ? new Types.ObjectId(ticketDetails.vendor) : null,
           companyId: companyIdObj,
+          ticketMetadata: {
+            ticketNo: ticketDetails.ticketNo,
+            pnr: ticketDetails.pnr,
+            gdsPnr: ticketDetails.gdsPnr,
+            route: ticketDetails.route,
+            journeyDate: ticketDetails.journeyDate,
+            returnDate: ticketDetails.returnDate,
+            airline: ticketDetails.airline,
+            ticketType: ticketDetails.ticketType,
+            airbusClass: ticketDetails.airbusClass,
+            issueDate: ticketDetails.issueDate,
+          },
           createdAt: now,
           updatedAt: now
         }], { session })

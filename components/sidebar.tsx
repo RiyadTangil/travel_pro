@@ -44,6 +44,7 @@ export function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [openMap, setOpenMap] = useState<Record<string, boolean>>({
+    "Refund": pathname.startsWith("/dashboard/refund"),
     "Money Receipt": pathname.startsWith("/dashboard/money-receipts"),
     "Expense": pathname.startsWith("/dashboard/expenses"),
     "Vendors": pathname.startsWith("/dashboard/vendors"),
@@ -95,6 +96,16 @@ export function Sidebar() {
         {
           title: "Invoice (Visa)",
           href: "/dashboard/invoices-visa",
+        },
+      ],
+    },
+    {
+      title: "Refund",
+      icon: <Archive className="h-5 w-5" />,
+      children: [
+        {
+          title: "Airticket Refund",
+          href: "/dashboard/refund/airticket",
         },
       ],
     },

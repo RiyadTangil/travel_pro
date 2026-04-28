@@ -28,10 +28,25 @@ const InvoiceItemSchema = new Schema({
   mofaNo: { type: String },
   okalaNo: { type: String },
 
+  // Ticket specific metadata (Flattened for performance/simplicity)
+  ticketMetadata: {
+    ticketNo: { type: String },
+    pnr: { type: String },
+    gdsPnr: { type: String },
+    route: { type: String },
+    journeyDate: { type: String },
+    returnDate: { type: String },
+    airline: { type: String },
+    ticketType: { type: String },
+    airbusClass: { type: String },
+    issueDate: { type: String },
+  },
+
   // Relation links
   referenceId: { type: Schema.Types.ObjectId, index: true }, // Links to Ticket/Passport/Hotel/Transport doc
   
   companyId: { type: Schema.Types.ObjectId, ref: "Company", index: true, required: true },
+  isRefund: { type: Boolean, default: false, index: true },
   isDeleted: { type: Boolean, default: false, index: true },
   createdAt: { type: String },
   updatedAt: { type: String },

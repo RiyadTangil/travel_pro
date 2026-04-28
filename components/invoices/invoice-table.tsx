@@ -79,7 +79,20 @@ export function InvoiceTable({
         align: "center",
         render: (_: unknown, __: Row, index: number) => (page - 1) * pageSize + index + 1,
       },
-      { title: "Invoice", dataIndex: "invoiceNo", key: "invoiceNo", width: 120 },
+      {
+        title: "Invoice",
+        dataIndex: "invoiceNo",
+        key: "invoiceNo",
+        width: 120,
+        render: (v: string, record: Row) => (
+          <div className="flex items-center gap-2">
+            <span>{v}</span>
+            {record.isRefund && (
+              <span className="h-2 w-2 rounded-full bg-yellow-400 shadow-[0_0_8px_rgba(250,204,21,0.6)]" title="Refunded" />
+            )}
+          </div>
+        ),
+      },
       {
         title: "Sales Date",
         dataIndex: "salesDate",
@@ -140,11 +153,10 @@ export function InvoiceTable({
         width: 120,
         render: (due: number) => (
           <div
-            className={`mx-auto px-2 py-0.5 rounded-full text-[10px] font-bold text-center inline-block ${
-              due > 0
-                ? "bg-red-50 text-red-600 border border-red-100"
-                : "bg-green-50 text-green-600 border border-green-100"
-            }`}
+            className={`mx-auto px-2 py-0.5 rounded-full text-[10px] font-bold text-center inline-block ${due > 0
+              ? "bg-red-50 text-red-600 border border-red-100"
+              : "bg-green-50 text-green-600 border border-green-100"
+              }`}
           >
             {due > 0 ? formatCurrency(due) : "PAID"}
           </div>
@@ -166,10 +178,10 @@ export function InvoiceTable({
           <div className="flex flex-col gap-0.5 text-xs">
             {mr
               ? mr.split(",").map((x, i) => (
-                  <span key={i} className={i > 0 ? "pt-0.5 border-t border-gray-100" : ""}>
-                    {x.trim()}
-                  </span>
-                ))
+                <span key={i} className={i > 0 ? "pt-0.5 border-t border-gray-100" : ""}>
+                  {x.trim()}
+                </span>
+              ))
               : "-"}
           </div>
         ),
@@ -183,10 +195,10 @@ export function InvoiceTable({
           <div className="flex flex-col gap-0.5 text-[10px]">
             {pp
               ? pp.split(",").map((x, i) => (
-                  <span key={i} className={i > 0 ? "pt-0.5 border-t border-gray-100" : ""}>
-                    {x.trim()}
-                  </span>
-                ))
+                <span key={i} className={i > 0 ? "pt-0.5 border-t border-gray-100" : ""}>
+                  {x.trim()}
+                </span>
+              ))
               : "-"}
           </div>
         ),
@@ -224,6 +236,7 @@ export function InvoiceTable({
             columns={columns}
             dataSource={invoices as Row[]}
             loading={loading}
+            rowClassName={(record) => record.isRefund ? "refunded-row" : ""}
             scroll={{ x: "max-content" }}
             pagination={{
               current: page,
@@ -245,6 +258,14 @@ export function InvoiceTable({
           />
         </div>
       </CardContent>
+      <style jsx global>{`
+  .refunded-row > td {
+    background-color: #fefce8 !important;
+  }
+  .refunded-row:hover > td {
+    background-color: #fef9c3 !important;
+  }
+`}</style>
     </Card>
   )
 }

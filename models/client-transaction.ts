@@ -14,7 +14,7 @@ const ClientTransactionSchema = new Schema({
   payType: { type: String }, // e.g. CASH / BANK / MOBILE
   amount: { type: Number, required: true },
   direction: { type: String, enum: ["receiv", "payout", "invoice"], required: true },
-  transactionType: { type: String, enum: ["invoice", "money_receipt", "return", "opening_balance", "bill_adjustment"], default: "money_receipt" },
+  transactionType: { type: String, enum: ["invoice", "money_receipt", "return", "opening_balance", "bill_adjustment", "refund"], default: "money_receipt" },
   /** When false, row is hidden from account transaction history list (bill adjustments, system opening rows, etc.) */
   isMonetoryTranseciton: { type: Boolean, default: true },
   lastTotalAmount: { type: Number, default: 0 },
@@ -22,5 +22,10 @@ const ClientTransactionSchema = new Schema({
   createdAt: { type: String },
   updatedAt: { type: String },
 }, { collection: "client_transactions" })
+
+// Prevent model caching during development
+if (process.env.NODE_ENV === "development" && models.ClientTransaction) {
+  delete models.ClientTransaction
+}
 
 export const ClientTransaction = models.ClientTransaction || model("ClientTransaction", ClientTransactionSchema)

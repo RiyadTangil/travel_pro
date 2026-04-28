@@ -183,6 +183,7 @@ export function NonCommissionTable({
             columns={columns}
             dataSource={invoices}
             loading={loading}
+            rowClassName={(record) => record.isRefund ? "refunded-row" : ""}
             scroll={{ x: "max-content" }}
             pagination={{
               current: page,
@@ -204,6 +205,14 @@ export function NonCommissionTable({
           />
         </div>
       </CardContent>
+      <style jsx global>{`
+  .refunded-row {
+    background-color: #fefce8 ;
+  }
+  .refunded-row:hover{
+    background-color: #fef9c3 ;
+  }
+`}</style>
     </Card>
   )
 }

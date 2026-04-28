@@ -18,6 +18,7 @@ export interface Invoice {
   salesBy: string
   agent: string
   status: 'paid' | 'partial' | 'due' | 'overdue'
+  isRefund?: boolean
   createdAt: string
   updatedAt: string
 }
