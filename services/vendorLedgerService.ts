@@ -53,8 +53,10 @@ export async function getVendorLedger(
         date: { $first: "$inv.salesDate" },
         voucherNo: { $first: "$inv.invoiceNo" },
         invoiceCreatedAt: { $first: "$inv.createdAt" },
+        invoiceType: { $first: "$inv.invoiceType" },
         totalCost: { $sum: "$totalCost" },
         paxNames: { $addToSet: "$paxName" },
+        ticketMetadataList: { $push: "$ticketMetadata" },
       },
     },
 
@@ -102,18 +104,24 @@ export async function getVendorLedger(
   }
 
   const costEntries: LedgerRow[] = invoiceCostRows.map((row) => {
+    const isNonCommission = row.invoiceType === "non_commission"
     const tickets: any[] = row.tickets || []
+    const ticketMetadataList = (row.ticketMetadataList || []).filter((tm: any) => tm && tm.ticketNo)
+    
+    // For non-commission, use the metadata from InvoiceItem. 
+    // For commission, use the joined InvoiceTicket records.
+    const displayTickets = isNonCommission ? ticketMetadataList : tickets
 
     const paxNames = Array.from(
       new Set([
         ...((row.paxNames as string[]) || []).filter(Boolean),
-        ...tickets.map((t: any) => t.passengerName || t.paxName).filter(Boolean),
+        ...displayTickets.map((t: any) => t.passengerName || t.paxName).filter(Boolean),
       ])
     ).join(", ")
 
-    const ticketNos = tickets.map((t: any) => t.ticketNo).filter(Boolean).join(", ")
-    const pnrs      = tickets.map((t: any) => t.pnr).filter(Boolean).join(", ")
-    const routes    = tickets.map((t: any) => t.route).filter(Boolean).join(", ")
+    const ticketNos = displayTickets.map((t: any) => t.ticketNo).filter(Boolean).join(", ")
+    const pnrs      = displayTickets.map((t: any) => t.pnr).filter(Boolean).join(", ")
+    const routes    = displayTickets.map((t: any) => t.route).filter(Boolean).join(", ")
 
     return {
       id:          String(row._id),

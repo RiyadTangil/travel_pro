@@ -30,7 +30,7 @@ const InvoiceItemSchema = new Schema({
 
   // Ticket specific metadata (Flattened for performance/simplicity)
   ticketMetadata: {
-    ticketNo: { type: String },
+    ticketNo: { type: String, index: true },
     pnr: { type: String },
     gdsPnr: { type: String },
     route: { type: String },
@@ -51,6 +51,12 @@ const InvoiceItemSchema = new Schema({
   createdAt: { type: String },
   updatedAt: { type: String },
 }, { collection: "invoice_items" })
+
+// Unique index for ticketNo per company (only for items that have a ticketNo)
+InvoiceItemSchema.index(
+  { "ticketMetadata.ticketNo": 1, companyId: 1 }, 
+  { unique: true, sparse: true, partialFilterExpression: { "ticketMetadata.ticketNo": { $type: "string" } } }
+)
 
 // Prevent model caching during development
 if (process.env.NODE_ENV === "development" && models.InvoiceItem) {
