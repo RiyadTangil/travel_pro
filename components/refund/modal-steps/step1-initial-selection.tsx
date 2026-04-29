@@ -69,7 +69,29 @@ export function Step1InitialSelection({ onNext }: Step1InitialSelectionProps) {
           const fullData = res.data?.data || res.data
           const inv = fullData.invoice || fullData
           setInvoiceData(inv)
-          const allTickets = inv.tickets || []
+
+          let allTickets = []
+          if (inv.invoiceType === "non_commission") {
+            // For non-commission invoices, InvoiceItems are the source of truth for tickets
+            const items = inv.items || inv.billing?.items || []
+            allTickets = items.map((ii: any) => ({
+              _id: ii.id || ii._id,
+              ticketNo: ii.ticketDetails?.ticketNo || ii.ticketMetadata?.ticketNo || "",
+              paxName: ii.ticketDetails?.paxName || ii.paxName || "",
+              pnr: ii.ticketDetails?.pnr || ii.ticketMetadata?.pnr || "",
+              gdsPnr: ii.ticketDetails?.gdsPnr || ii.ticketMetadata?.gdsPnr || "",
+              airline: ii.ticketDetails?.airline || ii.ticketMetadata?.airline || "",
+              route: ii.ticketDetails?.route || ii.ticketMetadata?.route || "",
+              journeyDate: ii.ticketDetails?.journeyDate || ii.ticketMetadata?.journeyDate || "",
+              returnDate: ii.ticketDetails?.returnDate || ii.ticketMetadata?.returnDate || "",
+              ticketType: ii.ticketDetails?.ticketType || ii.ticketMetadata?.ticketType || "",
+              airbusClass: ii.ticketDetails?.airbusClass || ii.ticketMetadata?.airbusClass || "",
+              isRefund: ii.isRefund
+            }))
+          } else {
+            allTickets = inv.tickets || []
+          }
+
           // Filter out refunded tickets
           setTickets(allTickets.filter((t: any) => !t.isRefund))
           setVendors(fullData.vendors || [])
@@ -94,12 +116,12 @@ export function Step1InitialSelection({ onNext }: Step1InitialSelectionProps) {
     const items = invoiceData?.billing?.items || invoiceData?.items || []
 
     const selectedTickets = selectedTicketIds.map((tid: string) => {
-      // Find the ticket info from InvoiceTicket array
+      // Find the ticket info from our unified 'tickets' state
       const t = tickets.find(t => String(t._id || t.id) === tid)
       
       // Find the financial info from InvoiceItem array
       const item = items.find((ii: any) => 
-        String(ii.referenceId || ii.ticketId || ii.id || ii._id) === tid
+        String(ii.id || ii._id || ii.referenceId || ii.ticketId) === tid
       )
 
       const vendor = vendors.find(v => String(v.id || v._id) === String(item?.vendorId || ""))
@@ -197,7 +219,7 @@ export function Step1InitialSelection({ onNext }: Step1InitialSelectionProps) {
                 value={value || []}
                 options={tickets.map(t => {
                   const item = (invoiceData?.billing?.items || invoiceData?.items || []).find((ii: any) => 
-                    String(ii.referenceId || ii.ticketId || ii.id || ii._id) === String(t._id || t.id)
+                    String(ii.id || ii._id || ii.referenceId || ii.ticketId) === String(t._id || t.id)
                   );
                   return {
                     label: `${t.ticketNo} - ${item?.paxName || t.paxName || "Unknown Pax"}`,

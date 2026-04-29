@@ -98,6 +98,11 @@ export async function createAirticketRefund(body: any, companyId: string) {
       const vendorId = body.vendorId ? new Types.ObjectId(body.vendorId) : undefined
       const ticketsToRefund = body.items || body.tickets || []
 
+      // Get invoice to check type
+      const invoice = await Invoice.findById(invoiceId).session(session).lean() as any
+      if (!invoice) throw new AppError("Invoice not found", 404)
+      const isNonCommission = invoice.invoiceType === "non_commission"
+
       // Validation for refund profit/charges
       const clientTotalCharge = parseNumber(body.clientTotalCharge, 0)
       const vendorTotalCharge = parseNumber(body.vendorTotalCharge, 0)
@@ -116,24 +121,44 @@ export async function createAirticketRefund(body: any, companyId: string) {
       if (ticketsToRefund.length > 0) {
         const ticketIds = ticketsToRefund.map((t: any) => new Types.ObjectId(t.ticketId))
         
-        await Promise.all([
-          InvoiceItem.updateMany(
-            { referenceId: { $in: ticketIds }, companyId: companyIdObj },
-            { $set: { isRefund: true, updatedAt: now } },
-            { session }
-          ),
-          InvoiceTicket.updateMany(
+        if (isNonCommission) {
+          // For non-commission, ticketId passed from frontend is the InvoiceItem._id
+          await InvoiceItem.updateMany(
             { _id: { $in: ticketIds }, companyId: companyIdObj },
             { $set: { isRefund: true, updatedAt: now } },
             { session }
           )
-        ])
+        } else {
+          // For commission, ticketId is InvoiceTicket._id
+          await Promise.all([
+            InvoiceItem.updateMany(
+              { referenceId: { $in: ticketIds }, companyId: companyIdObj },
+              { $set: { isRefund: true, updatedAt: now } },
+              { session }
+            ),
+            InvoiceTicket.updateMany(
+              { _id: { $in: ticketIds }, companyId: companyIdObj },
+              { $set: { isRefund: true, updatedAt: now } },
+              { session }
+            )
+          ])
+        }
 
         // Check if all tickets in the invoice are now refunded
-        const [totalTickets, refundedTickets] = await Promise.all([
-          InvoiceTicket.countDocuments({ invoiceId, companyId: companyIdObj, isDeleted: { $ne: true } }).session(session),
-          InvoiceTicket.countDocuments({ invoiceId, companyId: companyIdObj, isRefund: true, isDeleted: { $ne: true } }).session(session)
-        ])
+        let totalTickets = 0
+        let refundedTickets = 0
+
+        if (isNonCommission) {
+          [totalTickets, refundedTickets] = await Promise.all([
+            InvoiceItem.countDocuments({ invoiceId, companyId: companyIdObj, isDeleted: { $ne: true } }).session(session),
+            InvoiceItem.countDocuments({ invoiceId, companyId: companyIdObj, isRefund: true, isDeleted: { $ne: true } }).session(session)
+          ])
+        } else {
+          [totalTickets, refundedTickets] = await Promise.all([
+            InvoiceTicket.countDocuments({ invoiceId, companyId: companyIdObj, isDeleted: { $ne: true } }).session(session),
+            InvoiceTicket.countDocuments({ invoiceId, companyId: companyIdObj, isRefund: true, isDeleted: { $ne: true } }).session(session)
+          ])
+        }
 
         if (totalTickets > 0 && totalTickets === refundedTickets) {
           await Invoice.updateOne(
@@ -308,21 +333,34 @@ export async function deleteAirticketRefund(id: string, companyId: string) {
         { session }
       )
 
+      // Get invoice to check type
+      const invoice = await Invoice.findById(refund.invoiceId).session(session).lean() as any
+      const isNonCommission = invoice?.invoiceType === "non_commission"
+
       // 4b. Reset Item/Ticket Refund Status
       if (refund.tickets && refund.tickets.length > 0) {
         const ticketIds = refund.tickets.map((t: any) => new Types.ObjectId(t.ticketId))
-        await Promise.all([
-          InvoiceItem.updateMany(
-            { referenceId: { $in: ticketIds }, companyId: companyIdObj },
-            { $set: { isRefund: false, updatedAt: now } },
-            { session }
-          ),
-          InvoiceTicket.updateMany(
+        
+        if (isNonCommission) {
+          await InvoiceItem.updateMany(
             { _id: { $in: ticketIds }, companyId: companyIdObj },
             { $set: { isRefund: false, updatedAt: now } },
             { session }
           )
-        ])
+        } else {
+          await Promise.all([
+            InvoiceItem.updateMany(
+              { referenceId: { $in: ticketIds }, companyId: companyIdObj },
+              { $set: { isRefund: false, updatedAt: now } },
+              { session }
+            ),
+            InvoiceTicket.updateMany(
+              { _id: { $in: ticketIds }, companyId: companyIdObj },
+              { $set: { isRefund: false, updatedAt: now } },
+              { session }
+            )
+          ])
+        }
       }
 
       // 5. Soft Delete Refund Record

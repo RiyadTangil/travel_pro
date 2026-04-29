@@ -357,7 +357,9 @@ export async function getInvoiceById(id: string, companyId: string) {
   // Fetch children with compatibility for existing String invoiceId
   const [items, tickets, hotels, transports, passports] = await Promise.all([
     InvoiceItem.find({ invoiceId: invId, companyId: companyIdObj, isDeleted: { $ne: true } }).lean(),
-    InvoiceTicket.find({ invoiceId: invId, companyId: companyIdObj, isDeleted: { $ne: true } }).lean(),
+    (inv as any).invoiceType === "non_commission"
+      ? Promise.resolve([])
+      : InvoiceTicket.find({ invoiceId: invId, companyId: companyIdObj, isDeleted: { $ne: true } }).lean(),
     InvoiceHotel.find({ invoiceId: invId, companyId: companyIdObj, isDeleted: { $ne: true } }).lean(),
     InvoiceTransport.find({ invoiceId: invId, companyId: companyIdObj, isDeleted: { $ne: true } }).lean(),
     InvoicePassport.find({ invoiceId: invId, companyId: companyIdObj, isDeleted: { $ne: true } }).lean(),
@@ -412,17 +414,34 @@ export async function getInvoiceById(id: string, companyId: string) {
     : []
 
   // Normalize child collections to UI-aligned shapes for edit prefill
-  const mapTickets = (tickets || []).map((t: any, idx: number) => ({
-    id: t.id || String(t._id || Date.now() + idx),
-    ticketNo: t.ticketNo || "",
-    pnr: t.pnr || "",
-    route: t.route || ((t.fromAirport && t.toAirport) ? `${t.fromAirport}->${t.toAirport}` : ""),
-    referenceNo: t.referenceNo || "",
-    journeyDate: t.journeyDate || t.flightDate || "",
-    returnDate: t.returnDate || "",
-    airline: t.airline || "",
-    isRefund: t.isRefund || false,
-  }))
+  const mapTickets = (inv as any).invoiceType === "non_commission"
+    ? (items || [])
+      .filter((ii: any) => ii.itemType === "ticket")
+      .map((ii: any) => {
+        const tm = ii.ticketMetadata || {}
+        return {
+          id: String(ii._id),
+          ticketNo: tm.ticketNo || "",
+          pnr: tm.pnr || "",
+          route: tm.route || "",
+          referenceNo: "",
+          journeyDate: tm.journeyDate || "",
+          returnDate: tm.returnDate || "",
+          airline: tm.airline || "",
+          isRefund: ii.isRefund || false,
+        }
+      })
+    : (tickets || []).map((t: any, idx: number) => ({
+      id: t.id || String(t._id || Date.now() + idx),
+      ticketNo: t.ticketNo || "",
+      pnr: t.pnr || "",
+      route: t.route || ((t.fromAirport && t.toAirport) ? `${t.fromAirport}->${t.toAirport}` : ""),
+      referenceNo: t.referenceNo || "",
+      journeyDate: t.journeyDate || t.flightDate || "",
+      returnDate: t.returnDate || "",
+      airline: t.airline || "",
+      isRefund: t.isRefund || false,
+    }))
   const mapHotels = (hotels || []).map((h: any, idx: number) => ({
     id: h.id || String(h._id || Date.now() + idx),
     hotelName: h.hotelName || "",
@@ -699,14 +718,14 @@ export async function listNonCommissionInvoices(params: {
         data: [
           { $skip: skip },
           { $limit: pageSize },
-          // Issue dates from InvoiceTicket
+          // Issue dates from InvoiceItem (non-commission tickets)
           {
             $lookup: {
-              from: "invoice_tickets",
+              from: "invoice_items",
               let: { invId: "$_id" },
               pipeline: [
-                { $match: { $expr: { $and: [{ $eq: ["$invoiceId", "$$invId"] }, { $ne: ["$isDeleted", true] }] } } },
-                { $project: { issueDate: 1, createdAt: 1, _id: 0 } }
+                { $match: { $expr: { $and: [{ $eq: ["$invoiceId", "$$invId"] }, { $ne: ["$isDeleted", true] }, { $eq: ["$itemType", "ticket"] }] } } },
+                { $project: { issueDate: "$ticketMetadata.issueDate", createdAt: 1, _id: 0 } }
               ],
               as: "ticketDates"
             }
@@ -721,6 +740,28 @@ export async function listNonCommissionInvoices(params: {
                 { $project: { voucherNo: 1, _id: 0 } }
               ],
               as: "mrAllocations"
+            }
+          },
+          // Tickets from InvoiceItem
+          {
+            $lookup: {
+              from: "invoice_items",
+              let: { invId: "$_id" },
+              pipeline: [
+                { $match: { $expr: { $and: [{ $eq: ["$invoiceId", "$$invId"] }, { $ne: ["$isDeleted", true] }, { $eq: ["$itemType", "ticket"] }] } } },
+                {
+                  $project: {
+                    id: { $toString: "$_id" },
+                    ticketNo: { $ifNull: ["$ticketMetadata.ticketNo", ""] },
+                    paxName: { $ifNull: ["$paxName", ""] },
+                    pnr: { $ifNull: ["$ticketMetadata.pnr", ""] },
+                    totalSales: 1,
+                    paidAmount: 1,
+                    dueAmount: { $max: [0, { $subtract: ["$totalSales", "$paidAmount"] }] }
+                  }
+                }
+              ],
+              as: "tickets"
             }
           },
           {
@@ -766,6 +807,7 @@ export async function listNonCommissionInvoices(params: {
               isRefund: { $ifNull: ["$isRefund", false] },
               createdAt: { $ifNull: ["$createdAt", { $toString: "$$NOW" }] },
               updatedAt: { $ifNull: ["$updatedAt", { $toString: "$$NOW" }] },
+              tickets: 1
             }
           }
         ]
@@ -873,29 +915,9 @@ export async function createNonCommissionInvoice(body: any, companyId: string) {
       for (const item of invoiceItems) {
         const { ticketDetails, paxEntries, flightEntries } = item
         
-        // a. Create InvoiceTicket (Main Reference)
-        const ticketResult = await InvoiceTicket.create([{
+        // a. Create InvoiceItem (Financial Row) - NOW containing all ticket metadata
+        const itemResult = await InvoiceItem.create([{
           invoiceId,
-          ticketNo: ticketDetails.ticketNo,
-          pnr: ticketDetails.pnr,
-          gdsPnr: ticketDetails.gdsPnr,
-          route: ticketDetails.route,
-          journeyDate: ticketDetails.journeyDate,
-          returnDate: ticketDetails.returnDate,
-          airline: ticketDetails.airline,
-          ticketType: ticketDetails.ticketType,
-          airbusClass: ticketDetails.airbusClass,
-          issueDate: ticketDetails.issueDate,
-          companyId: companyIdObj,
-          createdAt: now,
-          updatedAt: now
-        }], { session })
-        const ticketId = ticketResult[0]._id
-
-        // b. Create InvoiceItem (Financial Row) - Linked to Ticket
-        await InvoiceItem.create([{
-          invoiceId,
-          referenceId: ticketId,
           itemType: "ticket",
           product: "non_commission_ticket",
           productId: nonCommProductId,
@@ -924,8 +946,10 @@ export async function createNonCommissionInvoice(body: any, companyId: string) {
           createdAt: now,
           updatedAt: now
         }], { session })
+        
+        const ticketId = itemResult[0]._id // Use InvoiceItem ID as the ticketId reference
 
-        // c. Create InvoicePassports - Linked to Ticket
+        // b. Create InvoicePassports - Linked to the InvoiceItem (as ticketId)
         if (paxEntries.length > 0) {
           await InvoicePassport.insertMany(paxEntries.map((p: any) => ({
             invoiceId,
@@ -944,7 +968,7 @@ export async function createNonCommissionInvoice(body: any, companyId: string) {
           })), { session })
         }
 
-        // d. Create InvoiceTransports - Linked to Ticket
+        // c. Create InvoiceTransports - Linked to the InvoiceItem (as ticketId)
         if (flightEntries.length > 0) {
           await InvoiceTransport.insertMany(flightEntries.map((f: any) => ({
             invoiceId,
@@ -1028,9 +1052,8 @@ export async function getNonCommissionInvoiceById(id: string, companyId: string)
 
   const invId = inv._id
   // Fetch children
-  const [items, tickets, transports, passports] = await Promise.all([
+  const [items, transports, passports] = await Promise.all([
     InvoiceItem.find({ invoiceId: invId, companyId: companyIdObj, isDeleted: { $ne: true } }).lean(),
-    InvoiceTicket.find({ invoiceId: invId, companyId: companyIdObj, isDeleted: { $ne: true } }).lean(),
     InvoiceTransport.find({ invoiceId: invId, companyId: companyIdObj, isDeleted: { $ne: true } }).lean(),
     InvoicePassport.find({ invoiceId: invId, companyId: companyIdObj, isDeleted: { $ne: true } }).lean(),
   ])
@@ -1041,20 +1064,13 @@ export async function getNonCommissionInvoiceById(id: string, companyId: string)
   // and each InvoiceItem record represents one ticket in the UI list.
   
   const reconstructedItems = items.map((ii: any) => {
-    // 1. Find matching ticket for this item using referenceId (preferred) or paxName/description (fallback)
-    // IMPORTANT: MongoDB .lean() returns _id as an ObjectId, so we use .toString() to compare.
-    const ticket = tickets.find((t: any) => 
-      (ii.referenceId && String(t._id) === String(ii.referenceId)) || 
-      (ii.ticketId && String(t._id) === String(ii.ticketId)) || 
-      (!ii.referenceId && (t.ticketNo === ii.paxName || t.route === ii.description.split('|')[1]?.split(':')[1]?.trim()))
-    ) || tickets[0]
-    
-    const ticketIdStr = ticket ? String(ticket._id) : null
+    const ticketIdStr = String(ii._id)
+    const tm = ii.ticketMetadata || {}
 
     // 2. Filter paxEntries and flightEntries that belong ONLY to this ticket using ticketId
     const itemPaxEntries = passports
       .filter((p: any) => 
-        (ticketIdStr && String(p.ticketId) === ticketIdStr) || 
+        (String(p.ticketId) === ticketIdStr) || 
         (!p.ticketId && String(p.invoiceId) === String(invId))
       )
       .map((p: any) => ({
@@ -1071,7 +1087,7 @@ export async function getNonCommissionInvoiceById(id: string, companyId: string)
 
     const itemFlightEntries = transports
       .filter((tr: any) => 
-        (ticketIdStr && String(tr.ticketId) === ticketIdStr) || 
+        (String(tr.ticketId) === ticketIdStr) || 
         (!tr.ticketId && String(tr.invoiceId) === String(invId))
       )
       .map((tr: any) => ({
@@ -1086,23 +1102,23 @@ export async function getNonCommissionInvoiceById(id: string, companyId: string)
       }))
 
     return {
-      id: ii.referenceId || ii.ticketId || ii.id || String(ii._id),
+      id: ticketIdStr,
       ticketDetails: {
-        ticketNo: ticket?.ticketNo || "",
+        ticketNo: tm.ticketNo || "",
         clientPrice: ii.totalSales || 0,
         purchasePrice: ii.totalCost || 0,
         extraFee: 0,
         vendor: String(ii.vendorId || ""),
-        airline: ticket?.airline || "",
-        ticketType: ticket?.ticketType || "",
-        route: ticket?.route || "",
-        pnr: ticket?.pnr || "",
-        gdsPnr: ticket?.gdsPnr || "",
+        airline: tm.airline || "",
+        ticketType: tm.ticketType || "",
+        route: tm.route || "",
+        pnr: tm.pnr || "",
+        gdsPnr: tm.gdsPnr || "",
         paxName: ii.paxName || "",
-        issueDate: ticket?.issueDate ? new Date(ticket.issueDate) : (ticket?.createdAt ? new Date(ticket.createdAt) : new Date()),
-        journeyDate: ticket?.journeyDate ? new Date(ticket.journeyDate) : undefined,
-        returnDate: ticket?.returnDate ? new Date(ticket.returnDate) : undefined,
-        airbusClass: ticket?.airbusClass || ""
+        issueDate: tm.issueDate ? new Date(tm.issueDate) : (ii.createdAt ? new Date(ii.createdAt) : new Date()),
+        journeyDate: tm.journeyDate ? new Date(tm.journeyDate) : undefined,
+        returnDate: tm.returnDate ? new Date(tm.returnDate) : undefined,
+        airbusClass: tm.airbusClass || ""
       },
       paxEntries: itemPaxEntries,
       flightEntries: itemFlightEntries,
@@ -1147,7 +1163,6 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
 
       await Promise.all([
         InvoiceItem.deleteMany({ invoiceId: invId, companyId: companyIdObj }).session(session),
-        InvoiceTicket.deleteMany({ invoiceId: invId, companyId: companyIdObj }).session(session),
         InvoicePassport.deleteMany({ invoiceId: invId, companyId: companyIdObj }).session(session),
         InvoiceTransport.deleteMany({ invoiceId: invId, companyId: companyIdObj }).session(session),
       ])
@@ -1208,29 +1223,9 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
       for (const item of invoiceItems) {
         const { ticketDetails, paxEntries, flightEntries } = item
 
-        // a. Create InvoiceTicket (Main Reference)
-        const ticketResult = await InvoiceTicket.create([{
+        // a. Create InvoiceItem (Financial Row) - NOW containing all ticket metadata
+        const itemResult = await InvoiceItem.create([{
           invoiceId: invId,
-          ticketNo: ticketDetails.ticketNo,
-          pnr: ticketDetails.pnr,
-          gdsPnr: ticketDetails.gdsPnr,
-          route: ticketDetails.route,
-          journeyDate: ticketDetails.journeyDate,
-          returnDate: ticketDetails.returnDate,
-          airline: ticketDetails.airline,
-          ticketType: ticketDetails.ticketType,
-          airbusClass: ticketDetails.airbusClass,
-          issueDate: ticketDetails.issueDate,
-          companyId: companyIdObj,
-          createdAt: now,
-          updatedAt: now
-        }], { session })
-        const ticketId = ticketResult[0]._id
-
-        // b. Create InvoiceItem (Financial Row) - Linked to Ticket
-        await InvoiceItem.create([{
-          invoiceId: invId,
-          referenceId: ticketId,
           itemType: "ticket",
           product: "non_commission_ticket",
           productId: nonCommProductId,
@@ -1259,8 +1254,10 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
           createdAt: now,
           updatedAt: now
         }], { session })
+        
+        const ticketId = itemResult[0]._id // Use InvoiceItem ID as the ticketId reference
 
-        // c. Create InvoicePassports - Linked to Ticket
+        // c. Create InvoicePassports - Linked to the InvoiceItem (as ticketId)
         if (paxEntries.length > 0) {
           await InvoicePassport.insertMany(paxEntries.map((p: any) => ({
             invoiceId: invId,
@@ -1279,7 +1276,7 @@ export async function updateNonCommissionInvoice(id: string, body: any, companyI
           })), { session })
         }
 
-        // d. Create InvoiceTransports - Linked to Ticket
+        // d. Create InvoiceTransports - Linked to the InvoiceItem (as ticketId)
         if (flightEntries.length > 0) {
           await InvoiceTransport.insertMany(flightEntries.map((f: any) => ({
             invoiceId: invId,
@@ -1384,15 +1381,21 @@ export async function deleteInvoiceById(id: string, companyId: string) {
       const softDeleteFilter = { invoiceId, companyId: companyIdObj }
       const softDeleteUpdate = { $set: { isDeleted: true, updatedAt: now } }
       
-      await Promise.all([
+      const updatePromises: any[] = [
         InvoiceItem.updateMany(softDeleteFilter, softDeleteUpdate, { session }),
-        InvoiceTicket.updateMany(softDeleteFilter, softDeleteUpdate, { session }),
         InvoiceHotel.updateMany(softDeleteFilter, softDeleteUpdate, { session }),
         InvoiceTransport.updateMany(softDeleteFilter, softDeleteUpdate, { session }),
         InvoicePassport.updateMany(softDeleteFilter, softDeleteUpdate, { session }),
         // Soft delete the invoice itself
         Invoice.updateOne({ _id: inv._id, companyId: companyIdObj }, softDeleteUpdate, { session })
-      ])
+      ]
+
+      // Only delete InvoiceTicket if it's NOT a non-commission invoice (non-commission tickets are stored in InvoiceItem)
+      if (inv.invoiceType !== "non_commission") {
+        updatePromises.push(InvoiceTicket.updateMany(softDeleteFilter, softDeleteUpdate, { session }))
+      }
+      
+      await Promise.all(updatePromises)
 
       resultOk = true
     })

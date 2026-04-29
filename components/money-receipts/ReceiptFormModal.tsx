@@ -226,19 +226,40 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
           const res = await fetch(`/api/invoices?page=1&pageSize=100&clientId=${encodeURIComponent(selectedClientId)}&invoiceType=non_commission`, { signal: ctrl.signal })
           if (!res.ok) return
           const data = await res.json()
-          const invoices: InvoiceListItem[] = Array.isArray(data?.items) ? data.items : (Array.isArray(data?.data?.items) ? data.data.items : [])
-          // Build flat ticket list from invoices (each non-commission invoice = one "ticket" row)
-          const tickets: TicketItem[] = invoices.map((inv) => ({
-            id: inv.id,
-            invoiceId: inv.id,
-            invoiceNo: inv.invoiceNo,
-            ticketNo: inv.invoiceNo,
-            paxName: "",
-            salesDate: inv.salesDate,
-            totalSales: inv.salesPrice,
-            receivedAmount: inv.receivedAmount,
-            dueAmount: inv.dueAmount,
-          }))
+          const invoices: any[] = Array.isArray(data?.items) ? data.items : (Array.isArray(data?.data?.items) ? data.data.items : [])
+          
+          // Flatten tickets from all non-commission invoices
+          const tickets: TicketItem[] = []
+          invoices.forEach((inv) => {
+            if (Array.isArray(inv.tickets) && inv.tickets.length > 0) {
+              inv.tickets.forEach((t: any) => {
+                tickets.push({
+                  id: t.id, // This is InvoiceItem _id
+                  invoiceId: inv.id,
+                  invoiceNo: inv.invoiceNo,
+                  ticketNo: t.ticketNo || "",
+                  paxName: t.paxName || "",
+                  salesDate: inv.salesDate,
+                  totalSales: t.totalSales || 0,
+                  receivedAmount: t.paidAmount || 0,
+                  dueAmount: t.dueAmount || 0,
+                })
+              })
+            } else {
+              // Fallback if no tickets array found (should not happen with updated backend)
+              tickets.push({
+                id: inv.id,
+                invoiceId: inv.id,
+                invoiceNo: inv.invoiceNo,
+                ticketNo: inv.invoiceNo,
+                paxName: "",
+                salesDate: inv.salesDate,
+                totalSales: inv.salesPrice,
+                receivedAmount: inv.receivedAmount,
+                dueAmount: inv.dueAmount,
+              })
+            }
+          })
           setTicketItems(tickets)
         } catch {
           // ignore
@@ -580,10 +601,12 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
                               <SelectValue placeholder={ticketLoading ? "Loading..." : "Select Ticket / Invoice"} />
                             </SelectTrigger>
                             <SelectContent>
-                              {ticketItems.map(t => (
-                                <SelectItem key={t.id} value={t.id}>{t.invoiceNo}</SelectItem>
-                              ))}
-                            </SelectContent>
+                        {ticketItems.map(t => (
+                          <SelectItem key={t.id} value={t.id}>
+                            {t.invoiceNo} {t.ticketNo ? `- ${t.ticketNo}` : ""} {t.paxName ? `(${t.paxName})` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
                           </Select>
                         </div>
                         <div className="col-span-6 md:col-span-2">

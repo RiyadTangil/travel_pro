@@ -198,12 +198,15 @@ export async function getNonCommissionTicketLinesByVendor(vendorId: string, comp
     if (due <= 0) continue
 
     const invNo = invNoById.get(String(item.invoiceId)) || ""
-    const ticketLabel = [invNo, item.description || item.paxName || "Ticket"].filter(Boolean).join(" · ")
+    const ticketNo = item.ticketMetadata?.ticketNo || ""
+    const paxName = item.paxName || item.ticketMetadata?.paxName || ""
+    const ticketInfo = [ticketNo, paxName].filter(Boolean).join(" - ") || item.description || "Ticket"
+    const ticketLabel = [invNo, ticketInfo].filter(Boolean).join(" · ")
 
     out.push({
       vendor: {
         id: String(item._id),
-        name: ticketLabel || vName || "Ticket",
+        name: ticketLabel,
         mobile: vMobile,
         email: vEmail,
       },
