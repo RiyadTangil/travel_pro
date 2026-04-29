@@ -9,7 +9,7 @@ const AdvanceReturnSchema = new Schema({
   accountId: { type: Types.ObjectId, ref: "Account" },
   accountName: { type: String },
   advanceAmount: { type: Number, required: true },
-  returnDate: { type: String },
+  returnDate: { type: Date },
   note: { type: String },
   receiptNo: { type: String },
   transactionCharge: { type: Number, default: 0 },

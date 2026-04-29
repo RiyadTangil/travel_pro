@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useForm } from "react-hook-form"
+import { useSession } from "next-auth/react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -10,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { DateInput } from "@/components/ui/date-input"
 import ClientSelect from "@/components/clients/client-select"
+import { cn } from "@/lib/utils"
 import type { AccountType } from "@/components/accounts/types"
 
 type FormValues = {
@@ -31,12 +33,14 @@ type Props = {
   open: boolean
   onOpenChange: (v: boolean) => void
   mode: "add" | "edit"
+  id?: string
   initialValues?: Partial<FormValues>
-  onSubmit: (values: FormValues) => void
+  onSuccess?: () => void
 }
 
-export default function AdvanceReturnModal({ open, onOpenChange, mode, initialValues, onSubmit }: Props) {
-  const { register, setValue, handleSubmit, reset, watch, setError, formState: { errors } } = useForm<FormValues>({
+export default function AdvanceReturnModal({ open, onOpenChange, mode, id, initialValues, onSuccess }: Props) {
+  const { data: session } = useSession()
+  const { register, setValue, handleSubmit, reset, watch, setError, clearErrors, formState: { errors } } = useForm<FormValues>({
     defaultValues: {
       clientId: "",
       paymentMethod: "",
@@ -213,14 +217,33 @@ export default function AdvanceReturnModal({ open, onOpenChange, mode, initialVa
       return
     }
     const acc = filteredAccounts.find(a => a.id === vals.accountId)
-    setValue("accountName", acc?.name || "")
+    const payload = { ...vals, accountName: acc?.name || "" }
+
     try {
       setSubmitting(true)
-      const ok = await Promise.resolve(onSubmit({ ...vals, accountName: acc?.name || "" }) as any)
-      if (ok) {
-        if (mode === "add") reset(makeDefaults())
-        onOpenChange(false)
+      const url = mode === "add" ? "/api/advance-returns" : `/api/advance-returns/${id}`
+      const method = mode === "add" ? "POST" : "PUT"
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          "x-company-id": session?.user?.companyId ?? "",
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.message || `Failed to ${mode === "add" ? "create" : "update"} advance return`)
       }
+
+      if (onSuccess) onSuccess()
+      if (mode === "add") reset(makeDefaults())
+      onOpenChange(false)
+    } catch (err: any) {
+      console.error(err)
+      setError("root", { type: "manual", message: err.message })
     } finally {
       setSubmitting(false)
     }
@@ -290,7 +313,7 @@ export default function AdvanceReturnModal({ open, onOpenChange, mode, initialVa
                   </div>
                 )}
 
-                {mode === "edit" && (
+                {paymentMethod && paymentMethod.toLowerCase() !== "cash" && (
                   <div className="space-y-2">
                     <Label>Transaction charge:</Label>
                     <Input placeholder="Transaction charge" {...register("transactionCharge")} />
@@ -299,8 +322,21 @@ export default function AdvanceReturnModal({ open, onOpenChange, mode, initialVa
 
                 <div className="space-y-2">
                   <Label>{requiredMark("Advance amount:", true)}</Label>
-                  <Input type="number" step="0.01" placeholder="Advance amount" {...register("advanceAmount", { required: true })} />
-                  {errors.advanceAmount && <div className="text-red-500 text-xs">Advance amount is required</div>}
+                  <Input 
+                    type="number" 
+                    step="0.01" 
+                    placeholder="Advance amount" 
+                    className={cn(errors.advanceAmount && "border-red-500 focus-visible:ring-red-500")}
+                    {...register("advanceAmount", { 
+                      required: "Advance amount is required",
+                      validate: (val) => {
+                        const amt = parseFloat(val || "0")
+                        const bal = parseFloat(watch("availableBalance") || "0")
+                        return amt <= bal || "Insufficient account balance"
+                      }
+                    })} 
+                  />
+                  {errors.advanceAmount && <div className="text-red-500 text-xs">{errors.advanceAmount.message}</div>}
                 </div>
               </div>
 
@@ -326,7 +362,8 @@ export default function AdvanceReturnModal({ open, onOpenChange, mode, initialVa
                   <Textarea rows={3} placeholder="Note something" {...register("returnNote")} />
                 </div>
 
-                <div className="flex justify-end">
+                <div className="flex flex-col items-end space-y-2">
+                  {errors.root && <div className="text-red-500 text-sm">{errors.root.message}</div>}
                   <Button type="submit" className="bg-sky-500 hover:bg-sky-600">
                     {submitting ? (mode === "add" ? "Submitting..." : "Updating...") : (mode === "add" ? "Return Advance Payment" : "Update")}
                   </Button>

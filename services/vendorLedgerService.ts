@@ -1,3 +1,4 @@
+import { startOfDay, endOfDay, parseISO } from "date-fns"
 import { Types } from "mongoose"
 import connectMongoose from "@/lib/mongoose"
 import { InvoiceItem } from "@/models/invoice-item"
@@ -21,9 +22,9 @@ export async function getVendorLedger(
   const vendorDoc = await Vendor.findById(vendorOid).lean() as any
 
   // Build optional date filter (used for both queries)
-  const dateFilter: Record<string, string> = {}
-  if (dateFrom) dateFilter.$gte = dateFrom
-  if (dateTo)   dateFilter.$lte = dateTo
+  const dateFilter: Record<string, any> = {}
+  if (dateFrom) dateFilter.$gte = startOfDay(parseISO(dateFrom))
+  if (dateTo)   dateFilter.$lte = endOfDay(parseISO(dateTo))
   const hasDateFilter = Object.keys(dateFilter).length > 0
 
   // ── 1. Invoice cost entries ────────────────────────────────────────────────

@@ -21,6 +21,8 @@ type AdvanceReturnRow = {
   paymentDetails: string
   advanceAmount: number
   returnNote?: string
+  transactionCharge?: number
+  receiptNo?: string
 }
 
 export default function AdvanceReturnPage() {
@@ -202,15 +204,13 @@ export default function AdvanceReturnPage() {
         open={openAdd}
         mode="add"
         onOpenChange={setOpenAdd}
-        onSubmit={async () => {
-          await load()
-          return true
-        }}
+        onSuccess={load}
       />
 
       <AdvanceReturnModal
         open={openEdit}
         mode="edit"
+        id={editingRow?.id}
         onOpenChange={(v) => {
           if (!v) setEditingRow(null)
           setOpenEdit(v)
@@ -218,21 +218,20 @@ export default function AdvanceReturnPage() {
         initialValues={
           editingRow
             ? {
-                clientId: "",
+                clientId: "", // Note: Modal will try to find this by name if empty
                 clientName: editingRow.clientName,
                 paymentMethod: editingRow.paymentType,
-                accountId: "",
+                accountId: "", // Note: Modal will try to find this by name if empty
                 accountName: editingRow.paymentDetails,
                 advanceAmount: String(editingRow.advanceAmount),
                 returnDate: editingRow.returnDate,
                 returnNote: editingRow.returnNote || "",
+                transactionCharge: editingRow.transactionCharge ? String(editingRow.transactionCharge) : "",
+                receiptNo: editingRow.receiptNo || "",
               }
             : undefined
         }
-        onSubmit={async () => {
-          await load()
-          return true
-        }}
+        onSuccess={load}
       />
     </PageWrapper>
   )

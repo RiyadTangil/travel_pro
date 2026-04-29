@@ -12,13 +12,13 @@ const BillingSummarySchema = new Schema({
 }, { _id: false })
 
 const InvoiceSchema = new Schema({
-  invoiceNo: { type: String, required: true, index: true, unique: true },
+  invoiceNo: { type: String, required: true, index: true },
   clientId: { type: Types.ObjectId, ref: "Client", index: true },
   employeeId: { type: Types.ObjectId, ref: "Employee", index: true },
   agentId: { type: Types.ObjectId, ref: "Agent", index: true },
   companyId: { type: Types.ObjectId, ref: "Company", index: true, required: true },
-  salesDate: { type: String },
-  dueDate: { type: String },
+  salesDate: { type: Date },
+  dueDate: { type: Date },
   clientName: { type: String },
   clientPhone: { type: String },
   salesByName: { type: String },
@@ -37,6 +37,10 @@ const InvoiceSchema = new Schema({
   createdAt: { type: String },
   updatedAt: { type: String },
 }, { collection: "invoices" })
+
+// Compound index for unique invoice numbers within a company
+InvoiceSchema.index({ companyId: 1, invoiceNo: 1 }, { unique: true })
+
 
 // Compound indexes for the most frequent query patterns
 // (companyId, salesDate) → list + sort  (most common list call)

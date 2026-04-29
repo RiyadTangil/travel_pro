@@ -1,3 +1,4 @@
+import { startOfDay, endOfDay, parseISO } from "date-fns"
 import { Types } from "mongoose"
 import connectMongoose from "@/lib/mongoose"
 import mongoose from "mongoose"
@@ -8,17 +9,16 @@ import { ClientTransaction } from "@/models/client-transaction"
 import { Counter } from "@/models/counter"
 import { AppError } from "@/errors/AppError"
 
-async function getNextVoucherNo() {
+async function getNextVoucherNo(companyId?: string | Types.ObjectId) {
+  const companyKey = String(companyId || "").trim()
+  const key = companyKey ? `vendor_advance_return_voucher:${companyKey}` : "vendor_advance_return_voucher"
   const counter = await Counter.findOneAndUpdate(
-    { key: "vendor_advance_return_voucher" },
+    { key },
     { $inc: { seq: 1 } },
     { new: true, upsert: true }
   )
   const seq = counter.seq.toString().padStart(4, "0")
-  return `ADVR-${seq}` // Using same prefix as client? Or VADVR? User screenshot shows ADVR. Let's stick to ADVR but maybe prefix clash if same counter key? 
-  // User screenshot shows ADVR-9967001. 
-  // If we use same key as client advance return, we might want to check.
-  // But let's use a unique key for safety: "vendor_advance_return_voucher".
+  return `ADVR-${seq}`
 }
 
 async function updateVendorBalance(vendorId: string | Types.ObjectId, amountChange: number, session: any) {
@@ -66,7 +66,7 @@ export async function createVendorAdvanceReturn(data: any) {
     if (!accountId) throw new AppError("Account is required", 400)
     if (!amount || amount <= 0) throw new AppError("Amount must be greater than zero", 400)
 
-    const voucherNo = await getNextVoucherNo()
+    const voucherNo = await getNextVoucherNo(companyId)
 
     const newReturn = new VendorAdvanceReturn({
       companyId: new Types.ObjectId(companyId),
@@ -237,9 +237,10 @@ export async function listVendorAdvanceReturns(params: any) {
   const filter: any = {}
   if (companyId) filter.companyId = new Types.ObjectId(companyId)
   if (dateFrom || dateTo) {
-    filter.returnDate = {}
-    if (dateFrom) filter.returnDate.$gte = dateFrom
-    if (dateTo) filter.returnDate.$lte = dateTo
+    const dFilter: any = {}
+    if (dateFrom) dFilter.$gte = startOfDay(parseISO(dateFrom))
+    if (dateTo)   dFilter.$lte = endOfDay(parseISO(dateTo))
+    filter.returnDate = dFilter
   }
 
   // Basic search on voucherNo or note

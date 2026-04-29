@@ -1,3 +1,4 @@
+import { startOfDay, endOfDay, parseISO } from "date-fns"
 import { Types } from "mongoose"
 import connectMongoose from "@/lib/mongoose"
 import { Invoice } from "@/models/invoice"
@@ -48,9 +49,9 @@ export async function getSalesReport(params: SalesReportParams) {
   if (categoryId) query.invoiceType = categoryId
 
   if (dateFrom || dateTo) {
-    const df: Record<string, string> = {}
-    if (dateFrom) df.$gte = dateFrom
-    if (dateTo)   df.$lte = dateTo
+    const df: Record<string, any> = {}
+    if (dateFrom) df.$gte = startOfDay(parseISO(dateFrom))
+    if (dateTo)   df.$lte = endOfDay(parseISO(dateTo))
     query.salesDate = df
   }
 

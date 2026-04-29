@@ -1,3 +1,4 @@
+import { startOfDay, endOfDay, parseISO } from "date-fns"
 import { Types } from "mongoose"
 import mongoose from "mongoose"
 import connectMongoose from "@/lib/mongoose"
@@ -10,9 +11,12 @@ import { AdvanceReturn } from "@/models/advance-return"
 
 function parseNumber(n: any, def = 0): number { const x = Number(n); return isFinite(x) ? x : def }
 
-async function nextVoucher() {
+async function nextVoucher(companyId?: string | Types.ObjectId) {
+  const companyKey = String(companyId || "").trim()
+  if (!companyKey) throw new AppError("Company ID is required", 401)
+  const key = `voucher_adr:${companyKey}`
   const doc = await Counter.findOneAndUpdate(
-    { key: "voucher_adr" },
+    { key },
     { $inc: { seq: 1 }, $set: { updatedAt: new Date().toISOString() } },
     { new: true, upsert: true }
   ).lean()
@@ -34,11 +38,10 @@ export async function listAdvanceReturns(params: { page?: number; pageSize?: num
     ]
   }
   if (dateFrom || dateTo) {
-    const d1 = dateFrom ? new Date(dateFrom).toISOString().slice(0, 10) : undefined
-    const d2 = dateTo ? new Date(dateTo).toISOString().slice(0, 10) : undefined
-    if (d1 && d2) filter.returnDate = { $gte: d1, $lte: d2 }
-    else if (d1) filter.returnDate = { $gte: d1 }
-    else if (d2) filter.returnDate = { $lte: d2 }
+    const dFilter: any = {}
+    if (dateFrom) dFilter.$gte = startOfDay(parseISO(dateFrom))
+    if (dateTo)   dFilter.$lte = endOfDay(parseISO(dateTo))
+    filter.returnDate = dFilter
   }
   if (search) {
     const q = String(search).trim()
@@ -89,10 +92,11 @@ export async function createAdvanceReturn(body: any, companyId?: string) {
       const amount = Math.max(0, parseNumber(body.advanceAmount ?? body.amount, 0))
       if (amount <= 0) throw new AppError("Amount must be positive", 400)
 
-      const present = parseNumber(clientDoc.presentBalance, 0)
-      if (present < amount - 0.0001) throw new AppError("Insufficient client advance balance", 400)
+      const accBalance = parseNumber(accDoc.lastBalance, 0)
+      if (accBalance < amount - 0.0001) throw new AppError("Insufficient account balance", 400)
 
-      const voucherNo = await nextVoucher()
+      const present = parseNumber(clientDoc.presentBalance, 0)
+      const voucherNo = await nextVoucher(companyObjectId)
       const paymentMethod = String(body.paymentMethod || "")
       const accountName = String(body.accountName || accDoc.name || "")
       const returnDate = String(body.returnDate || now.slice(0, 10))
@@ -190,9 +194,10 @@ export async function updateAdvanceReturn(id: string, body: any, companyId?: str
       const returnDate = String(body.returnDate ?? doc.returnDate ?? now.slice(0, 10))
       const note = String(body.returnNote ?? body.note ?? doc.note ?? "")
 
-      const present = parseNumber(clientDoc.presentBalance, 0)
-      if (delta > 0 && present < delta - 0.0001) throw new AppError("Insufficient client advance balance", 400)
+      const accBalance = parseNumber(accDoc.lastBalance, 0)
+      if (delta > 0 && accBalance < delta - 0.0001) throw new AppError("Insufficient account balance", 400)
 
+      const present = parseNumber(clientDoc.presentBalance, 0)
       const newClientPresent = present - delta
       await Client.updateOne({ _id: clientId }, { $set: { presentBalance: newClientPresent, updatedAt: now } }, sess ? { session: sess } : undefined)
 
@@ -206,6 +211,8 @@ export async function updateAdvanceReturn(id: string, body: any, companyId?: str
           advanceAmount: newAmount,
           returnDate,
           note,
+          receiptNo: String(body.receiptNo ?? doc.receiptNo ?? ""),
+          transactionCharge: parseNumber(body.transactionCharge ?? doc.transactionCharge, 0),
           updatedAt: now,
         }
       }, sess ? { session: sess } : undefined)

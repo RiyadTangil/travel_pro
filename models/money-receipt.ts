@@ -15,7 +15,7 @@ const MoneyReceiptSchema = new Schema({
   discount: { type: Number, default: 0 },
   allocatedAmount: { type: Number, default: 0 },
   remainingAmount: { type: Number, default: 0 },
-  paymentDate: { type: String }, // ISO YYYY-MM-DD
+  paymentDate: { type: Date }, // ISO YYYY-MM-DD
   note: { type: String },
   docOneName: { type: String },
   docTwoName: { type: String },
@@ -23,6 +23,9 @@ const MoneyReceiptSchema = new Schema({
   createdAt: { type: String },
   updatedAt: { type: String },
 }, { collection: "money_receipts" })
+
+// Compound index for unique voucher numbers within a company
+MoneyReceiptSchema.index({ companyId: 1, voucherNo: 1 }, { unique: true })
 
 // Hot-path for advance auto-apply (autoApplyClientAdvanceToInvoice)
 MoneyReceiptSchema.index({ clientId: 1, companyId: 1, paymentTo: 1, remainingAmount: 1 })

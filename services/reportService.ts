@@ -1,3 +1,4 @@
+import { endOfDay, parseISO } from "date-fns"
 import { Types } from "mongoose"
 import connectMongoose from "@/lib/mongoose"
 import { Client } from "@/models/client"
@@ -51,7 +52,7 @@ export async function getClientsTotalDueAdvance(
       {
         $match: {
           clientId: { $in: clientIds },
-          date: { $lte: targetDate },
+          date: { $lte: endOfDay(parseISO(targetDate)) },
         },
       },
       {

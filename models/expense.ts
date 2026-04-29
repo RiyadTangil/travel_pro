@@ -8,8 +8,8 @@ const ExpenseItemSchema = new Schema({
 
 const ExpenseSchema = new Schema({
   companyId: { type: Types.ObjectId, ref: "Company", index: true, required: true },
-  voucherNo: { type: String, required: true, unique: true, index: true },
-  date: { type: String, required: true },
+  voucherNo: { type: String, required: true, index: true },
+  date: { type: Date, required: true },
   
   accountId: { type: Types.ObjectId, ref: "Account", required: true },
   accountName: { type: String },
@@ -27,5 +27,8 @@ const ExpenseSchema = new Schema({
   createdAt: { type: String },
   updatedAt: { type: String },
 }, { collection: "expenses" })
+
+// Compound index for unique voucher numbers within a company
+ExpenseSchema.index({ companyId: 1, voucherNo: 1 }, { unique: true })
 
 export const Expense = models.Expense || model("Expense", ExpenseSchema)

@@ -21,11 +21,11 @@ const RefundTicketItemSchema = new Schema({
 }, { _id: false })
 
 const AirticketRefundSchema = new Schema({
-  voucherNo: { type: String, required: true, unique: true },
+  voucherNo: { type: String, required: true, index: true },
   invoiceId: { type: Types.ObjectId, ref: "Invoice", required: true, index: true },
   clientId: { type: Types.ObjectId, ref: "Client", required: true, index: true },
   companyId: { type: Types.ObjectId, ref: "Company", required: true, index: true },
-  refundDate: { type: String, required: true },
+  refundDate: { type: Date, required: true },
   tickets: [RefundTicketItemSchema],
   
   // Client Refund Info
@@ -52,6 +52,10 @@ const AirticketRefundSchema = new Schema({
   createdAt: { type: String },
   updatedAt: { type: String },
 }, { collection: "airticket_refunds" })
+
+// Compound index for unique voucher numbers within a company
+AirticketRefundSchema.index({ companyId: 1, voucherNo: 1 }, { unique: true })
+
 
 // Prevent model caching during development
 if (process.env.NODE_ENV === "development" && models.AirticketRefund) {

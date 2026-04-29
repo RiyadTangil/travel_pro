@@ -4,7 +4,7 @@ const VendorAdvanceReturnSchema = new Schema({
   companyId: { type: Schema.Types.ObjectId, required: true },
   vendorId: { type: Schema.Types.ObjectId, required: true, ref: "Vendor" },
   voucherNo: { type: String },
-  returnDate: { type: String, required: true },
+  returnDate: { type: Date, required: true },
   amount: { type: Number, required: true },
   paymentMethod: { type: String, default: "Cash" },
   accountId: { type: Schema.Types.ObjectId, ref: "Account" },

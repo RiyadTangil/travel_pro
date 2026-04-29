@@ -1,3 +1,4 @@
+import { startOfDay, endOfDay, parseISO } from "date-fns"
 import { Types } from "mongoose"
 import connectMongoose from "@/lib/mongoose"
 import { Invoice } from "@/models/invoice"
@@ -5,6 +6,8 @@ import { Expense } from "@/models/expense"
 import { MoneyReceipt } from "@/models/money-receipt"
 import { NonInvoiceIncome } from "@/models/non-invoice-income"
 import { VendorPayment } from "@/models/vendor-payment"
+import { AdvanceReturn } from "@/models/advance-return"
+import { AirticketRefund } from "@/models/airticket-refund"
 import { AppError } from "@/errors/AppError"
 
 export interface ProfitLossParams {
@@ -25,8 +28,8 @@ export async function getOverallProfitLoss(params: ProfitLossParams) {
   function makeDateFilter(field: string, from?: string, to?: string) {
     if (!from && !to) return {}
     const range: any = {}
-    if (from) range.$gte = from
-    if (to) range.$lte = to
+    if (from) range.$gte = startOfDay(parseISO(from))
+    if (to) range.$lte = endOfDay(parseISO(to))
     return { [field]: range }
   }
 
@@ -35,6 +38,8 @@ export async function getOverallProfitLoss(params: ProfitLossParams) {
   const receiptMatch = { ...baseMatch, ...makeDateFilter("paymentDate", dateFrom, dateTo) }
   const nonInvIncomeMatch = { ...baseMatch, ...makeDateFilter("date", dateFrom, dateTo) }
   const vendorPaymentMatch = { ...baseMatch, ...makeDateFilter("paymentDate", dateFrom, dateTo) }
+  const advanceReturnMatch = { ...baseMatch, ...makeDateFilter("returnDate", dateFrom, dateTo) }
+  const refundMatch = { ...baseMatch, isDeleted: { $ne: true }, ...makeDateFilter("refundDate", dateFrom, dateTo) }
 
   // Run all aggregations in parallel — single DB round-trip per collection
   const [
@@ -43,6 +48,8 @@ export async function getOverallProfitLoss(params: ProfitLossParams) {
     discountResult,
     nonInvoiceIncomeResult,
     aitResult,
+    transactionChargeResult,
+    refundProfitResult,
   ] = await Promise.all([
     // 1. Invoice: sales, purchase cost, service charge, agent commission — all in one $group
     Invoice.aggregate([
@@ -54,6 +61,7 @@ export async function getOverallProfitLoss(params: ProfitLossParams) {
           totalPurchase: { $sum: { $ifNull: ["$billing.totalCost", 0] } },
           totalServiceCharge: { $sum: { $ifNull: ["$billing.serviceCharge", 0] } },
           totalAgentCommission: { $sum: { $ifNull: ["$agentCommission", 0] } },
+          totalInvoiceDiscount: { $sum: { $ifNull: ["$billing.discount", 0] } },
         }
       }
     ]),
@@ -81,25 +89,42 @@ export async function getOverallProfitLoss(params: ProfitLossParams) {
       { $match: vendorPaymentMatch },
       { $group: { _id: null, total: { $sum: { $ifNull: ["$vendorAit", 0] } } } }
     ]),
+
+    // 6. Transaction charges from Advance Returns
+    AdvanceReturn.aggregate([
+      { $match: advanceReturnMatch },
+      { $group: { _id: null, total: { $sum: { $ifNull: ["$transactionCharge", 0] } } } }
+    ]),
+
+    // 7. Refund profit from Airticket Refunds
+    AirticketRefund.aggregate([
+      { $match: refundMatch },
+      { $group: { _id: null, total: { $sum: { $ifNull: ["$refundProfit", 0] } } } }
+    ]),
   ])
 
-  const inv = invoiceResult[0] ?? { totalSales: 0, totalPurchase: 0, totalServiceCharge: 0, totalAgentCommission: 0 }
+  const inv = invoiceResult[0] ?? { totalSales: 0, totalPurchase: 0, totalServiceCharge: 0, totalAgentCommission: 0, totalInvoiceDiscount: 0 }
   const totalSales = Number(inv.totalSales) || 0
   const totalPurchase = Number(inv.totalPurchase) || 0
   const serviceCharge = Number(inv.totalServiceCharge) || 0
   const agentCommission = Number(inv.totalAgentCommission) || 0
+  const invoiceDiscount = Number(inv.totalInvoiceDiscount) || 0
 
   const totalExpense = Number(expenseResult[0]?.total) || 0
-  const totalDiscount = Number(discountResult[0]?.total) || 0
+  const receiptDiscount = Number(discountResult[0]?.total) || 0
   const nonInvoiceIncome = Number(nonInvoiceIncomeResult[0]?.total) || 0
   const ait = Number(aitResult[0]?.total) || 0
+  const totalTransactionCharge = Number(transactionChargeResult[0]?.total) || 0
+  const totalRefundProfit = Number(refundProfitResult[0]?.total) || 0
+
+  const totalDiscount = invoiceDiscount + receiptDiscount
 
   const salesProfitLoss = totalSales - totalPurchase
 
   // Total income = all revenue streams
-  const totalIncome = totalSales + serviceCharge + nonInvoiceIncome
+  const totalIncome = totalSales + serviceCharge + nonInvoiceIncome + totalRefundProfit
   // Total expense = cost of goods + all operating costs
-  const totalCost = totalPurchase + totalExpense + totalDiscount + ait + agentCommission
+  const totalCost = totalPurchase + totalExpense + totalDiscount + ait + agentCommission + totalTransactionCharge
   const netProfitLoss = totalIncome - totalCost
 
   return {
@@ -112,14 +137,14 @@ export async function getOverallProfitLoss(params: ProfitLossParams) {
       discount: totalDiscount,
       expense: totalExpense,
       payroll: 0,           // No payroll model yet
-      transaction_charge: 0, // No transaction charge model yet
+      transaction_charge: totalTransactionCharge,
       ait,
       agent_payment: agentCommission,
     },
     income: {
       service_charge: serviceCharge,
       void_charge: 0,        // No void charge model yet
-      refund_profit: 0,      // No refund profit model yet
+      refund_profit: totalRefundProfit,
       incentive: 0,          // No incentive model yet
       non_invoice_income: nonInvoiceIncome,
     },

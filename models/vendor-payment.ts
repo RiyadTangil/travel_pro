@@ -14,7 +14,7 @@ const VendorPaymentSchema = new Schema({
   amount: { type: Number, required: true },
   vendorAit: { type: Number, default: 0 },
   totalAmount: { type: Number, required: true },
-  paymentDate: { type: String }, // ISO YYYY-MM-DD
+  paymentDate: { type: Date }, // ISO YYYY-MM-DD
   note: { type: String },
   voucherImage: { type: String },
   referPassport: { type: String, enum: ["yes", "no"], default: "no" },
@@ -31,5 +31,8 @@ const VendorPaymentSchema = new Schema({
   createdAt: { type: String },
   updatedAt: { type: String },
 }, { collection: "vendor_payments" })
+
+// Compound index for unique voucher numbers within a company
+VendorPaymentSchema.index({ companyId: 1, voucherNo: 1 }, { unique: true })
 
 export const VendorPayment = models.VendorPayment || model("VendorPayment", VendorPaymentSchema)
