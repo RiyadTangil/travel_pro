@@ -1,14 +1,10 @@
 "use client"
 
-import { useEffect } from "react"
-import { Drawer, Form, Input, Select, Row, Col, Button, Space } from "antd"
+import { useEffect, useState } from "react"
+import { Drawer, Form, Input, Select, Row, Col, Button, Space, message } from "antd"
 import type { DrawerProps } from "antd"
-
-const emailDomains = [
-  { value: "@gmail.com", label: "@gmail.com" },
-  { value: "@yahoo.com", label: "@yahoo.com" },
-  { value: "@outlook.com", label: "@outlook.com" },
-]
+import { useSession } from "next-auth/react"
+import axios from "axios"
 
 const mobilePrefixes = [
   { value: "+88", label: "+88" },
@@ -16,29 +12,109 @@ const mobilePrefixes = [
   { value: "+1", label: "+1" },
 ]
 
-const userRoleOptions = [
-  { value: "admin_role", label: "admin_role" },
-  { value: "staff", label: "staff" },
-  { value: "viewer", label: "viewer" },
-]
-
 export type CreateUserDrawerProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
+  onUserSaved?: (user: any) => void
+  mode?: "add" | "edit"
+  viewUser?: any | null
 } & Pick<DrawerProps, "className">
 
-export function CreateUserDrawer({ open, onOpenChange, className }: CreateUserDrawerProps) {
+export function CreateUserDrawer({ open, onOpenChange, onUserSaved, mode = "add", viewUser, className }: CreateUserDrawerProps) {
+  const { data: session } = useSession()
   const [form] = Form.useForm()
+  const [roles, setRoles] = useState<{ label: string; value: string }[]>([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (open && session?.user?.companyId) {
+      axios
+        .get("/api/configuration/roles", { headers: { "x-company-id": session.user.companyId }, params: { pageSize: 100 } })
+        .then((res) => {
+          setRoles(res.data.items.map((r: any) => ({ label: r.roleName, value: r.id })))
+        })
+        .catch((err) => {
+          console.error("Failed to fetch roles", err)
+        })
+    }
+  }, [open, session?.user?.companyId])
 
   useEffect(() => {
     if (!open) {
       form.resetFields()
+    } else if (mode === "edit" && viewUser) {
+      const [firstName, ...rest] = (viewUser.fullName || "").split(" ")
+      const lastName = rest.join(" ")
+      
+      let mobilePrefix = "+88"
+      let mobile = viewUser.mobile || ""
+      for (const p of mobilePrefixes) {
+        if (mobile.startsWith(p.value)) {
+          mobilePrefix = p.value
+          mobile = mobile.substring(p.value.length)
+          break
+        }
+      }
+
+      form.setFieldsValue({
+        firstName,
+        lastName,
+        userName: viewUser.userName !== "—" ? viewUser.userName : "",
+        emailLocal: viewUser.userEmail,
+        mobilePrefix,
+        mobile: mobile !== "—" ? mobile : "",
+        userRole: viewUser.roleId,
+      })
     }
-  }, [open, form])
+  }, [open, mode, viewUser, form])
+
+  const handleSubmit = async () => {
+    try {
+      const values = await form.validateFields()
+      if (values.password && values.password !== values.confirmPassword) {
+        message.error("Passwords do not match")
+        return
+      }
+
+      setLoading(true)
+      const payload: any = {
+        fullName: `${values.firstName} ${values.lastName}`.trim(),
+        userName: values.userName,
+        userEmail: values.emailLocal,
+        mobile: `${values.mobilePrefix || ""}${values.mobile || ""}`,
+        roleId: values.userRole,
+        userRole: "user",
+      }
+      if (values.password) {
+        payload.password = values.password
+      }
+
+      if (mode === "edit" && viewUser) {
+        const res = await axios.put(`/api/configuration/users/${viewUser.id}`, payload, {
+          headers: { "x-company-id": session?.user?.companyId },
+        })
+        message.success("User updated successfully")
+        if (onUserSaved) onUserSaved(res.data)
+      } else {
+        const res = await axios.post("/api/configuration/users", payload, {
+          headers: { "x-company-id": session?.user?.companyId },
+        })
+        message.success("User created successfully")
+        if (onUserSaved) onUserSaved(res.data)
+      }
+      onOpenChange(false)
+    } catch (error: any) {
+      if (error.response) {
+        message.error(error.response?.data?.message || error.response?.data?.error || `Failed to ${mode === "edit" ? "update" : "create"} user`)
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <Drawer
-      title={<span className="text-base font-semibold text-gray-900">Create a new user</span>}
+      title={<span className="text-base font-semibold text-gray-900">{mode === "edit" ? "Edit User" : "Create a new user"}</span>}
       placement="right"
       width={560}
       onClose={() => onOpenChange(false)}
@@ -57,8 +133,9 @@ export function CreateUserDrawer({ open, onOpenChange, className }: CreateUserDr
         <div className="flex justify-end border-t border-gray-100 pt-3 -mx-6 px-6 -mb-2 pb-1 bg-white">
           <Button
             type="primary"
-            className="min-w-[100px] bg-sky-500 hover:bg-sky-600"
-            onClick={() => onOpenChange(false)}
+            className="min-w-[100px] bg-sky-500 hover:bg-sky-600 border-none"
+            onClick={handleSubmit}
+            loading={loading}
           >
             Submit
           </Button>
@@ -99,18 +176,11 @@ export function CreateUserDrawer({ open, onOpenChange, className }: CreateUserDr
           </Col>
           <Col span={12}>
             <Form.Item
+              name="emailLocal"
               label={<span className="text-gray-700">Email</span>}
-              required
-              style={{ marginBottom: 0 }}
+              rules={[{ required: true, type: "email", message: "Enter valid email" }]}
             >
-              <Space.Compact style={{ width: "100%" }}>
-                <Form.Item name="emailLocal" noStyle rules={[{ required: true, message: "Enter email" }]}>
-                  <Input placeholder="Please enter email" size="large" style={{ width: "62%" }} />
-                </Form.Item>
-                <Form.Item name="emailDomain" noStyle initialValue="@gmail.com">
-                  <Select options={emailDomains} size="large" style={{ width: "38%" }} />
-                </Form.Item>
-              </Space.Compact>
+              <Input placeholder="Email" size="large" />
             </Form.Item>
           </Col>
         </Row>
@@ -120,10 +190,10 @@ export function CreateUserDrawer({ open, onOpenChange, className }: CreateUserDr
             <Form.Item label={<span className="text-gray-700">Mobile</span>}>
               <Space.Compact style={{ width: "100%" }}>
                 <Form.Item name="mobilePrefix" noStyle initialValue="+88">
-                  <Select options={mobilePrefixes} size="large" style={{ width: "28%" }} />
+                  <Select options={mobilePrefixes} size="large" style={{ width: "35%" }} />
                 </Form.Item>
                 <Form.Item name="mobile" noStyle>
-                  <Input placeholder="Mobile" size="large" style={{ width: "72%" }} />
+                  <Input placeholder="Mobile" size="large" style={{ width: "65%" }} />
                 </Form.Item>
               </Space.Compact>
             </Form.Item>
@@ -134,7 +204,7 @@ export function CreateUserDrawer({ open, onOpenChange, className }: CreateUserDr
               label={<span className="text-gray-700">User Role</span>}
               rules={[{ required: true, message: "Select user role" }]}
             >
-              <Select placeholder="Select user role" options={userRoleOptions} size="large" allowClear />
+              <Select placeholder="Select user role" options={roles} size="large" allowClear />
             </Form.Item>
           </Col>
         </Row>
@@ -143,8 +213,8 @@ export function CreateUserDrawer({ open, onOpenChange, className }: CreateUserDr
           <Col span={12}>
             <Form.Item
               name="password"
-              label={<span className="text-gray-700">Password</span>}
-              rules={[{ required: true, message: "Enter password" }]}
+              label={<span className="text-gray-700">Password {mode === "edit" && "(Leave empty to keep)"}</span>}
+              rules={[{ required: mode === "add", message: "Enter password" }]}
             >
               <Input.Password placeholder="Enter password" size="large" />
             </Form.Item>
@@ -153,7 +223,7 @@ export function CreateUserDrawer({ open, onOpenChange, className }: CreateUserDr
             <Form.Item
               name="confirmPassword"
               label={<span className="text-gray-700">Confirm Password</span>}
-              rules={[{ required: true, message: "Confirm password" }]}
+              rules={[{ required: mode === "add", message: "Confirm password" }]}
             >
               <Input.Password placeholder="Confirm user password" size="large" />
             </Form.Item>

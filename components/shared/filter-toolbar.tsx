@@ -6,6 +6,8 @@ import { SearchInput } from "@/components/shared/search-input"
 import { DateRangePickerWithPresets } from "@/components/shared/date-range-with-presets"
 import { DateRange } from "react-day-picker"
 import { cn } from "@/lib/utils"
+import { usePermissions } from "@/hooks/use-permissions"
+import React from "react"
 
 export type FilterToolbarProps = {
   className?: string
@@ -26,6 +28,8 @@ export type FilterToolbarProps = {
   filterExtrasBefore?: React.ReactNode
   /** Extra controls rendered AFTER the search (right side, before refresh) */
   filterExtras?: React.ReactNode
+  /** Override the module prefix for permissions */
+  permissionPrefix?: string
 }
 
 export default function FilterToolbar({
@@ -42,7 +46,22 @@ export default function FilterToolbar({
   onRefresh,
   filterExtrasBefore,
   filterExtras,
+  permissionPrefix,
 }: FilterToolbarProps) {
+  const { canCreate } = usePermissions(permissionPrefix)
+
+  const renderChildrenWithPermissions = () => {
+    if (children == null || children === false) return null
+    return React.Children.map(children, (child) => {
+      if (React.isValidElement(child)) {
+        return React.cloneElement(child, {
+          disabled: (child.props as any).disabled || !canCreate,
+        } as any)
+      }
+      return child
+    })
+  }
+
   const hasAny =
     (showDateRange && onDateRangeChange) ||
     (showSearch && onSearchChange) ||
@@ -62,7 +81,7 @@ export default function FilterToolbar({
       )}
     >
       {children != null && children !== false && (
-        <div className="flex shrink-0 items-center">{children}</div>
+        <div className="flex shrink-0 items-center">{renderChildrenWithPermissions()}</div>
       )}
       <div
         className={cn(

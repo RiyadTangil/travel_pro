@@ -20,16 +20,7 @@ import {
 import { useState } from "react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+import { LogoutConfirmationDialog } from "@/components/shared/logout-confirmation-dialog"
 
 export function AdminSidebar() {
   const pathname = usePathname()
@@ -171,20 +162,11 @@ export function AdminSidebar() {
       </div>
 
       {/* Logout Confirmation Dialog */}
-      <AlertDialog open={showLogoutConfirm} onOpenChange={setShowLogoutConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Sign Out</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to sign out? You will be redirected to the login page.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleLogout}>Sign Out</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <LogoutConfirmationDialog 
+        open={showLogoutConfirm} 
+        onOpenChange={setShowLogoutConfirm} 
+        onConfirm={handleLogout} 
+      />
     </>
   )
 } 

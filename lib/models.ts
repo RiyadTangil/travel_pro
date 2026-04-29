@@ -13,9 +13,21 @@ export interface User {
   password: string;
   name: string;
   role: UserRole;
+  roleId?: ObjectId | null; // Reference to the custom Role collection
   isVerified: boolean;
   verificationToken?: string;
   companyId?: ObjectId | null; // Reference to company for company users
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Role interface for granular permissions
+export interface Role {
+  _id?: ObjectId;
+  name: string; // e.g., "Owner", "Accountant", "Agent"
+  companyId: ObjectId; // The company this role belongs to
+  permissions: string[]; // Array of permission keys e.g., ["invoice:read", "invoice:write"]
+  isDefault?: boolean; // Identify built-in roles like Owner
   createdAt: Date;
   updatedAt: Date;
 }

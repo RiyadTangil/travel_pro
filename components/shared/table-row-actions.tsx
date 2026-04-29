@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -10,10 +10,13 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { Loader2, MoreVertical } from "lucide-react"
+import { usePermissions } from "@/hooks/use-permissions"
+
+const NARROW_MAX = 768
 
 export type TableRowActionsProps = {
   className?: string
-  /** Narrow tables: single ⋯ menu instead of multiple buttons */
+  /** Narrow tables: single ⋯ menu instead of multiple buttons. If undefined, uses responsive check automatically. */
   compact?: boolean
   /** When false, the View button is not rendered (e.g. expense heads). Default true. */
   showView?: boolean
@@ -29,6 +32,8 @@ export type TableRowActionsProps = {
   deleteDisabled?: boolean
   /** Parent-controlled loading (e.g. row id match) */
   deleteLoading?: boolean
+  /** Override the module prefix for permissions */
+  permissionPrefix?: string
 }
 
 /**
@@ -36,7 +41,7 @@ export type TableRowActionsProps = {
  */
 export function TableRowActions({
   className = "",
-  compact = false,
+  compact,
   showView = true,
   onView,
   onEdit,
@@ -47,10 +52,29 @@ export function TableRowActions({
   deleteDescription = "Are you sure you want to delete this record? This cannot be undone.",
   deleteDisabled = false,
   deleteLoading: externalLoading,
+  permissionPrefix,
 }: TableRowActionsProps) {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [internalLoading, setInternalLoading] = useState(false)
+  const [isNarrow, setIsNarrow] = useState(false)
+  
+  useEffect(() => {
+    if (compact !== undefined) return
+    const mq = window.matchMedia(`(max-width: ${NARROW_MAX}px)`)
+    const apply = () => setIsNarrow(mq.matches)
+    apply()
+    mq.addEventListener("change", apply)
+    return () => mq.removeEventListener("change", apply)
+  }, [compact])
+
+  const isCompact = compact !== undefined ? compact : isNarrow
   const busy = !!externalLoading || internalLoading
+
+  const { canEdit, canDelete, canView } = usePermissions(permissionPrefix)
+
+  const isEditDisabled = editDisabled || editLoading || !canEdit
+  const isDeleteDisabled = deleteDisabled || busy || !canDelete
+  const isViewDisabled = !canView
 
   const handleConfirmDelete = () => {
     if (!onDelete || deleteDisabled) return
@@ -59,7 +83,7 @@ export function TableRowActions({
     Promise.resolve(onDelete()).finally(() => setInternalLoading(false))
   }
 
-  if (compact) {
+  if (isCompact) {
     return (
       <>
         <DropdownMenu>
@@ -76,18 +100,18 @@ export function TableRowActions({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-44">
             {showView && onView && (
-              <DropdownMenuItem onSelect={() => onView()}>View</DropdownMenuItem>
+              <DropdownMenuItem disabled={isViewDisabled} onSelect={() => !isViewDisabled && onView()}>View</DropdownMenuItem>
             )}
             {onEdit && (
-              <DropdownMenuItem disabled={editDisabled || editLoading} onSelect={() => !editDisabled && !editLoading && onEdit()}>
+              <DropdownMenuItem disabled={isEditDisabled} onSelect={() => !isEditDisabled && onEdit()}>
                 Edit
               </DropdownMenuItem>
             )}
             {onDelete && (
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
-                disabled={deleteDisabled || busy}
-                onSelect={() => !deleteDisabled && !busy && setConfirmOpen(true)}
+                disabled={isDeleteDisabled}
+                onSelect={() => !isDeleteDisabled && setConfirmOpen(true)}
               >
                 Delete
               </DropdownMenuItem>
@@ -116,7 +140,14 @@ export function TableRowActions({
     <>
       <div className={`flex flex-wrap items-center justify-center gap-2 ${className}`}>
         {showView && onView && (
-          <Button type="button" size="sm" variant="secondary" className="h-8 px-3 bg-slate-100 hover:bg-slate-200" onClick={onView}>
+          <Button 
+            type="button" 
+            size="sm" 
+            variant="secondary" 
+            className="h-8 px-3 bg-slate-100 hover:bg-slate-200" 
+            onClick={onView}
+            disabled={isViewDisabled}
+          >
             View
           </Button>
         )}
@@ -126,7 +157,7 @@ export function TableRowActions({
             size="sm"
             className="bg-sky-500 hover:bg-sky-600 text-white h-8 px-3"
             onClick={onEdit}
-            disabled={editDisabled || editLoading}
+            disabled={isEditDisabled}
           >
             {editLoading ? (
               <>
@@ -144,8 +175,8 @@ export function TableRowActions({
             size="sm"
             variant="destructive"
             className="h-8 px-3"
-            disabled={deleteDisabled || busy}
-            onClick={() => !deleteDisabled && !busy && setConfirmOpen(true)}
+            disabled={isDeleteDisabled}
+            onClick={() => !isDeleteDisabled && setConfirmOpen(true)}
           >
             {busy ? (
               <>

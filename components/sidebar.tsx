@@ -3,43 +3,27 @@
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
-  LayoutDashboard,
-  Users,
-  CreditCard,
-  HelpCircle,
   LogOut,
   Plane,
   Menu,
   X,
-  Building2,
-  FileText,
-  Settings,
-  Archive,
-  BarChart2,
   ChevronRight,
   ChevronDown,
-  UserPlus,
+  HelpCircle,
 } from "lucide-react"
 import { useState } from "react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import { signOut } from "next-auth/react"
+import { signOut, useSession } from "next-auth/react"
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
+import { getNavItems } from "@/lib/navigation"
+import { LogoutConfirmationDialog } from "@/components/shared/logout-confirmation-dialog"
 
 export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { data: session } = useSession()
   const [expanded, setExpanded] = useState(true)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
@@ -54,6 +38,8 @@ export function Sidebar() {
     "Ledgers": pathname.includes("/reports/client-ledger") || pathname.includes("/reports/vendor-ledger") || pathname.includes("/reports/combined-ledgers") || pathname.includes("/reports/agent-ledger"),
     "Total Due/Advance": pathname.includes("/reports/total-due-advance"),
     "Sales Report": pathname.includes("/reports/daily_sales_report") || pathname.includes("/reports/sales-earning") || pathname.includes("/reports/airline-wise-sales") || pathname.includes("/reports/salesman-product") || pathname.includes("/reports/sales-collection") || pathname.includes("/reports/purchase-payment") || pathname.includes("/reports/salesman-wise-collection") || pathname.includes("/reports/daily-sales-purchase") || pathname.includes("/reports/salesman-wise-client-due"),
+    "Configuration": pathname.startsWith("/dashboard/configuration") || pathname.startsWith("/dashboard/profile") || pathname.startsWith("/dashboard/employee") || pathname.startsWith("/dashboard/products") || pathname.startsWith("/dashboard/client-categories"),
+    "Users": pathname.startsWith("/dashboard/configuration/users") || pathname.startsWith("/dashboard/configuration/roles"),
   })
 
   const isActive = (path: string) => {
@@ -65,296 +51,55 @@ export function Sidebar() {
     signOut({ callbackUrl: "/auth/signin" }) // Redirects to sign-in after sign out
   }
 
-  const navItems = [
-    {
-      title: "Dashboard",
-      icon: <LayoutDashboard className="h-5 w-5" />,
-      href: "/dashboard",
-    },
-    // {
-    //   title: "Client Management",
-    //   icon: <Users className="h-5 w-5" />,
-    //   href: "/dashboard/clients",
-    // },
-    {
-      title: "Clients Manager",
-      icon: <Users className="h-5 w-5" />,
-      href: "/dashboard/clients-manager",
-    },
-    {
-      title: "Invoices",
-      icon: <FileText className="h-5 w-5" />,
-      children: [
-        {
-          title: "Invoice (Others)",
-          href: "/dashboard/invoices",
-        },
-        {
-          title: "Invoice (Non Commission)",
-          href: "/dashboard/invoices-non-commission",
-        },
-        {
-          title: "Invoice (Visa)",
-          href: "/dashboard/invoices-visa",
-        },
-      ],
-    },
-    {
-      title: "Refund",
-      icon: <Archive className="h-5 w-5" />,
-      children: [
-        {
-          title: "Airticket Refund",
-          href: "/dashboard/refund/airticket",
-        },
-      ],
-    },
-    {
-      title: "Money Receipt",
-      icon: <CreditCard className="h-5 w-5" />,
-      children: [
-        {
-          title: "Invoice Money Receipt",
-          href: "/dashboard/money-receipts?view=invoice",
-        },
-        {
-          title: "Advance Return",
-          href: "/dashboard/money-receipts/advance-return",
-        },
-      ],
-    },
-    {
-      title: "Expense",
-      icon: <FileText className="h-5 w-5" />,
-      children: [
-        {
-          title: "Expenses Head",
-          href: "/dashboard/expenses/head",
-        },
-        {
-          title: "Expenses History",
-          href: "/dashboard/expenses/history",
-        },
-      ],
-    },
+  // Filter items based on permissions
+  const filterNavItems = (items: any[]): any[] => {
+    // If there's no session or the user is not defined, we can choose to return empty or all (depending on auth guard)
+    // Assuming auth guard handles login, but wait until session loads
+    if (!session?.user) return []; 
+    
+    // Admin bypass: if you want admin to see everything without explicit permissions
+    // if (session.user.role === 'admin') return items;
 
+    const userPerms = (session.user as any).permissions || [];
 
-    {
-      title: "Vendors",
-      icon: <Archive className="h-5 w-5" />,
-      children: [
-        {
-          title: "Vendor List",
-          href: "/dashboard/vendors",
-        },
-        {
-          title: "Vendor Payment",
-          href: "/dashboard/vendors/payment",
-        },
-        {
-          title: "Advance Return",
-          href: "/dashboard/vendors/advance-return",
-        },
-      ],
-    },
-    {
-      title: "Accounts",
-      icon: <CreditCard className="h-5 w-5" />,
-      children: [
-        {
-          title: "Bill Adjustment",
-          href: "/dashboard/bill-adjustment",
-        },
-        {
-          title: "Accounts List",
-          href: "/dashboard/accounts",
-        },
-        {
-          title: "Non Invoice Income",
-          href: "/dashboard/accounts/non-invoice-income",
-        },
-        {
-          title: "Balance Transfer",
-          href: "/dashboard/accounts/balance-transfer",
-        },
-        {
-          title: "Balance Status",
-          href: "/dashboard/accounts/balance-status",
-        },
-        {
-          title: "Investments",
-          href: "/dashboard/accounts/investments",
-        },
-        {
-          title: "Transaction History",
-          href: "/dashboard/accounts/transactions",
-        },
-      ],
-    },
-    // {
-    //   title: "Archived Clients",
-    //   icon: <Archive className="h-5 w-5" />,
-    //   href: "/dashboard/archived-clients",
-    // },
-    // {
-    //   title: "B2B Clients",
-    //   icon: <Building2 className="h-5 w-5" />,
-    //   href: "/dashboard/b2b-clients",
-    // },
+    return items.reduce((acc, item) => {
+      // Create the prefix the same way navigation.tsx does
+      const keyPrefix = item.href ? item.href : item.title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      
+      // If it's a leaf node with href
+      if (item.href) {
+        // We will assume 'perm-all' means full access. 
+        if (userPerms.includes("perm-all")) {
+          acc.push(item);
+        } else {
+          const prefix = `perm-${keyPrefix}`;
+          const hasViewPerm = userPerms.some((p: string) => {
+            // New compacted format: starts with prefix, view is the 3rd element (create-edit-view-delete)
+            const match = p.match(new RegExp(`^${prefix}-(?:create|null)-(?:edit|null)-(view)-(?:delete|null)$`));
+            if (match) return true;
+            // Fallback for old uncompacted keys
+            return p === `${prefix}-view` || p === prefix;
+          });
+          
+          if (hasViewPerm) {
+            acc.push(item);
+          }
+        }
+      } 
+      // If it has children, recursively filter them
+      else if (item.children) {
+        const filteredChildren = filterNavItems(item.children);
+        // Only include the parent if it has at least one visible child
+        if (filteredChildren.length > 0) {
+          acc.push({ ...item, children: filteredChildren });
+        }
+      }
+      
+      return acc;
+    }, []);
+  }
 
-    {
-      title: "Agent Profile",
-      icon: <Users className="h-5 w-5" />,
-      href: "/dashboard/agent-profile",
-    },
-    {
-      title: "Configuration",
-      icon: <Settings className="h-5 w-5" />,
-      children: [
-        {
-          title: "Company Profile",
-          icon: <Settings className="h-5 w-5" />,
-          href: "/dashboard/profile",
-        },
-        
-        {
-          title: "Companies",
-          href: "/dashboard/configuration/companies",
-        },
-        {
-          title: "Users",
-          icon: <UserPlus className="h-5 w-5" />,
-          href: "/dashboard/configuration/users",
-        },
-        {
-          title: "Employee",
-          icon: <Users className="h-5 w-5" />,
-          href: "/dashboard/employee",
-        },
-        {
-          title: "Product",
-          icon: <FileText className="h-5 w-5" />,
-          href: "/dashboard/products",
-        },
-        {
-          title: "Client Categories",
-          icon: <FileText className="h-5 w-5" />,
-          href: "/dashboard/client-categories",
-        },
-      ],
-    },
-    {
-      title: "Passport",
-      icon: <FileText className="h-5 w-5" />,
-      href: "/dashboard/passport",
-    },
-    {
-      title: "Reports",
-      icon: <BarChart2 className="h-5 w-5" />,
-      children: [
-        {
-          title: "Ledgers",
-          children: [
-            {
-              title: "Client Ledger",
-              href: "/dashboard/reports/client-ledger",
-            },
-            {
-              title: "Vendor Ledger",
-              href: "/dashboard/reports/vendor-ledger",
-            },
-            {
-              title: "Combined Ledgers",
-              href: "/dashboard/reports/combined-ledgers",
-            },
-            {
-              title: "Agent Ledger",
-              href: "/dashboard/reports/agent-ledger",
-            },
-          ]
-        },
-        {
-          title: "Total Due/Advance",
-          children: [
-            {
-              title: "Clients",
-              href: "/dashboard/reports/total-due-advance/clients",
-            },
-            {
-              title: "Vendors",
-              href: "/dashboard/reports/total-due-advance/vendors",
-            },
-            {
-              title: "Combined Clients",
-              href: "/dashboard/reports/total-due-advance/combined-clients",
-            },
-          ]
-        },
-        {
-          title: "Sales Report",
-          children: [
-            {
-              title: "Sales Report",
-              href: "/dashboard/reports/daily_sales_report",
-            },
-            {
-              title: "Sales & Earning",
-              href: "/dashboard/reports/monthly_sales_and_earning",
-            },
-            {
-              title: "Airline Wise Sales",
-              href: "/dashboard/reports/airline-wise-sales",
-            },
-            {
-              title: "Salesman & Product",
-              href: "/dashboard/reports/sales_report_item_and_salesman",
-            },
-            {
-              title: "Sales & Collection",
-              href: "/dashboard/reports/sales-collection",
-            },
-            {
-              title: "Purchase & Payment",
-              href: "/dashboard/reports/vendor_wise_purchase_and_payment",
-            },
-            {
-              title: "Salesman's Wise Collection",
-              href: "/dashboard/reports/sales_man_collection_report",
-            },
-            {
-              title: "Daily Sales & Purchase",
-              href: "/dashboard/reports/daily-sales-purchase",
-            },
-            {
-              title: "Salesman-Wise Client Due",
-              href: "/dashboard/reports/salesman-wise-client-due",
-            },
-          ]
-        },
-        {
-          title: "Profit / Loss",
-          children: [
-            {
-              title: "Over All Profit / Loss",
-              href: "/dashboard/reports/over_all_profit_loss",
-            },
-            {
-              title: "Visa Wise Profit / Loss",
-              href: "/dashboard/reports/visa-wise-profit-loss",
-            },
-            {
-              title: "Group Wise Profit / Loss",
-              href: "/dashboard/reports/group-wise-profit-loss",
-            },
-            {
-              title: "Ticket Wise Profit / Loss",
-              href: "/dashboard/reports/ticket-wise-profit-loss",
-            },
-          ]
-        },
-      ],
-    },
-  ]
+  const navItems = filterNavItems(getNavItems());
 
   return (
     <>
@@ -581,20 +326,11 @@ export function Sidebar() {
       </div>
 
       {/* Logout Confirmation Dialog */}
-      <AlertDialog open={showLogoutConfirm} onOpenChange={setShowLogoutConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Sign Out</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to sign out? You will be redirected to the login page.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleLogout}>Sign Out</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <LogoutConfirmationDialog 
+        open={showLogoutConfirm} 
+        onOpenChange={setShowLogoutConfirm} 
+        onConfirm={handleLogout} 
+      />
     </>
   )
 }

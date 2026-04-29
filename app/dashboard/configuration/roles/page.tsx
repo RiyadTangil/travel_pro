@@ -1,5 +1,5 @@
-"use client"
 
+"use client"
 import { useMemo, useState, useEffect } from "react"
 import { useSession } from "next-auth/react"
 import { DateRange } from "react-day-picker"
@@ -9,12 +9,13 @@ import { ShieldPlus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import FilterToolbar from "@/components/shared/filter-toolbar"
 import { TableRowActions } from "@/components/shared/table-row-actions"
-import { AddUserRoleDrawer, type UserRoleRow } from "./add-user-role-drawer"
 import axios from "axios"
 import { usePermissions } from "@/hooks/use-permissions"
 import { compactPermissions } from "@/lib/permissions"
+import { PageWrapper } from "@/components/shared/page-wrapper"
+import { AddUserRoleDrawer, UserRoleRow } from "@/components/configuration/users/add-user-role-drawer"
 
-export function RolesTab() {
+export default function ConfigurationRolesPage() {
   const { data: session } = useSession()
   const [roles, setRoles] = useState<UserRoleRow[]>([])
   const [loading, setLoading] = useState(false)
@@ -29,17 +30,9 @@ export function RolesTab() {
     if (!session?.user?.companyId) return
     setLoading(true)
     try {
-      const from = dateRange?.from?.toISOString().slice(0, 10)
-      const to = dateRange?.to?.toISOString().slice(0, 10)
-
       const res = await axios.get("/api/configuration/roles", {
         headers: { "x-company-id": session.user.companyId },
-        params: { 
-          pageSize: 100,
-          search: search || undefined,
-          fromDate: from,
-          toDate: to,
-        }
+        params: { pageSize: 100 }
       })
       setRoles(res.data.items || [])
     } catch (error: any) {
@@ -51,9 +44,21 @@ export function RolesTab() {
 
   useEffect(() => {
     fetchRoles()
-  }, [session?.user?.companyId, search, dateRange])
+  }, [session?.user?.companyId])
 
-  const filteredRoles = roles;
+  const filteredRoles = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const from = dateRange?.from?.toISOString().slice(0, 10)
+    const to = dateRange?.to?.toISOString().slice(0, 10)
+    return roles.filter((row) => {
+      const hay = `${row.roleName} ${row.developer ? "yes" : "no"} ${row.roleType}`.toLowerCase()
+      const matchesSearch = !q || hay.includes(q)
+      const d = row.createdAt.slice(0, 10)
+      const inFrom = from ? d >= from : true
+      const inTo = to ? d <= to : true
+      return matchesSearch && inFrom && inTo
+    })
+  }, [search, dateRange, roles])
 
   const openAddDrawer = () => {
     setDrawerMode("add")
@@ -151,7 +156,9 @@ export function RolesTab() {
         <TableRowActions
           showView={true}
           onView={() => openViewDrawer(row)}
+          showEdit={canEdit}
           onEdit={() => openEditDrawer(row)}
+          showDelete={canDelete}
           onDelete={() => handleDelete(row.id)}
           deleteTitle="Delete role"
           deleteDescription="Are you sure to delete this role?"
@@ -161,16 +168,15 @@ export function RolesTab() {
   ]
 
   return (
+        <PageWrapper breadcrumbs={[{ label: "Configuration", href: "/dashboard/configuration/companies" }, { label: "Roles" }]}>
     <div className="space-y-4">
       <FilterToolbar
-        showDateRange
         dateRange={dateRange}
         onDateRangeChange={setDateRange}
         showSearch
         search={search}
         onSearchChange={setSearch}
         searchPlaceholder="Search roles..."
-        showRefresh
         onRefresh={() => {
           setSearch("")
           setDateRange(undefined)
@@ -178,16 +184,14 @@ export function RolesTab() {
         }}
         className="flex-1 min-w-0"
       >
-        {canCreate && (
           <Button className="bg-sky-500 hover:bg-sky-600 text-white shrink-0" onClick={openAddDrawer}>
             <ShieldPlus className="h-4 w-4 mr-2" />
             Add user role
           </Button>
-        )}
       </FilterToolbar>
 
       <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">User Roles</h2>
+
         <div className="bg-white rounded-md border shadow-sm overflow-hidden">
           <Table<UserRoleRow>
             rowKey="id"
@@ -209,5 +213,7 @@ export function RolesTab() {
         onAddRole={handleAddOrEditRole}
       />
     </div>
+    </PageWrapper>
   )
 }
+

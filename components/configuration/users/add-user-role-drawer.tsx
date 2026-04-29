@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { Drawer, Form, Input, Select, Button, Row, Col, Tree } from "antd"
 import type { DrawerProps } from "antd"
 import { PERMISSION_TREE_DATA } from "./permission-tree-data"
+import { expandPermissions } from "@/lib/permissions"
 
 export type UserRoleRow = {
   id: string
@@ -16,18 +17,18 @@ export type UserRoleRow = {
 }
 
 const ROLE_TYPE_OPTIONS = [
-  { value: "standard", label: "Standard" },
-  { value: "developer", label: "Developer" },
+  { value: "account", label: "Account" },
+  { value: "employee", label: "Employee" },
   { value: "admin", label: "Administrator" },
 ]
 
 export type AddUserRoleDrawerProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  mode: "add" | "view"
-  /** When mode is "view", pass the row to display (read-only). */
+  mode: "add" | "view" | "edit"
+  /** When mode is "view" or "edit", pass the row to display. */
   viewRole?: UserRoleRow | null
-  /** Called after successful validation when mode is "add". */
+  /** Called after successful validation when mode is "add" or "edit". */
   onAddRole?: (payload: { roleName: string; roleType: string; permissionKeys: React.Key[] }) => void
 } & Pick<DrawerProps, "className">
 
@@ -44,6 +45,7 @@ export function AddUserRoleDrawer({
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>(["perm-all", "perm-inv-other"])
 
   const isView = mode === "view"
+  const isEdit = mode === "edit"
 
   useEffect(() => {
     if (!open) {
@@ -51,17 +53,17 @@ export function AddUserRoleDrawer({
       setCheckedKeys([])
       return
     }
-    if (isView && viewRole) {
+    if ((isView || isEdit) && viewRole) {
       form.setFieldsValue({
         roleName: viewRole.roleName,
         roleType: viewRole.roleType,
       })
-      setCheckedKeys(viewRole.permissionKeys ?? [])
-    } else if (!isView) {
+      setCheckedKeys(expandPermissions((viewRole.permissionKeys as string[]) ?? []))
+    } else {
       form.resetFields()
       setCheckedKeys([])
     }
-  }, [open, isView, viewRole, form])
+  }, [open, isView, isEdit, viewRole, form])
 
   const handleClose = () => {
     onOpenChange(false)
@@ -71,20 +73,22 @@ export function AddUserRoleDrawer({
     if (isView) return
     try {
       const values = await form.validateFields(["roleName", "roleType"])
-      onAddRole?.({
-        roleName: String(values.roleName).trim(),
-        roleType: String(values.roleType),
-        permissionKeys: checkedKeys,
-      })
+      if (onAddRole) {
+        await onAddRole({
+          roleName: String(values.roleName).trim(),
+          roleType: String(values.roleType),
+          permissionKeys: checkedKeys,
+        })
+      }
       form.resetFields()
       setCheckedKeys([])
       onOpenChange(false)
-    } catch {
-      // validation errors only
+    } catch (error) {
+      // validation errors or API errors
     }
   }
 
-  const title = isView ? "View user role" : "Add user role"
+  const title = isView ? "View user role" : isEdit ? "Edit user role" : "Add user role"
 
   return (
     <Drawer
@@ -138,7 +142,7 @@ export function AddUserRoleDrawer({
                 className="w-full bg-sky-500 hover:bg-sky-600 border-none"
                 onClick={handleAddRole}
               >
-                Add role
+                {isEdit ? "Update role" : "Add role"}
               </Button>
             ) : (
               <Button type="default" size="large" className="w-full" onClick={handleClose}>

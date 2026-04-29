@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
     const db = client.db(MONGODB_DB_NAME)
     const users = db.collection("users")
     const companies = db.collection("companies")
+    const roles = db.collection("roles")
 
     // Check if user already exists (case-insensitive vs DB)
     const existingUser = await users.findOne(emailEqualsNormalized(emailNorm))
@@ -104,10 +105,24 @@ export async function POST(request: NextRequest) {
     const companyResult = await companies.insertOne(company)
     console.log("companyResult", companyResult)
 
-    // Update user with company reference
+    // Create a default "Owner" Role for this company
+    const ownerRole = {
+      roleName: "Owner",
+      roleType: "admin",
+      companyId: companyResult.insertedId,
+      permissions: ["perm-all"], // Full permissions
+      isDefault: true,
+      developer: false,
+      status: "active",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
+    const roleResult = await roles.insertOne(ownerRole)
+
+    // Update user with company reference and roleId
     await users.updateOne(
       { _id: userId },
-      { $set: { companyId: companyResult.insertedId } }
+      { $set: { companyId: companyResult.insertedId, roleId: roleResult.insertedId } }
     )
 
     // Send verification email
