@@ -838,3 +838,59 @@ Vendor "Omor Faruk" has one invoice cost (INV-0003, totalCost 8,000) and one pay
 **Code:** `services/vendorLedgerService.ts`, `app/api/reports/vendor-ledger/route.ts`, UI `app/dashboard/reports/vendor-ledger/page.tsx`, shared component `components/shared/ledger-entity-card.tsx`.
 
 **UI:** `LedgerEntityCard` (appears after first search), `FilterToolbar` (date range + `ClearableSelect` for vendor + Search button), Ant `Table` with horizontal scroll and fixed summary row. URL param `vendorId` triggers auto-fetch on mount.
+
+---
+
+## 18. Users and Roles (configuration)
+
+**Total operations: 5** for Users, **4** for Roles.
+
+### Roles Module
+
+| # | Operation | Trigger | Collections / notes |
+|---|-----------|---------|---------------------|
+| **1** | **List** | `GET /api/configuration/roles?search&fromDate&toDate` + `x-company-id` | `roles` (read, paginated, backend filtered by name/date) |
+| **2** | **Create** | `POST /api/configuration/roles` | `roles` insert; `permissionKeys` are **compacted** into `perm-/route-c-e-v-d` format before saving |
+| **3** | **Update** | `PUT /api/configuration/roles/[id]` | Atomic update of role name, type, and permissions |
+| **4** | **Delete** | `DELETE /api/configuration/roles/[id]` | **Industry Standard:** Blocked if any users are currently assigned to the role. |
+
+### Users Module
+
+| # | Operation | Trigger | Collections / notes |
+|---|-----------|---------|---------------------|
+| **1** | **List** | `GET /api/configuration/users?search&fromDate&toDate` + `x-company-id` | `users` (read, paginated, backend filtered by name/email/username/date) |
+| **2** | **Create** | `POST /api/configuration/users` | `users` insert; `isVerified: true` (admin-created), `status: active` by default |
+| **3** | **Update** | `PUT /api/configuration/users/[id]` | Update user profile, password, and role linkage; **Blocked** if user tries to edit their own account |
+| **4** | **Delete** | `DELETE /api/configuration/users/[id]` | Hard delete; **Blocked** if user tries to delete their own account |
+| **5** | **Auto-Logout** | `NextAuth` session refresh | If a user is deleted or set to `inactive` in DB, their next session refresh triggers an automatic `signOut` |
+
+### Key Technical Features
+
+1. **Compacted Permission Storage:** 
+   - Instead of storing 4 strings like `perm-/route-create`, we store 1: `perm-/route-create-null-view-null`.
+   - Utility: `compactPermissions` / `expandPermissions` in `lib/permissions.ts`.
+   - Benefit: Reduces DB size and avoids NextAuth session cookie overflow (4KB limit).
+
+2. **Automatic UI Permissions:**
+   - **Hook:** `usePermissions()` hook automatically detects current route via `usePathname()`.
+   - **Buttons:** `TableRowActions` and `FilterToolbar` internally use the hook to **disable/blur** buttons (Create, Edit, Delete, View) instead of hiding them, ensuring a stable UI layout.
+
+3. **Admin Auto-Setup:**
+   - On company signup (`/api/auth/signup`), an "Owner" role is created with `perm-all` access, ensuring the initial user has full control.
+
+### Example
+
+1. **Create Role:** Admin creates "Accounts Manager" role. Selects "View" and "Edit" for "Invoices". DB saves `perm-/dashboard/invoices-null-edit-view-null`.
+2. **Create User:** Admin creates user "Yeasir" and assigns "Accounts Manager" role. `isVerified` is set to `true`.
+3. **Login:** Yeasir logs in. `NextAuth` session fetches his role's permissions from DB. 
+4. **UI Access:** Yeasir navigates to Invoices. The "Add Invoice" button in `FilterToolbar` is automatically disabled (no `create` perm). In the table, `TableRowActions` shows "Edit" enabled but "Delete" disabled.
+5. **Security:** Yeasir tries to delete his own account via API. Backend `getServerSession` check identifies the ID match and returns `400 Bad Request`.
+6. **Revocation:** Admin sets Yeasir to `inactive`. Within minutes, Yeasir's browser session detects the status change and triggers `signOut({ callbackUrl: "/auth/signin" })`.
+
+**Code Paths:**
+- **Models:** `models/user.ts`, `models/role.ts`
+- **Hooks:** `hooks/use-permissions.ts`
+- **Utilities:** `lib/permissions.ts`, `lib/navigation.ts`
+- **API Routes:** `app/api/configuration/users/*`, `app/api/configuration/roles/*`, `app/api/auth/[...nextauth]/route.ts`
+- **UI Components:** `app/dashboard/configuration/users/page.tsx`, `components/configuration/users/roles-tab.tsx`, `components/shared/table-row-actions.tsx`, `components/shared/filter-toolbar.tsx`
+

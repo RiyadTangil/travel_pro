@@ -124,14 +124,15 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
 
   const [submitting, setSubmitting] = useState(false)
   const [paymentMethodOptions, setPaymentMethodOptions] = useState<AccountType[]>([])
+  const [accounts, setAccounts] = useState<AccountOptionItem[]>(accountsPreloaded || [])
 
   // Kept for backward compat (edit mode)
   const [selectedInvoiceId] = useState<string>(mode === "edit" && defaults?.paymentTo === "invoice" && defaults?.invoiceId ? String(defaults.invoiceId) : "")
 
   const filteredAccounts = useMemo(() => {
-    if (!accountsPreloaded || !paymentMethod) return []
-    return accountsPreloaded.filter(a => a.type === (paymentMethod as AccountType))
-  }, [accountsPreloaded, paymentMethod])
+    if (!accounts || !paymentMethod) return []
+    return accounts.filter(a => a.type === (paymentMethod as AccountType))
+  }, [accounts, paymentMethod])
 
   // simple voucher generator for UI-only
   const nextVoucher = useMemo(() => {
@@ -165,9 +166,32 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
           setPaymentMethodOptions(["Cash", "Bank", "Mobile banking", "Credit Card"])
         }
       })()
+
+      // Fetch Accounts to ensure fresh data and balances
+      ;(async () => {
+        try {
+          const res = await fetch(`/api/accounts?page=1&pageSize=100`, { 
+            signal: ctrl.signal,
+            headers: { "x-company-id": session?.user?.companyId ?? "" }
+          })
+          const data = await res.json()
+          const items = Array.isArray(data?.items) ? data.items : []
+          const mapped = items.map((i: any) => ({
+            id: String(i.id || i._id),
+            name: i.bankName ? `${i.name} (${i.bankName})` : String(i.name || ""),
+            type: String(i.type || "Cash"),
+            lastBalance: typeof i.lastBalance === "number" ? i.lastBalance : Number(i.lastBalance || 0),
+          }))
+          setAccounts(mapped)
+        } catch (e) {
+          console.error("Failed to fetch accounts", e)
+          if (accountsPreloaded) setAccounts(accountsPreloaded)
+        }
+      })()
+
       return () => ctrl.abort()
     }
-  }, [open, defaults, form, mode, nextVoucher])
+  }, [open, defaults, form, mode, nextVoucher, session?.user?.companyId, accountsPreloaded])
 
   useEffect(() => {
     // Load Present Due when client changes
@@ -677,7 +701,13 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
                         <span className="text-destructive mr-1">*</span> Payment Method:
                       </FormLabel>
                       <FormControl>
-                        <Select value={field.value} onValueChange={field.onChange}>
+                        <Select 
+                          value={field.value} 
+                          onValueChange={(val) => {
+                            field.onChange(val)
+                            form.setValue("accountId", "")
+                          }}
+                        >
                           <SelectTrigger className={fieldState.error ? "border-red-500" : undefined}>
                             <SelectValue placeholder="Select Payment Method" />
                           </SelectTrigger>
