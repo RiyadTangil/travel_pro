@@ -145,18 +145,21 @@ export default function OverAllProfitLossPage() {
                       <td className="px-6 py-4 font-medium text-gray-600 uppercase">Service Charge</td>
                       <td className="px-6 py-4 text-right font-semibold">{formatCurrency(reportData?.income.service_charge || 0)}</td>
                     </tr>
-                    <tr className="hover:bg-gray-50 transition-colors">
+
+                    {/* todo  will work on it later */}
+                    {/* <tr className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 font-medium text-gray-600 uppercase">Void Charge</td>
                       <td className="px-6 py-4 text-right font-semibold">{formatCurrency(reportData?.income.void_charge || 0)}</td>
-                    </tr>
+                    </tr> */}
                     <tr className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 font-medium text-gray-600 uppercase">Refund Profit</td>
                       <td className="px-6 py-4 text-right font-semibold">{formatCurrency(reportData?.income.refund_profit || 0)}</td>
                     </tr>
-                    <tr className="hover:bg-gray-50 transition-colors">
+                    {/* todo  will work on it later */}
+                    {/* <tr className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 font-medium text-gray-600 uppercase">Incentive</td>
                       <td className="px-6 py-4 text-right font-semibold">{formatCurrency(reportData?.income.incentive || 0)}</td>
-                    </tr>
+                    </tr> */}
                     <tr className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 font-medium text-gray-600 uppercase">Non Invoice Income</td>
                       <td className="px-6 py-4 text-right font-semibold">{formatCurrency(reportData?.income.non_invoice_income || 0)}</td>
@@ -184,10 +187,11 @@ export default function OverAllProfitLossPage() {
                       <td className="px-6 py-4 font-medium text-gray-600 uppercase">Expense</td>
                       <td className="px-6 py-4 text-right font-semibold">{formatCurrency(reportData?.expense.expense || 0)}</td>
                     </tr>
-                    <tr className="hover:bg-gray-50 transition-colors">
+                    {/* todo  will work on it later */}
+                    {/* <tr className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 font-medium text-gray-600 uppercase">Payroll</td>
                       <td className="px-6 py-4 text-right font-semibold">{formatCurrency(reportData?.expense.payroll || 0)}</td>
-                    </tr>
+                    </tr> */}
                     <tr className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 font-medium text-gray-600 uppercase">Transaction Charge</td>
                       <td className="px-6 py-4 text-right font-semibold">{formatCurrency(reportData?.expense.transaction_charge || 0)}</td>
@@ -196,10 +200,11 @@ export default function OverAllProfitLossPage() {
                       <td className="px-6 py-4 font-medium text-gray-600 uppercase">AIT</td>
                       <td className="px-6 py-4 text-right font-semibold">{formatCurrency(reportData?.expense.ait || 0)}</td>
                     </tr>
-                    <tr className="hover:bg-gray-50 transition-colors">
+                    {/* todo  will work on it later */}
+                    {/* <tr className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 font-medium text-gray-600 uppercase">Agent Payment</td>
                       <td className="px-6 py-4 text-right font-semibold">{formatCurrency(reportData?.expense.agent_payment || 0)}</td>
-                    </tr>
+                    </tr> */}
                   </tbody>
                 </table>
               </CardContent>

@@ -1,11 +1,19 @@
 import { NextResponse } from "next/server"
 
-export function ok(data: any, status = 200) {
-  return NextResponse.json(data, { status })
+export function ok(data: any, status = 200, message?: string, meta?: any) {
+  return NextResponse.json({
+    success: true,
+    data,
+    message,
+    meta
+  }, { status })
 }
 
 export function fail(error: string | { error: string; message?: string }, status = 500) {
-  const payload = typeof error === "string" ? { error } : error
+  const payload = typeof error === "string" 
+    ? { success: false, message: error, error } 
+    : { success: false, ...error, message: error.message || error.error }
+    
   return NextResponse.json(payload, { status })
 }
 
