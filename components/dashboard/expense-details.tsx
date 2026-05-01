@@ -23,14 +23,11 @@ interface ExpenseStats {
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8", "#82ca9d"];
 
 export function ExpenseDetails() {
-  const { data: session } = useSession();
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
   const { data: response, isLoading } = useList<ExpenseStats>(
     KEYS.DASH.EXPENSE_STATS,
-    API.DASH.EXPENSE_STATS,
-    undefined,
-    session?.user?.companyId
+    API.DASH.EXPENSE_STATS
   );
 
   const stats = response?.data || {

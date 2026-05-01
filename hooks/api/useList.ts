@@ -12,7 +12,6 @@ interface ListParams {
 export function useList<T>(
   key: string,
   url: string,
-  companyId?: string,
   params?: ListParams,
   options?: Omit<UseQueryOptions<ApiResponse<T>, Error>, "queryKey" | "queryFn">
 ) {
@@ -29,18 +28,10 @@ export function useList<T>(
   const queryString = queryParams.toString();
   const fullUrl = `${url}${queryString ? `?${queryString}` : ""}`;
 
-  const isEnabled = !!companyId && (options?.enabled === undefined || options?.enabled);
-
   return useQuery<ApiResponse<T>, Error>({
-    queryKey: queryKeys.list(key, queryString, companyId),
-    queryFn: () => 
-      fetcher<T>(fullUrl, {
-        headers: {
-          "x-company-id": companyId || "",
-        },
-      }),
-    enabled: isEnabled,
-    placeholderData: (previousData) => previousData, // Equivalent to keepPreviousData in v5
+    queryKey: queryKeys.list(key, queryString),
+    queryFn: () => fetcher<T>(fullUrl),
+    placeholderData: (previousData) => previousData,
     ...options,
   });
 }

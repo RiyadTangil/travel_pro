@@ -32,7 +32,6 @@ interface DashboardMetrics {
 }
 
 export function SalesDataPanel() {
-  const { data: session } = useSession();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"daily" | "monthly" | "yearly">("daily");
   const [showMore, setShowMore] = useState(false);
@@ -40,8 +39,7 @@ export function SalesDataPanel() {
   const { data: response, isLoading } = useList<DashboardMetrics>(
     KEYS.DASH.METRICS,
     API.DASH.METRICS,
-    session?.user?.companyId,
-    { period: activeTab },
+    { period: activeTab }
   );
 
   const metrics = response?.data || {

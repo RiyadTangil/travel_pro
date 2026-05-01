@@ -47,7 +47,7 @@ export default function ExpenseHeadPage() {
       params.set("pageSize", String(pageSize))
       if (debouncedSearch) params.set("search", debouncedSearch)
       const res = await client.get(`/api/expense-heads?${params.toString()}`)
-      const data = res.data
+      const {data} = res.data
       const items: ExpenseHeadRow[] = Array.isArray(data?.items) ? data.items : []
       const pag = data?.pagination || {}
       setRows(items)

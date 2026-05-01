@@ -20,7 +20,6 @@ interface ChartData {
 }
 
 export function YearlySalesChart() {
-  const { data: session } = useSession();
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
   const [activeLegend, setActiveLegend] = useState<string | null>(null);
   const [hoveredBar, setHoveredBar] = useState<any>(null);
@@ -31,8 +30,9 @@ export function YearlySalesChart() {
   }, []);
 
   const { data: response, isLoading } = useList<ChartData[]>(
-    KEYS.DASH.YEARLY, API.DASH.YEARLY, session?.user?.companyId,
-    { year: selectedYear },
+    KEYS.DASH.YEARLY,
+    API.DASH.YEARLY,
+    { year: selectedYear }
   );
 
   const chartData = response?.data || [];

@@ -14,7 +14,6 @@ export function useMutationApi<T = any, V = any>(
   options?: MutationOptions<T, V>
 ) {
   const queryClient = useQueryClient();
-  const companyId = options?.companyId;
 
   return useMutation<ApiResponse<T>, Error, V>({
     mutationFn: async (variables: V) => {
@@ -23,9 +22,6 @@ export function useMutationApi<T = any, V = any>(
       
       return fetcher<T>(url, {
         method,
-        headers: {
-          "x-company-id": companyId || "",
-        },
         body: isDelete ? undefined : JSON.stringify(variables),
       });
     },

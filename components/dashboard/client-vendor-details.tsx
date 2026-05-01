@@ -18,14 +18,11 @@ interface StatsData {
 }
 
 export default function ClientVendorDetails() {
-  const { data: session } = useSession();
   const [hoveredBar, setHoveredBar] = useState<string | null>(null);
 
   const { data: response, isLoading } = useList<StatsData[]>(
     KEYS.DASH.CLIENT_VENDOR_STATS,
-    API.DASH.CLIENT_VENDOR_STATS,
-    session?.user?.companyId,
-    undefined,
+    API.DASH.CLIENT_VENDOR_STATS
   );
 
   const chartData = response?.data || [
