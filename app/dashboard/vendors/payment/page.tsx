@@ -216,40 +216,48 @@ export default function VendorPaymentPage() {
     {
       title: "SL",
       key: "sl",
-      width: 56,
+      width: 60,
+      align: "center" as const,
       render: (_: unknown, __: PaymentRow, index: number) => index + 1,
     },
     {
       title: "Date",
       dataIndex: "date",
       key: "date",
+      width: 120,
+      render: (d: string) => (d ? new Date(d).toLocaleDateString("en-GB") : "—"),
     },
     {
       title: "Voucher No",
       dataIndex: "voucherNo",
       key: "voucherNo",
+      width: 130,
       render: (text: string) => <Tag color="blue">{text}</Tag>,
     },
     {
       title: "Payment To",
       dataIndex: "paymentTo",
       key: "paymentTo",
+      width: 150,
     },
     {
       title: "Vendor/Invoice",
       dataIndex: "vendorInvoice",
       key: "vendorInvoice",
+      width: 200,
       render: (text: string) => <span className="text-blue-600 font-medium">{text}</span>,
     },
     {
       title: "Account",
       dataIndex: "account",
       key: "account",
+      width: 180,
     },
     {
       title: "Total Payment",
       dataIndex: "totalPayment",
       key: "totalPayment",
+      width: 130,
       align: "right" as const,
       render: (n: number) => <span className="font-semibold">{n.toLocaleString()}</span>,
     },
@@ -257,12 +265,15 @@ export default function VendorPaymentPage() {
       title: "Doc",
       dataIndex: "doc",
       key: "doc",
+      width: 80,
+      align: "center" as const,
       render: (hasDoc: boolean) => (hasDoc ? <Tag color="green">Yes</Tag> : <span className="text-muted-foreground">—</span>),
     },
     {
       title: "Note",
       dataIndex: "note",
       key: "note",
+      width: 200,
       ellipsis: true,
     },
     {
@@ -270,7 +281,7 @@ export default function VendorPaymentPage() {
       key: "action",
       width: 220,
       render: (_: unknown, row: PaymentRow) => (
-        <div className="flex flex-wrap items-center justify-center gap-2">
+        <div className="flex items-center justify-center gap-2">
           <TableRowActions
             onView={() => router.push(`/dashboard/vendors/payment/${row.id}`)}
             onEdit={() => handleEdit(row)}
@@ -286,7 +297,7 @@ export default function VendorPaymentPage() {
 
   return (
     <PageWrapper breadcrumbs={[{ label: "Vendor Payments" }]}>
-      <div className="mx-4 mb-4 space-y-4">
+      <div className="min-w-0 space-y-4 px-2 sm:px-4">
         <FilterToolbar
           showDateRange
           dateRange={dateRange}
@@ -297,7 +308,6 @@ export default function VendorPaymentPage() {
           searchPlaceholder="Search voucher, vendor, invoice..."
           showRefresh
           onRefresh={loadPayments}
-          className="flex-1"
         >
           <Button
             className="bg-sky-500 hover:bg-sky-600 shrink-0"
@@ -310,22 +320,24 @@ export default function VendorPaymentPage() {
           </Button>
         </FilterToolbar>
 
-        <Card className="border-none shadow-none bg-transparent">
-          <CardContent className="p-0">
-            <div className="bg-white rounded-md border shadow-sm overflow-hidden">
-              <Table<PaymentRow>
-                rowKey="id"
-                columns={columns}
-                dataSource={data}
-                loading={loading}
-                pagination={false}
-                scroll={{ x: 1100 }}
-                className="border-none"
-                locale={{ emptyText: loading ? "Loading…" : "No payments found" }}
-              />
-            </div>
-          </CardContent>
-        </Card>
+        <div className="bg-white rounded-md border shadow-sm overflow-hidden">
+          <Table<PaymentRow>
+            rowKey="id"
+            columns={columns}
+            dataSource={data}
+            loading={loading}
+            pagination={{
+              pageSize: 20,
+              showSizeChanger: true,
+              showTotal: (total) => `Total ${total} items`,
+              size: "small",
+            }}
+            scroll={{ x: 1200 }}
+            size="middle"
+            className="ant-table-responsive"
+            locale={{ emptyText: loading ? "Loading…" : "No payments found" }}
+          />
+        </div>
       </div>
 
       <PaymentModal

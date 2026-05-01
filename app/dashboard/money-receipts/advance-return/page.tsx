@@ -10,7 +10,8 @@ import FilterToolbar from "@/components/shared/filter-toolbar"
 import { PageWrapper } from "@/components/shared/page-wrapper"
 import { DateRange } from "react-day-picker"
 import { Plus } from "lucide-react"
-import { DeleteButton } from "@/components/shared/delete-button"
+import { TableRowActions } from "@/components/shared/table-row-actions"
+import { useMemo } from "react"
 
 type AdvanceReturnRow = {
   id: string
@@ -41,6 +42,16 @@ export default function AdvanceReturnPage() {
   const [openAdd, setOpenAdd] = useState(false)
   const [openEdit, setOpenEdit] = useState(false)
   const [editingRow, setEditingRow] = useState<AdvanceReturnRow | null>(null)
+
+  const [narrowViewport, setNarrowViewport] = useState(false)
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 768px)")
+    const apply = () => setNarrowViewport(mq.matches)
+    apply()
+    mq.addEventListener("change", apply)
+    return () => mq.removeEventListener("change", apply)
+  }, [])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -89,73 +100,72 @@ export default function AdvanceReturnPage() {
     }
   }
 
-  const columns = [
+  const columns = useMemo(() => [
     {
       title: "SL.",
       key: "sl",
-      width: 60,
+      width: 56,
+      align: "center" as const,
       render: (_: unknown, __: AdvanceReturnRow, index: number) => (page - 1) * pageSize + index + 1,
     },
     {
       title: "Return Date",
       dataIndex: "returnDate",
       key: "returnDate",
-      render: (date: string) => new Date(date).toLocaleDateString("en-GB"),
+      width: 120,
+      render: (date: string) => date ? new Date(date).toLocaleDateString("en-GB") : "-",
     },
     {
       title: "Voucher No",
       dataIndex: "voucherNo",
       key: "voucherNo",
+      width: 120,
       render: (text: string) => <Tag color="blue">{text}</Tag>,
     },
     {
       title: "Client Name",
       dataIndex: "clientName",
       key: "clientName",
+      width: 200,
       render: (text: string) => <span className="text-blue-500 font-medium">{text}</span>,
     },
     {
       title: "Advance Amount",
       dataIndex: "advanceAmount",
       key: "advanceAmount",
+      width: 130,
       align: "right" as const,
-      render: (amount: number) => <span className="font-semibold">{amount.toLocaleString()}</span>,
+      render: (amount: number) => <span className="font-semibold">{amount?.toLocaleString() || 0}</span>,
     },
     {
       title: "Action",
       key: "action",
-      width: 220,
+      fixed: "right" as const,
+      width: narrowViewport ? 64 : 200,
+      align: narrowViewport ? "center" : undefined,
       render: (_: unknown, r: AdvanceReturnRow) => (
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="secondary" size="sm" className="bg-slate-100 hover:bg-slate-200 h-8 px-3">
-            View
-          </Button>
-          <Button
-            variant="default"
-            size="sm"
-            className="bg-sky-500 hover:bg-sky-600 h-8 px-3"
-            onClick={() => {
-              setEditingRow(r)
-              setOpenEdit(true)
-            }}
-          >
-            Edit
-          </Button>
-          <DeleteButton
-            onDelete={() => handleDelete(r.id)}
-            isLoading={deletingId === r.id}
-            title="Delete Advance Return"
-            description={`Are you sure you want to delete advance return ${r.voucherNo}?`}
-            size="sm"
-          />
-        </div>
+        <TableRowActions
+          showView
+          onView={() => {
+            // View logic if needed
+          }}
+          onEdit={() => {
+            setEditingRow(r)
+            setOpenEdit(true)
+          }}
+          onDelete={() => handleDelete(r.id)}
+          deleteLoading={deletingId === r.id}
+          deleteTitle="Delete Advance Return"
+          deleteDescription={`Are you sure you want to delete advance return ${r.voucherNo}?`}
+          compact={narrowViewport}
+        />
       ),
     },
-  ]
+  ], [page, pageSize, narrowViewport, deletingId])
 
   return (
     <PageWrapper breadcrumbs={[{ label: "Money Receipt" }, { label: "Advance Return" }]}>
-      <div className="mx-4 mb-4 space-y-4">
+      <div className="px-2 sm:px-4 mb-4 min-w-0 space-y-4">
           <FilterToolbar
             showDateRange
             dateRange={dateRange}
@@ -166,9 +176,9 @@ export default function AdvanceReturnPage() {
             searchPlaceholder="Search voucher, client..."
             showRefresh
             onRefresh={load}
-            className="flex-1"
+            className="flex-1 min-w-0"
           >
-            <Button className="bg-sky-500 hover:bg-sky-600 shrink-0" onClick={() => setOpenAdd(true)}>
+            <Button className="bg-sky-500 hover:bg-sky-600 shrink-0 whitespace-nowrap" onClick={() => setOpenAdd(true)}>
               <Plus className="h-4 w-4 mr-2" />
               Add Advance Return
             </Button>
@@ -176,12 +186,13 @@ export default function AdvanceReturnPage() {
 
         <Card className="border-none shadow-none bg-transparent">
           <CardContent className="p-0">
-            <div className="bg-white rounded-md border shadow-sm overflow-hidden">
+            <div className="min-w-0 overflow-hidden rounded-md border bg-white shadow-sm">
               <Table<AdvanceReturnRow>
                 columns={columns}
                 dataSource={rows}
                 rowKey="id"
                 loading={loading}
+                scroll={{ x: "max-content" }}
                 pagination={{
                   current: page,
                   pageSize,
@@ -192,6 +203,7 @@ export default function AdvanceReturnPage() {
                   },
                   showSizeChanger: true,
                   showTotal: (t) => `Total ${t} items`,
+                  size: "small",
                 }}
                 className="border-none"
               />

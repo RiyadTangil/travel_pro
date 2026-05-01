@@ -54,8 +54,9 @@ export default function VendorAdvanceReturnPage() {
   const [search, setSearch] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
 
-  const [openAdd, setOpenAdd] = useState(false)
-  const [openEdit, setOpenEdit] = useState(false)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [modalMode, setModalMode] = useState<"add" | "edit">("add")
+  const [modalLoading, setModalLoading] = useState(false)
   const [editingRow, setEditingRow] = useState<VendorAdvanceReturnRow | null>(null)
 
   useEffect(() => {
@@ -124,31 +125,35 @@ export default function VendorAdvanceReturnPage() {
     {
       title: "SL.",
       key: "sl",
-      width: 56,
+      width: 60,
       render: (_: unknown, __: VendorAdvanceReturnRow, index: number) => (page - 1) * pageSize + index + 1,
     },
     {
       title: "Return Date",
       dataIndex: "returnDate",
       key: "returnDate",
+      width: 120,
       render: (d: string) => (d ? format(new Date(d), "dd-MM-yyyy") : "—"),
     },
     {
       title: "Voucher No",
       dataIndex: "voucherNo",
       key: "voucherNo",
+      width: 130,
       render: (text: string) => <Tag color="blue">{text}</Tag>,
     },
     {
       title: "Vendor Name",
       dataIndex: "vendorName",
       key: "vendorName",
+      width: 200,
       render: (text: string) => <span className="text-blue-600 font-medium">{text}</span>,
     },
     {
       title: "Advance Amount",
       dataIndex: "advanceAmount",
       key: "advanceAmount",
+      width: 130,
       align: "right" as const,
       render: (n: number) => <span className="font-semibold">{n.toLocaleString()}</span>,
     },
@@ -156,20 +161,23 @@ export default function VendorAdvanceReturnPage() {
       title: "Return Note",
       dataIndex: "returnNote",
       key: "returnNote",
+      width: 200,
       ellipsis: true,
       render: (t: string | undefined) => t || "—",
     },
     {
       title: "Action",
       key: "action",
-      width: 240,
+      width: 120,
+      fixed: "right" as const,
       render: (_: unknown, r: VendorAdvanceReturnRow) => (
-        <div className="flex flex-wrap items-center justify-center gap-2">
+        <div className="flex items-center justify-center gap-2">
           <TableRowActions
             showView={false}
             onEdit={() => {
               setEditingRow(r)
-              setOpenEdit(true)
+              setModalMode("edit")
+              setIsModalOpen(true)
             }}
           />
           <DeleteButton
@@ -186,7 +194,7 @@ export default function VendorAdvanceReturnPage() {
 
   return (
     <PageWrapper breadcrumbs={[{ label: "Vendor Advance Return" }]}>
-      <div className="mx-4 mb-4 space-y-4">
+      <div className="min-w-0 space-y-4 px-2 sm:px-4">
         <FilterToolbar
           showDateRange
           dateRange={dateRange}
@@ -197,78 +205,50 @@ export default function VendorAdvanceReturnPage() {
           searchPlaceholder="Search voucher, vendor, note..."
           showRefresh
           onRefresh={load}
-          className="flex-1"
         >
-          <Button className="bg-sky-500 hover:bg-sky-600 shrink-0" onClick={() => setOpenAdd(true)}>
+          <Button className="bg-sky-500 hover:bg-sky-600" onClick={() => {
+            setModalMode("add")
+            setEditingRow(null)
+            setIsModalOpen(true)
+          }}>
             <Plus className="h-4 w-4 mr-2" />
             Add Advance Return
           </Button>
         </FilterToolbar>
 
-        <Card className="border-none shadow-none bg-transparent">
-          <CardContent className="p-0">
-            <div className="bg-white rounded-md border shadow-sm overflow-hidden">
-              <Table<VendorAdvanceReturnRow>
-                columns={columns}
-                dataSource={rows}
-                rowKey="id"
-                loading={loading}
-                pagination={{
-                  current: page,
-                  pageSize,
-                  total,
-                  onChange: (p, ps) => {
-                    setPage(p)
-                    setPageSize(ps)
-                  },
-                  showSizeChanger: true,
-                  showTotal: (t) => `Total ${t} items`,
-                }}
-                scroll={{ x: 960 }}
-                className="border-none"
-              />
-            </div>
-          </CardContent>
-        </Card>
+        <div className="bg-white rounded-md border shadow-sm overflow-hidden">
+          <Table<VendorAdvanceReturnRow>
+            columns={columns}
+            dataSource={rows}
+            rowKey="id"
+            loading={loading}
+            pagination={{
+              current: page,
+              pageSize,
+              total,
+              onChange: (p, ps) => {
+                setPage(p)
+                setPageSize(ps)
+              },
+              showSizeChanger: true,
+              showTotal: (t) => `Total ${t} items`,
+              size: "small",
+            }}
+            scroll={{ x: 800 }}
+            size="middle"
+            className="ant-table-responsive"
+          />
+        </div>
       </div>
 
       <VendorAdvanceReturnModal
-        open={openAdd}
-        mode="add"
-        onOpenChange={setOpenAdd}
-        onSubmit={async (payload) => {
-          const amount = Number(payload.advanceAmount || 0)
-          const res = await fetch("/api/vendors/advance-return", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "x-company-id": companyId },
-            body: JSON.stringify({
-              vendorId: payload.vendorId,
-              paymentMethod: payload.paymentMethod,
-              accountId: payload.accountId,
-              accountName: payload.accountName ?? "",
-              amount,
-              returnDate: payload.returnDate,
-              note: payload.returnNote ?? "",
-            }),
-          })
-          const data = await res.json().catch(() => ({}))
-          if (!res.ok) {
-            toast.error(parseApiError(data))
-            return
-          }
-          toast.success("Advance return created")
-          setOpenAdd(false)
-          load()
-        }}
-      />
-
-      <VendorAdvanceReturnModal
-        open={openEdit}
-        mode="edit"
+        open={isModalOpen}
+        mode={modalMode}
         onOpenChange={(v) => {
           if (!v) setEditingRow(null)
-          setOpenEdit(v)
+          setIsModalOpen(v)
         }}
+        loading={modalLoading}
         initialValues={
           editingRow
             ? {
@@ -286,29 +266,41 @@ export default function VendorAdvanceReturnPage() {
             : undefined
         }
         onSubmit={async (payload) => {
-          if (!editingRow) return
-          const amount = Number(payload.advanceAmount || 0)
-          const res = await fetch(`/api/vendors/advance-return/${editingRow.id}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json", "x-company-id": companyId },
-            body: JSON.stringify({
-              paymentMethod: payload.paymentMethod,
-              accountId: payload.accountId,
-              accountName: payload.accountName ?? "",
-              amount,
-              returnDate: payload.returnDate,
-              note: payload.returnNote ?? "",
-            }),
-          })
-          const data = await res.json().catch(() => ({}))
-          if (!res.ok) {
-            toast.error(parseApiError(data))
-            return
+          setModalLoading(true)
+          try {
+            const amount = Number(payload.advanceAmount || 0)
+            const url = modalMode === "add" 
+              ? "/api/vendors/advance-return" 
+              : `/api/vendors/advance-return/${editingRow?.id}`
+            const method = modalMode === "add" ? "POST" : "PUT"
+
+            const res = await fetch(url, {
+              method,
+              headers: { "Content-Type": "application/json", "x-company-id": companyId },
+              body: JSON.stringify({
+                vendorId: payload.vendorId,
+                paymentMethod: payload.paymentMethod,
+                accountId: payload.accountId,
+                accountName: payload.accountName ?? "",
+                amount,
+                returnDate: payload.returnDate,
+                note: payload.returnNote ?? "",
+              }),
+            })
+            const data = await res.json().catch(() => ({}))
+            if (!res.ok) {
+              toast.error(parseApiError(data))
+              return
+            }
+            toast.success(modalMode === "add" ? "Advance return created" : "Updated")
+            setIsModalOpen(false)
+            setEditingRow(null)
+            load()
+          } catch {
+            toast.error("An error occurred")
+          } finally {
+            setModalLoading(false)
           }
-          toast.success("Updated")
-          setOpenEdit(false)
-          setEditingRow(null)
-          load()
         }}
       />
     </PageWrapper>

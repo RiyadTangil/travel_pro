@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { StatusSwitch } from "@/components/shared/status-switch"
 import { TableRowActions } from "@/components/shared/table-row-actions"
 import type { Vendor } from "./types"
+import { cn } from "@/lib/utils"
 
 type Props = {
   vendors: Vendor[]
@@ -35,13 +36,15 @@ export function VendorTable({
     {
       title: "SL",
       key: "sl",
-      width: 56,
+      width: 60,
+      align: "center" as const,
       render: (_: unknown, __: Vendor, index: number) => index + 1,
     },
     {
       title: "Name",
       dataIndex: "name",
       key: "name",
+      width: 200,
       render: (text: string, v: Vendor) => (
         <Link
           href={`/dashboard/reports/vendor-ledger?vendorId=${v.id}`}
@@ -57,22 +60,25 @@ export function VendorTable({
       title: "Mobile",
       dataIndex: "mobile",
       key: "mobile",
+      width: 140,
     },
     {
       title: "Email",
       dataIndex: "email",
       key: "email",
+      width: 200,
       render: (email: string | undefined) => email || "—",
     },
     {
       title: "Present Balance",
       key: "presentBalance",
+      width: 180,
       render: (_: unknown, v: Vendor) =>
         v.presentBalance.type === "due" ? (
-          <span className="text-red-600">Due : {v.presentBalance.amount.toLocaleString()}</span>
+          <span className="text-red-600 font-semibold">Due: {v.presentBalance.amount.toLocaleString()}</span>
         ) : (
-          <span className={v.presentBalance.type === "advance" ? "text-green-600" : "text-red-600"}>
-            {v.presentBalance.type === "advance" ? "Advance" : "Due"} : {v.presentBalance.amount.toLocaleString()}
+          <span className={cn("font-semibold", v.presentBalance.type === "advance" ? "text-green-600" : "text-red-600")}>
+            {v.presentBalance.type === "advance" ? "Adv" : "Due"}: {v.presentBalance.amount.toLocaleString()}
           </span>
         ),
     },
@@ -80,12 +86,14 @@ export function VendorTable({
       title: "Fixed Balance",
       dataIndex: "fixedBalance",
       key: "fixedBalance",
-      render: (fb: number | undefined) => (fb != null ? fb : "—"),
+      width: 120,
+      align: "right" as const,
+      render: (fb: number | undefined) => (fb != null ? fb.toLocaleString() : "—"),
     },
     {
       title: "Status",
       key: "status",
-      width: 140,
+      width: 100,
       align: "center" as const,
       render: (_: unknown, v: Vendor) => (
         <div className="flex flex-col items-center gap-1">
@@ -101,16 +109,11 @@ export function VendorTable({
     {
       title: "Action",
       key: "action",
-      width: 350,
+      width: 220,
+      fixed: "right" as const,
+      align: "center" as const,
       render: (_: unknown, v: Vendor) => (
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          {/*
-           todo : we will use this later
-          {v.presentBalance.amount !== 0 && (
-            <Button type="button" variant="outline" size="sm" className="h-8 px-3" onClick={() => onAddPayment(v)}>
-              + Add Payment
-            </Button>
-          )} */}
+        <div className="flex items-center justify-center gap-2">
           <TableRowActions
             onView={() => onView(v)}
             onEdit={() => onEdit(v)}
@@ -134,10 +137,16 @@ export function VendorTable({
       rowKey={(r) => r.id}
       dataSource={vendors}
       loading={loading}
-      pagination={false}
-      scroll={{ x: 960 }}
+      pagination={{
+        pageSize: 50,
+        showSizeChanger: true,
+        showTotal: (total) => `Total ${total} vendors`,
+        size: "small",
+      }}
+      scroll={{ x: 1100 }}
       columns={columns}
-      className="border-none"
+      size="middle"
+      className="ant-table-responsive"
       locale={{ emptyText: loading ? "Loading…" : "No vendors found" }}
     />
   )

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useForm, useFieldArray, Controller } from "react-hook-form"
 import { cn } from "@/lib/utils"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { SharedModal } from "@/components/shared/shared-modal"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -274,190 +274,170 @@ export default function ExpenseModal({ open, onOpenChange, mode, initialValues, 
   )
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[1000px] max-h-[90vh] overflow-y-auto bg-gray-50">
-        <DialogHeader>
-          <div className="flex justify-between items-center">
-             <DialogTitle className="text-xl font-semibold">
-               {mode === "add" ? "Add Expense" : "Edit Expense"}
-             </DialogTitle>
-             {/* {mode === "add" && (
-                <Button variant="ghost" className="bg-sky-500 hover:bg-sky-600 text-white h-8 px-3" onClick={() => onOpenChange(false)}>
-                   Return to Expense List
-                </Button>
-             )} */}
-          </div>
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit(onSubmitInternal)}>
-          <div className="p-1 space-y-6">
-            
-            {/* Add Items Section */}
-            <div className="bg-white p-4 rounded-md shadow-sm border border-gray-100 flex flex-wrap items-end gap-4">
-              <div className="flex-1 min-w-[200px] space-y-2">
-                 <Label>{requiredMark("Head:", true)}</Label>
-                 <ClearableSelect
-                   value={watch("tempHeadId")}
-                   onChange={(v) => {
-                     setValue("tempHeadId", v)
-                     clearErrors(["tempHeadId", "items"])
-                   }}
-                   options={heads.map(h => ({ label: h.name, value: h.id }))}
-                   placeholder="Select Head"
-                   error={!!errors.tempHeadId}
-                 />
-                 {errors.tempHeadId && <div className="text-red-500 text-xs">{errors.tempHeadId.message}</div>}
-              </div>
-
-              <div className="flex-1 min-w-[150px] space-y-2">
-                 <Label>{requiredMark("Amount:", true)}</Label>
-                 <Input 
-                   type="number" 
-                   placeholder="Amount" 
-                   value={watch("tempAmount")}
-                   onChange={(e) => {
-                     setValue("tempAmount", e.target.value)
-                     clearErrors(["tempAmount", "items"])
-                   }}
-                 />
-                 {errors.tempAmount && <div className="text-red-500 text-xs">{errors.tempAmount.message}</div>}
-              </div>
-
-              <div className="pb-0.5">
-                 <Button type="button" onClick={handleAddItem} className="bg-sky-500 hover:bg-sky-600">
-                   <Plus className="w-4 h-4 mr-2" /> Add More
-                 </Button>
-              </div>
+    <SharedModal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={mode === "add" ? "Add Expense" : "Edit Expense"}
+      submitText={mode === "add" ? "Create Expense" : "Update Expense"}
+      onSubmit={handleSubmit(onSubmitInternal)}
+      loading={submitting}
+      formId="expense-form"
+      className="sm:max-w-[1000px]"
+    >
+      <form id="expense-form" onSubmit={handleSubmit(onSubmitInternal)}>
+        <div className="space-y-6">
+          
+          {/* Add Items Section */}
+          <div className="bg-white p-4 rounded-md shadow-sm border border-gray-100 flex flex-wrap items-end gap-4">
+            <div className="flex-1 min-w-[200px] space-y-2">
+               <Label>{requiredMark("Head:", true)}</Label>
+               <ClearableSelect
+                 value={watch("tempHeadId")}
+                 onChange={(v) => {
+                   setValue("tempHeadId", v)
+                   clearErrors(["tempHeadId", "items"])
+                 }}
+                 options={heads.map(h => ({ label: h.name, value: h.id }))}
+                 placeholder="Select Head"
+                 error={!!errors.tempHeadId}
+               />
+               {errors.tempHeadId && <div className="text-red-500 text-xs">{errors.tempHeadId.message}</div>}
             </div>
 
-            {/* Items List */}
-            {fields.length > 0 && (
-              <div className="bg-white p-4 rounded-md shadow-sm border border-gray-100">
-                 <Label className="mb-2 block font-semibold">Expense Items:</Label>
-                 <div className="space-y-2">
-                   {fields.map((field, index) => (
-                     <div key={field.id} className="flex justify-between items-center bg-gray-50 p-2 rounded border border-gray-200">
-                       <span className="font-medium">{field.headName}</span>
-                       <div className="flex items-center gap-4">
-                         <span className="font-mono">{Number(field.amount).toFixed(2)}</span>
-                         <Button type="button" variant="ghost" size="sm" onClick={() => remove(index)} className="text-red-500 hover:text-red-700 hover:bg-red-50">
-                           <Trash2 className="w-4 h-4" />
-                         </Button>
-                       </div>
-                     </div>
-                   ))}
-                   <div className="flex justify-between items-center pt-2 border-t mt-2 font-bold">
-                      <span>Total</span>
-                      <span className="mr-12">{Number(watch("totalAmount") || 0).toFixed(2)}</span>
-                   </div>
-                 </div>
-                 {errors.items && <div className="text-red-500 text-xs mt-2">{errors.items.message}</div>}
-              </div>
-            )}
-
-            {/* Main Form Fields */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-               <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>{requiredMark("Payment Method:", true)}</Label>
-                    <Controller
-                      name="paymentMethod"
-                      control={control}
-                      rules={{ required: "Payment method is required" }}
-                      render={({ field }) => (
-                        <ClearableSelect
-                          value={field.value}
-                          onChange={field.onChange}
-                          options={paymentMethodOptions.map((m) => ({ label: m, value: m }))}
-                          placeholder="Select Payment Method"
-                          error={!!errors.paymentMethod}
-                        />
-                      )}
-                    />
-                    {errors.paymentMethod && (
-                      <p className="text-xs text-red-500 font-medium">{errors.paymentMethod.message}</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>{requiredMark("Available Balance:", true)}</Label>
-                    <Input placeholder="Select your account" readOnly {...register("availableBalance")} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>{requiredMark("Date:", true)}</Label>
-                    <Controller
-                      name="date"
-                      control={control}
-                      rules={{ required: "Date is required" }}
-                      render={({ field }) => (
-                        <DateInput
-                          value={field.value ? new Date(field.value) : undefined}
-                          onChange={(d) => field.onChange(d ? d.toISOString().slice(0, 10) : "")}
-                          className={cn(errors.date && "border-red-500")}
-                        />
-                      )}
-                    />
-                    {errors.date && (
-                      <p className="text-xs text-red-500 font-medium">{errors.date.message}</p>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-2">
-                     <Button type="button" variant="outline" className="w-full justify-start text-gray-500">
-                        <Upload className="w-4 h-4 mr-2" /> Voucher image 1
-                     </Button>
-                  </div>
-
-                  <div className="space-y-2">
-                     <Button type="button" variant="outline" className="w-full justify-start text-gray-500">
-                        <Upload className="w-4 h-4 mr-2" /> Voucher image 2
-                     </Button>
-                  </div>
-               </div>
-
-               <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>{requiredMark("Account:", true)}</Label>
-                    <ClearableSelect
-                      value={watch("accountId")}
-                      onChange={(v) => setValue("accountId", v)}
-                      options={filteredAccounts.map(a => ({ label: a.name, value: a.id }))}
-                      placeholder="Select Account"
-                      disabled={!paymentMethod}
-                      error={!!errors.accountId}
-                    />
-                    {errors.accountId && <div className="text-red-500 text-xs">{errors.accountId.message}</div>}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>{requiredMark("Total Amount:", true)}</Label>
-                    <Input type="number" placeholder="0" readOnly {...register("totalAmount")} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Note:</Label>
-                    <Textarea rows={4} placeholder="Note something" {...register("note")} />
-                  </div>
-               </div>
+            <div className="flex-1 min-w-[150px] space-y-2">
+               <Label>{requiredMark("Amount:", true)}</Label>
+               <Input 
+                 type="number" 
+                 placeholder="Amount" 
+                 value={watch("tempAmount")}
+                 onChange={(e) => {
+                   setValue("tempAmount", e.target.value)
+                   clearErrors(["tempAmount", "items"])
+                 }}
+               />
+               {errors.tempAmount && <div className="text-red-500 text-xs">{errors.tempAmount.message}</div>}
             </div>
 
-            <div className="flex justify-end pt-4">
-               <Button type="submit" className="bg-sky-500 hover:bg-sky-600 min-w-[150px]" disabled={submitting}>
-                 {submitting ? (
-                   <>
-                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                     {mode === "add" ? "Creating..." : "Updating..."}
-                   </>
-                 ) : (
-                   mode === "add" ? "Create Expense" : "Update Expense"
-                 )}
+            <div className="pb-0.5">
+               <Button type="button" onClick={handleAddItem} className="bg-sky-500 hover:bg-sky-600">
+                 <Plus className="w-4 h-4 mr-2" /> Add More
                </Button>
             </div>
-
           </div>
-        </form>
-      </DialogContent>
-    </Dialog>
+
+          {/* Items List */}
+          {fields.length > 0 && (
+            <div className="bg-white p-4 rounded-md shadow-sm border border-gray-100">
+               <Label className="mb-2 block font-semibold">Expense Items:</Label>
+               <div className="space-y-2">
+                 {fields.map((field, index) => (
+                   <div key={field.id} className="flex justify-between items-center bg-gray-50 p-2 rounded border border-gray-200">
+                     <span className="font-medium">{field.headName}</span>
+                     <div className="flex items-center gap-4">
+                       <span className="font-mono">{Number(field.amount).toFixed(2)}</span>
+                       <Button type="button" variant="ghost" size="sm" onClick={() => remove(index)} className="text-red-500 hover:text-red-700 hover:bg-red-50">
+                         <Trash2 className="w-4 h-4" />
+                       </Button>
+                     </div>
+                   </div>
+                 ))}
+                 <div className="flex justify-between items-center pt-2 border-t mt-2 font-bold">
+                    <span>Total</span>
+                    <span className="mr-12">{Number(watch("totalAmount") || 0).toFixed(2)}</span>
+                 </div>
+               </div>
+               {errors.items && <div className="text-red-500 text-xs mt-2">{errors.items.message}</div>}
+            </div>
+          )}
+
+          {/* Main Form Fields */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+             <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>{requiredMark("Payment Method:", true)}</Label>
+                  <Controller
+                    name="paymentMethod"
+                    control={control}
+                    rules={{ required: "Payment method is required" }}
+                    render={({ field }) => (
+                      <ClearableSelect
+                        value={field.value}
+                        onChange={field.onChange}
+                        options={paymentMethodOptions.map((m) => ({ label: m, value: m }))}
+                        placeholder="Select Payment Method"
+                        error={!!errors.paymentMethod}
+                      />
+                    )}
+                  />
+                  {errors.paymentMethod && (
+                    <p className="text-xs text-red-500 font-medium">{errors.paymentMethod.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{requiredMark("Available Balance:", true)}</Label>
+                  <Input placeholder="Select your account" readOnly {...register("availableBalance")} />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{requiredMark("Date:", true)}</Label>
+                  <Controller
+                    name="date"
+                    control={control}
+                    rules={{ required: "Date is required" }}
+                    render={({ field }) => (
+                      <DateInput
+                        value={field.value ? new Date(field.value) : undefined}
+                        onChange={(d) => field.onChange(d ? d.toISOString().slice(0, 10) : "")}
+                        className={cn(errors.date && "border-red-500")}
+                      />
+                    )}
+                  />
+                  {errors.date && (
+                    <p className="text-xs text-red-500 font-medium">{errors.date.message}</p>
+                  )}
+                </div>
+                
+                <div className="space-y-2">
+                   <Button type="button" variant="outline" className="w-full justify-start text-gray-500">
+                      <Upload className="w-4 h-4 mr-2" /> Voucher image 1
+                   </Button>
+                </div>
+
+                <div className="space-y-2">
+                   <Button type="button" variant="outline" className="w-full justify-start text-gray-500">
+                      <Upload className="w-4 h-4 mr-2" /> Voucher image 2
+                   </Button>
+                </div>
+             </div>
+
+             <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>{requiredMark("Account:", true)}</Label>
+                  <ClearableSelect
+                    value={watch("accountId")}
+                    onChange={(v) => setValue("accountId", v)}
+                    options={filteredAccounts.map(a => ({ label: a.name, value: a.id }))}
+                    placeholder="Select Account"
+                    disabled={!paymentMethod}
+                    error={!!errors.accountId}
+                  />
+                  {errors.accountId && <div className="text-red-500 text-xs">{errors.accountId.message}</div>}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{requiredMark("Total Amount:", true)}</Label>
+                  <Input type="number" placeholder="0" readOnly {...register("totalAmount")} />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Note:</Label>
+                  <Textarea rows={4} placeholder="Note something" {...register("note")} />
+                </div>
+             </div>
+          </div>
+        </div>
+      </form>
+    </SharedModal>
   )
 }

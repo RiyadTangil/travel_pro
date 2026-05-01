@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useForm } from "react-hook-form"
 import { useSession } from "next-auth/react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { SharedModal } from "@/components/shared/shared-modal"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
@@ -256,123 +256,122 @@ export default function AdvanceReturnModal({ open, onOpenChange, mode, id, initi
   )
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[920px]">
-        <DialogHeader>
-          <DialogTitle>{mode === "add" ? "Return to Advanced Payment List" : "Edit Advance Return"}</DialogTitle>
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit(onSubmitInternal)}>
-          <div className="rounded-md border bg-gray-50 p-4 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>{requiredMark("Select Client:", true)}</Label>
-                  <ClientSelect
-                    value={watch("clientId")}
-                    preloaded={clients as any}
-                    placeholder="Select client"
-                    disabled={mode === "edit"}
-                    onChange={(id, selected) => {
-                      setValue("clientId", id || "", { shouldValidate: true })
-                      setValue("clientName", selected?.name || "")
-                    }}
-                  />
-                  {errors.clientId && <div className="text-red-500 text-xs">Client is required</div>}
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Payment method:</Label>
-                  <Select value={watch("paymentMethod")} onValueChange={(v) => setValue("paymentMethod", v)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Payment method" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {paymentMethodOptions.map((m) => (<SelectItem key={m} value={m}>{m}</SelectItem>))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>{requiredMark("Select account:", true)}</Label>
-                  <Select value={watch("accountId")} onValueChange={(v) => setValue("accountId", v, { shouldValidate: true })} disabled={!paymentMethod}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select an account" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {filteredAccounts.map((a) => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}
-                    </SelectContent>
-                  </Select>
-                  {errors.accountId && <div className="text-red-500 text-xs">Account is required</div>}
-                </div>
-
-                {mode === "edit" && (
-                  <div className="space-y-2">
-                    <Label>Receipt/Trans No:</Label>
-                    <Input placeholder="Receipt/Trans No :" {...register("receiptNo")} />
-                  </div>
-                )}
-
-                {paymentMethod && paymentMethod.toLowerCase() !== "cash" && (
-                  <div className="space-y-2">
-                    <Label>Transaction charge:</Label>
-                    <Input placeholder="Transaction charge" {...register("transactionCharge")} />
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  <Label>{requiredMark("Advance amount:", true)}</Label>
-                  <Input 
-                    type="number" 
-                    step="0.01" 
-                    placeholder="Advance amount" 
-                    className={cn(errors.advanceAmount && "border-red-500 focus-visible:ring-red-500")}
-                    {...register("advanceAmount", { 
-                      required: "Advance amount is required",
-                      validate: (val) => {
-                        const amt = parseFloat(val || "0")
-                        const bal = parseFloat(watch("availableBalance") || "0")
-                        return amt <= bal || "Insufficient account balance"
-                      }
-                    })} 
-                  />
-                  {errors.advanceAmount && <div className="text-red-500 text-xs">{errors.advanceAmount.message}</div>}
-                </div>
+    <SharedModal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={mode === "add" ? "Return to Advanced Payment List" : "Edit Advance Return"}
+      submitText={mode === "add" ? "Return Advance Payment" : "Update"}
+      onSubmit={handleSubmit(onSubmitInternal)}
+      loading={submitting}
+      formId="advance-return-form"
+    >
+      <form id="advance-return-form" onSubmit={handleSubmit(onSubmitInternal)}>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>{requiredMark("Select Client:", true)}</Label>
+                <ClientSelect
+                  value={watch("clientId")}
+                  preloaded={clients as any}
+                  placeholder="Select client"
+                  disabled={mode === "edit"}
+                  onChange={(id, selected) => {
+                    setValue("clientId", id || "", { shouldValidate: true })
+                    setValue("clientName", selected?.name || "")
+                  }}
+                />
+                {errors.clientId && <div className="text-red-500 text-xs">Client is required</div>}
               </div>
 
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>{clientAdvancePositive ? "Advance:" : " Present balance :"}</Label>
-                  <Input placeholder="0" readOnly={clientAdvancePositive} {...register("presentBalance")} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Available Balance:</Label>
-                  <Input placeholder="Available Balance" readOnly {...register("availableBalance")} />
-                </div>
-                <div className="space-y-2">
-                  <Label>{requiredMark("Return date:", true)}</Label>
-                  <DateInput
-                    value={watch("returnDate") ? new Date(watch("returnDate")) : undefined}
-                    onChange={(d) => setValue("returnDate", d ? d.toISOString().slice(0, 10) : "", { shouldValidate: true })}
-                  />
-                  {errors.returnDate && <div className="text-red-500 text-xs">Return date is required</div>}
-                </div>
-                <div className="space-y-2">
-                  <Label>Return note:</Label>
-                  <Textarea rows={3} placeholder="Note something" {...register("returnNote")} />
-                </div>
+              <div className="space-y-2">
+                <Label>Payment method:</Label>
+                <Select value={watch("paymentMethod")} onValueChange={(v) => setValue("paymentMethod", v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select Payment method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {paymentMethodOptions.map((m) => (<SelectItem key={m} value={m}>{m}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-                <div className="flex flex-col items-end space-y-2">
-                  {errors.root && <div className="text-red-500 text-sm">{errors.root.message}</div>}
-                  <Button type="submit" className="bg-sky-500 hover:bg-sky-600">
-                    {submitting ? (mode === "add" ? "Submitting..." : "Updating...") : (mode === "add" ? "Return Advance Payment" : "Update")}
-                  </Button>
+              <div className="space-y-2">
+                <Label>{requiredMark("Select account:", true)}</Label>
+                <Select value={watch("accountId")} onValueChange={(v) => setValue("accountId", v, { shouldValidate: true })} disabled={!paymentMethod}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select an account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filteredAccounts.map((a) => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+                {errors.accountId && <div className="text-red-500 text-xs">Account is required</div>}
+              </div>
+
+              {mode === "edit" && (
+                <div className="space-y-2">
+                  <Label>Receipt/Trans No:</Label>
+                  <Input placeholder="Receipt/Trans No :" {...register("receiptNo")} />
                 </div>
+              )}
+
+              {paymentMethod && paymentMethod.toLowerCase() !== "cash" && (
+                <div className="space-y-2">
+                  <Label>Transaction charge:</Label>
+                  <Input placeholder="Transaction charge" {...register("transactionCharge")} />
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label>{requiredMark("Advance amount:", true)}</Label>
+                <Input 
+                  type="number" 
+                  step="0.01" 
+                  placeholder="Advance amount" 
+                  className={cn(errors.advanceAmount && "border-red-500 focus-visible:ring-red-500")}
+                  {...register("advanceAmount", { 
+                    required: "Advance amount is required",
+                    validate: (val) => {
+                      const amt = parseFloat(val || "0")
+                      const bal = parseFloat(watch("availableBalance") || "0")
+                      return amt <= bal || "Insufficient account balance"
+                    }
+                  })} 
+                />
+                {errors.advanceAmount && <div className="text-red-500 text-xs">{errors.advanceAmount.message}</div>}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>{clientAdvancePositive ? "Advance:" : " Present balance :"}</Label>
+                <Input placeholder="0" readOnly={clientAdvancePositive} {...register("presentBalance")} />
+              </div>
+              <div className="space-y-2">
+                <Label>Available Balance:</Label>
+                <Input placeholder="Available Balance" readOnly {...register("availableBalance")} />
+              </div>
+              <div className="space-y-2">
+                <Label>{requiredMark("Return date:", true)}</Label>
+                <DateInput
+                  value={watch("returnDate") ? new Date(watch("returnDate")) : undefined}
+                  onChange={(d) => setValue("returnDate", d ? d.toISOString().slice(0, 10) : "", { shouldValidate: true })}
+                />
+                {errors.returnDate && <div className="text-red-500 text-xs">Return date is required</div>}
+              </div>
+              <div className="space-y-2">
+                <Label>Return note:</Label>
+                <Textarea rows={3} placeholder="Note something" {...register("returnNote")} />
+              </div>
+
+              <div className="flex flex-col items-end space-y-2">
+                {errors.root && <div className="text-red-500 text-sm">{errors.root.message}</div>}
               </div>
             </div>
           </div>
-        </form>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </form>
+    </SharedModal>
   )
 }

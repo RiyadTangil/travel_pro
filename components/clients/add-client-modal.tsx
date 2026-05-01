@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 import { EmailInput } from "@/components/ui/email-input"
 import { cn } from "@/lib/utils"
+import { SharedModal } from "../shared/shared-modal"
 
 type CategoryOption = { id: string; name: string; prefix: string }
 
@@ -128,171 +129,171 @@ export default function AddClientModal({ open, onOpenChange, onSubmit, loading, 
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{mode === "edit" ? "Edit Client Information" : "Add Client Information"}</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmitForm)} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="space-y-2">
-              <Label className={cn(errors.categoryId && "text-red-500")}>Client Category  <span className="text-red-500">*</span></Label>
-              <Select value={watch("categoryId")} onValueChange={(v) => setValue("categoryId", v, { shouldValidate: true })}>
-                <SelectTrigger className={cn(errors.categoryId && "border-red-500 focus:ring-red-500")}>
-                  <SelectValue placeholder="Select a Category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.categoryId && <p className="text-red-600 text-[10px] font-medium uppercase tracking-tight">Category is required</p>}
-              <input type="hidden" {...register("categoryId", { required: true })} />
-            </div>
 
-            <div className="space-y-2">
-              <Label className={cn(errors.clientType && "text-red-500")}>Client Type  <span className="text-red-500">*</span></Label>
-              <Select value={watch("clientType")} onValueChange={(v) => setValue("clientType", v, { shouldValidate: true })}>
-                <SelectTrigger className={cn(errors.clientType && "border-red-500 focus:ring-red-500")}>
-                  <SelectValue placeholder="Select client type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Individual">Individual</SelectItem>
-                  <SelectItem value="Corporate">Corporate</SelectItem>
-                </SelectContent>
-              </Select>
-              {errors.clientType && <p className="text-red-600 text-[10px] font-medium uppercase tracking-tight">Type is required</p>}
-              <input type="hidden" {...register("clientType", { required: true })} />
-            </div>
 
-            <div className="space-y-2">
-              <Label className={cn(errors.name && "text-red-500")}>Name  <span className="text-red-500">*</span></Label>
-              <Input 
-                {...register("name", { required: "Name is required" })} 
-                placeholder="Name" 
-                className={cn(errors.name && "border-red-500 focus-visible:ring-red-500")}
-              />
-              {errors.name && <p className="text-red-600 text-[10px] font-medium uppercase tracking-tight">{String(errors.name.message)}</p>}
-            </div>
-
-            <div className="space-y-2">
-              <Label className={cn(errors.email && "text-red-500")}>Email</Label>
-              <EmailInput 
-                {...register("email", { 
-                  pattern: {
-                    value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                    message: "Invalid email address"
-                  }
-                })} 
-                placeholder="Email" 
-                error={errors.email?.message}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Gender</Label>
-              <Select value={watch("gender")} onValueChange={(v) => setValue("gender", v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select gender" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Male">Male</SelectItem>
-                  <SelectItem value="Female">Female</SelectItem>
-                  <SelectItem value="Other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label className={cn(errors.phone && "text-red-500")}>Mobile  <span className="text-red-500">*</span></Label>
-              <Input 
-                {...register("phone", { required: "Mobile is required" })} 
-                placeholder="Mobile Number" 
-                className={cn(errors.phone && "border-red-500 focus-visible:ring-red-500")}
-              />
-              {errors.phone && <p className="text-red-600 text-[10px] font-medium uppercase tracking-tight">{String(errors.phone.message)}</p>}
-            </div>
-
-            <div className="space-y-2">
-              <Label>Address</Label>
-              <Input {...register("address")} placeholder="Address" />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Walking Customer</Label>
-              <Select value={watch("walkingCustomer")} onValueChange={(v) => setValue("walkingCustomer", v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="No" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="No">No</SelectItem>
-                  <SelectItem value="Yes">Yes</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2 col-span-1 lg:col-span-4">
-              <Label>Client Source</Label>
-              <Select value={watch("source")} onValueChange={(v) => setValue("source", v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select client source" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Existing Client">Existing Client</SelectItem>
-                  <SelectItem value="Facebook Marketing">Facebook Marketing</SelectItem>
-                  <SelectItem value="Search Engine">Search Engine</SelectItem>
-                  <SelectItem value="YouTube Marketing">YouTube Marketing</SelectItem>
-                  <SelectItem value="Direct Client">Direct Client</SelectItem>
-                  <SelectItem value="Phone Call">Phone Call</SelectItem>
-                  <SelectItem value="Linkedin">Linkedin</SelectItem>
-                  <SelectItem value="Ads">Ads</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+    <SharedModal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={mode === "edit" ? "Edit Client Information" : "Add Client Information"}
+      maxWidth="max-w-5xl"
+      formId="add-client-form"
+      submitText={mode === "edit" ? "Save Changes" : "Add Client"}
+      cancelText="Cancel"
+      loading={loading}
+    >
+      <form id="add-client-form" onSubmit={handleSubmit(onSubmitForm)} className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="space-y-2">
+            <Label className={cn(errors.categoryId && "text-red-500")}>Client Category  <span className="text-red-500">*</span></Label>
+            <Select value={watch("categoryId")} onValueChange={(v) => setValue("categoryId", v, { shouldValidate: true })}>
+              <SelectTrigger className={cn(errors.categoryId && "border-red-500 focus:ring-red-500")}>
+                <SelectValue placeholder="Select a Category" />
+              </SelectTrigger>
+              <SelectContent>
+                {categories.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.categoryId && <p className="text-red-600 text-[10px] font-medium uppercase tracking-tight">Category is required</p>}
+            <input type="hidden" {...register("categoryId", { required: true })} />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="space-y-2">
-              <Label>Designation</Label>
-              <Input {...register("designation")} placeholder="Designation" />
-            </div>
-            <div className="space-y-2">
-              <Label>Trade License No</Label>
-              <Input {...register("tradeLicenseNo")} placeholder="Trade License No" />
-            </div>
-            {watch("openingBalanceType") && (
-              <div className="space-y-2">
-                <Label>Opening Balance Amount</Label>
-                <Input {...register("openingBalanceAmount")} placeholder="0.00" type="number" step="0.01" disabled={mode === "edit"} />
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label>Opening Balance type</Label>
-              <Select value={watch("openingBalanceType")} onValueChange={mode === "edit" ? undefined : (v) => setValue("openingBalanceType", v)}>
-                <SelectTrigger disabled={mode === "edit"}>
-                  <SelectValue placeholder="Select Opening Balance type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Due">Due</SelectItem>
-                  <SelectItem value="Advance">Advance</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Credit Limit</Label>
-              <Input {...register("creditLimit")} placeholder="Credit Limit" type="number" step="0.01" />
-            </div>
+          <div className="space-y-2">
+            <Label className={cn(errors.clientType && "text-red-500")}>Client Type  <span className="text-red-500">*</span></Label>
+            <Select value={watch("clientType")} onValueChange={(v) => setValue("clientType", v, { shouldValidate: true })}>
+              <SelectTrigger className={cn(errors.clientType && "border-red-500 focus:ring-red-500")}>
+                <SelectValue placeholder="Select client type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Individual">Individual</SelectItem>
+                <SelectItem value="Corporate">Corporate</SelectItem>
+              </SelectContent>
+            </Select>
+            {errors.clientType && <p className="text-red-600 text-[10px] font-medium uppercase tracking-tight">Type is required</p>}
+            <input type="hidden" {...register("clientType", { required: true })} />
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" className="bg-blue-600 hover:bg-blue-700 min-w-[140px]" disabled={loading}>
-              {loading ? (mode === "edit" ? "Updating..." : "Adding...") : (mode === "edit" ? "Save Changes" : "Add Client")}
-            </Button>
+          <div className="space-y-2">
+            <Label className={cn(errors.name && "text-red-500")}>Name  <span className="text-red-500">*</span></Label>
+            <Input
+              {...register("name", { required: "Name is required" })}
+              placeholder="Name"
+              className={cn(errors.name && "border-red-500 focus-visible:ring-red-500")}
+            />
+            {errors.name && <p className="text-red-600 text-[10px] font-medium uppercase tracking-tight">{String(errors.name.message)}</p>}
           </div>
-        </form>
-      </DialogContent>
-    </Dialog>
+
+          <div className="space-y-2">
+            <Label className={cn(errors.email && "text-red-500")}>Email</Label>
+            <EmailInput
+              {...register("email", {
+                pattern: {
+                  value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                  message: "Invalid email address"
+                }
+              })}
+              placeholder="Email"
+              error={errors.email?.message}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Gender</Label>
+            <Select value={watch("gender")} onValueChange={(v) => setValue("gender", v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select gender" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Male">Male</SelectItem>
+                <SelectItem value="Female">Female</SelectItem>
+                <SelectItem value="Other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label className={cn(errors.phone && "text-red-500")}>Mobile  <span className="text-red-500">*</span></Label>
+            <Input
+              {...register("phone", { required: "Mobile is required" })}
+              placeholder="Mobile Number"
+              className={cn(errors.phone && "border-red-500 focus-visible:ring-red-500")}
+            />
+            {errors.phone && <p className="text-red-600 text-[10px] font-medium uppercase tracking-tight">{String(errors.phone.message)}</p>}
+          </div>
+
+          <div className="space-y-2">
+            <Label>Address</Label>
+            <Input {...register("address")} placeholder="Address" />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Walking Customer</Label>
+            <Select value={watch("walkingCustomer")} onValueChange={(v) => setValue("walkingCustomer", v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="No" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="No">No</SelectItem>
+                <SelectItem value="Yes">Yes</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2 col-span-1 lg:col-span-4">
+            <Label>Client Source</Label>
+            <Select value={watch("source")} onValueChange={(v) => setValue("source", v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select client source" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Existing Client">Existing Client</SelectItem>
+                <SelectItem value="Facebook Marketing">Facebook Marketing</SelectItem>
+                <SelectItem value="Search Engine">Search Engine</SelectItem>
+                <SelectItem value="YouTube Marketing">YouTube Marketing</SelectItem>
+                <SelectItem value="Direct Client">Direct Client</SelectItem>
+                <SelectItem value="Phone Call">Phone Call</SelectItem>
+                <SelectItem value="Linkedin">Linkedin</SelectItem>
+                <SelectItem value="Ads">Ads</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="space-y-2">
+            <Label>Designation</Label>
+            <Input {...register("designation")} placeholder="Designation" />
+          </div>
+          <div className="space-y-2">
+            <Label>Trade License No</Label>
+            <Input {...register("tradeLicenseNo")} placeholder="Trade License No" />
+          </div>
+          {watch("openingBalanceType") && (
+            <div className="space-y-2">
+              <Label>Opening Balance Amount</Label>
+              <Input {...register("openingBalanceAmount")} placeholder="0.00" type="number" step="0.01" disabled={mode === "edit"} />
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label>Opening Balance type</Label>
+            <Select value={watch("openingBalanceType")} onValueChange={mode === "edit" ? undefined : (v) => setValue("openingBalanceType", v)}>
+              <SelectTrigger disabled={mode === "edit"}>
+                <SelectValue placeholder="Select Opening Balance type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Due">Due</SelectItem>
+                <SelectItem value="Advance">Advance</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Credit Limit</Label>
+            <Input {...register("creditLimit")} placeholder="Credit Limit" type="number" step="0.01" />
+          </div>
+        </div>
+      </form>
+    </SharedModal>
+
   )
 }

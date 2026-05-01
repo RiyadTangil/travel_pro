@@ -126,11 +126,10 @@ export default function TransactionHistoryPage() {
       if (dateRange?.from) params.set("dateFrom", dateRange.from.toISOString().slice(0, 10))
       if (dateRange?.to) params.set("dateTo", dateRange.to.toISOString().slice(0, 10))
 
-      const res = await client.get(`/api/client-transactions?${params.toString()}`, {
+      const {data} = await client.get(`/api/client-transactions?${params.toString()}`, {
         headers: { "x-company-id": String(companyId) },
       })
-      const data = res.data
-      const items = (data?.items || []) as ClientTransactionApiItem[]
+      const items = (data?.data?.items || []) as ClientTransactionApiItem[]
       const pag = data?.pagination || {}
       setRows(items.map(toTransactionRow))
       setTotal(Number(pag?.total || 0))

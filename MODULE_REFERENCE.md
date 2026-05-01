@@ -249,6 +249,68 @@ presentBalance: { type: "due" | "advance", amount: number }
 
 **Code:** `app/api/vendors/route.ts`, `app/api/vendors/[id]/route.ts`, `services/vendorService.ts` (if exists) or inline in routes, UI `app/dashboard/vendors/page.tsx`, `components/vendors/vendor-table.tsx`, `components/vendors/vendor-add-modal.tsx`, `components/vendors/vendor-view-modal.tsx`.
 
+---
+
+## 11. Dashboard
+
+**Total components: 8** (Centralized data fetching via `GET /api/dashboard/metrics?period=[daily|monthly|yearly]`).
+
+| # | Component / Card | Source Collection(s) | Calculation Logic / Filter |
+|---|------------------|-----------------------|----------------------------|
+| **1** | **Sales Amount** | `invoices` | Sum of `netTotal` (or `billing.netTotal`) for non-deleted invoices in the selected period (`salesDate`). |
+| **2** | **Purchase Amount** | `invoices` | Sum of `billing.totalCost` for non-deleted invoices in the selected period (`salesDate`). |
+| **3** | **Collection Amount** | `money_receipts` | Sum of `amount` field for receipts in the selected period (`paymentDate`). |
+| **4** | **Payment Amount** | `vendor_payments` | Sum of `totalAmount` field for payments in the selected period (`paymentDate`). |
+| **5** | **Expense Amount** | `expenses` | Sum of `totalAmount` field for expenses in the selected period (`date`). |
+| **6** | **Profit / Loss** | `invoices` | **Sales Amount** minus **Purchase Amount**. |
+| **7** | **Total Receivable** | `invoices` | Global (ignores period): Sum of (`netTotal` - `receivedAmount`) for all non-deleted invoices. |
+| **8** | **Total Advance** | `money_receipts` | Global (ignores period): Sum of `amount` where `paymentTo: "advance"`. |
+
+### Advanced Lists & Visualizations
+
+| List / Chart | Source Collection(s) | Logic |
+|--------------|-----------------------|-------|
+| **Flight Schedule** | `invoice_items` + `invoices` + `clients` | Nearest 5 items where `itemType: "ticket"` and `journeyDate >= today`. Joined with client for name. |
+| **Account Balances** | `accounts` + `account_types` | Sum of `lastBalance` grouped by account type name (e.g., Cash, Bank). |
+| **Best Client List** | `invoices` + `clients` | Top 5 clients ranked by sum of `netTotal` within the specific Month or Year. |
+| **Best Employee List** | `invoices` + `employees` | Top 5 employees ranked by sum of `netTotal` within the specific Month or Year. |
+| **Yearly Sales Chart** | `invoices` | Quarterly aggregation of Sales, Purchase, and Profit for the selected year. |
+
+**Code:** `services/dashboardService.ts`, `app/api/dashboard/metrics/route.ts`, UI `app/dashboard/page.tsx`.
+
+---
+
+## 12. Overall Profit & Loss
+
+**Total logic flows: 1** (Comprehensive financial report via `GET /api/reports/profit-loss?dateFrom&dateTo`).
+
+### 1. Sales Income (Gross)
+- **Sales**: Sum of `netTotal` from `invoices` (filtered by `salesDate`).
+- **Purchase**: Sum of `billing.totalCost` from `invoices` (filtered by `salesDate`).
+- **Sales Profit/Loss**: **Sales** minus **Purchase**.
+
+### 2. Income (Additional Revenue)
+- **Service Charge**: Sum of `billing.serviceCharge` from `invoices`.
+- **Refund Profit**: Sum of `refundProfit` from `airticket_refunds` (filtered by `refundDate`).
+- **Non Invoice Income**: Sum of `amount` from `non_invoice_incomes` (filtered by `date`).
+- **Total Income**: **Sales** + **Service Charge** + **Refund Profit** + **Non Invoice Income**.
+
+### 3. Expenses (Operational Costs)
+- **Discount**: Sum of `billing.discount` from `invoices` **PLUS** `discount` from `money_receipts`.
+- **Expense**: Sum of `totalAmount` from `expenses` (filtered by `date`).
+- **Transaction Charge**: Sum of `transactionCharge` from `advance_returns` (filtered by `returnDate`).
+- **AIT**: Sum of `vendorAit` from `vendor_payments` (filtered by `paymentDate`).
+- **Agent Payment**: Sum of `agentCommission` from `invoices`.
+- **Total Expense**: **Purchase** + **Discount** + **Expense** + **Transaction Charge** + **AIT** + **Agent Payment**.
+
+### 4. Net Result
+- **Net Profit/Loss**: **Total Income** minus **Total Expense**.
+
+**Calculation Note:** To ensure accuracy, the report considers **Purchase** as an expense in the final Net Profit/Loss calculation, while **Sales** is the primary income. All calculations are scoped to the `companyId` and the selected date range.
+
+**Code:** `services/profitLossService.ts`, `app/api/reports/profit-loss/route.ts`, UI `app/dashboard/reports/over_all_profit_loss/page.tsx`.
+
+
 **UI:** `FilterToolbar` (search + refresh + Add Vendor), Ant `Table` with name linked to vendor ledger report, `StatusSwitch` per row, **"+ Add Payment"** button visible only when `presentBalance.amount !== 0` (opens `PaymentModal` pre-filled with the vendor — no redirect needed).
 
 ---

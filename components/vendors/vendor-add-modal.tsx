@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { PRODUCT_OPTIONS, Vendor } from "./types"
 import { Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { SharedModal } from "@/components/shared/shared-modal"
 
 type Props = {
   open: boolean
@@ -124,11 +125,17 @@ export function VendorAddModal({ open, onOpenChange, initialData, onSubmit, prod
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-4xl">
-        <DialogHeader>
-          <DialogTitle>{initialData ? "Edit Vendor" : "Add Vendor"}</DialogTitle>
-        </DialogHeader>
+    <SharedModal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={initialData ? "Edit Vendor" : "Add Vendor"}
+      maxWidth="max-w-4xl"
+      submitText={initialData ? "Update Vendor" : "Add Vendor"}
+      cancelText="Cancel"
+      onSubmit={handleSave}
+      loading={submitting}
+    >
+      <div className="space-y-6">
         {/* Top form fields */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
@@ -207,42 +214,28 @@ export function VendorAddModal({ open, onOpenChange, initialData, onSubmit, prod
         {/* Products checklist */}
         <div
           className={cn(
-            "mt-4 rounded-md",
-            submitAttempted && selectedProducts.length === 0 && "ring-2 ring-red-500 ring-offset-2 p-2"
+            "rounded-md border p-4 bg-gray-50/50",
+            submitAttempted && selectedProducts.length === 0 && "ring-2 ring-red-500 ring-offset-2"
           )}
         >
-          <Label>
+          <Label className="text-base font-semibold">
             Products <span className="text-red-600">*</span>
           </Label>
           <div className="flex items-center gap-2 mt-2">
             <Checkbox id="check_all" checked={checkAll} onCheckedChange={(v) => setCheckAll(!!v)} />
-            <label htmlFor="check_all" className="text-sm">Check all</label>
+            <label htmlFor="check_all" className="text-sm font-medium">Check all</label>
           </div>
 
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-2">
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-3">
             {productOptions.map((p) => (
-              <label key={p} className="flex items-center gap-2">
+              <label key={p} className="flex items-center gap-2 cursor-pointer hover:text-blue-600 transition-colors">
                 <Checkbox checked={selectedProducts.includes(p)} onCheckedChange={() => toggleProduct(p)} />
-                <span>{p}</span>
+                <span className="text-sm">{p}</span>
               </label>
             ))}
           </div>
         </div>
-
-        <div className="flex items-center justify-end gap-2 mt-4">
-          <Button variant="outline" onClick={() => !submitting && onOpenChange(false)} disabled={submitting}>Cancel</Button>
-          <Button disabled={submitting} className="bg-blue-600 hover:bg-blue-700" onClick={handleSave}>
-            {submitting ? (
-              <span className="flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Saving...
-              </span>
-            ) : (
-              "Save"
-            )}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </SharedModal>
   )
 }

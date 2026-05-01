@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getVendors, createVendor } from "@/services/vendorService"
 import { ok, fail, badRequest } from "@/utils/api-response"
 import { AppError } from "@/errors/AppError"
+import { getBackendSession } from "@/lib/auth-server"
 
 export async function GET(request: Request) {
   try {
@@ -9,7 +10,7 @@ export async function GET(request: Request) {
     const page = Number(searchParams.get("page") || 1)
     const pageSize = Number(searchParams.get("pageSize") || 20)
     const search = (searchParams.get("search") || "").trim()
-    const companyId = request.headers.get("x-company-id")
+      const { companyId } = await getBackendSession()
 
     if (!companyId) {
       return badRequest("Company ID is required")

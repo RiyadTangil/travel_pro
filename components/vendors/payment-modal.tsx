@@ -15,6 +15,8 @@ import { useSession } from "next-auth/react"
 import { cn } from "@/lib/utils"
 import SpecificInvoicePayment from "./specific-invoice-payment"
 
+import { SharedModal } from "@/components/shared/shared-modal"
+
 interface AccountOptionItem {
   id: string
   name: string
@@ -58,6 +60,20 @@ export default function PaymentModal({ open, onOpenChange, onSubmit, accountsPre
 
   const { register, handleSubmit, setValue, watch, reset, getValues } = methods
   const isEdit = !!initialData
+
+  const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({})
+  const [accounts, setAccounts] = useState<AccountOptionItem[]>(accountsPreloaded || [])
+  const [paymentMethodOptions, setPaymentMethodOptions] = useState<string[]>([])
+  const [vendorBalanceStatus, setVendorBalanceStatus] = useState<"due" | "advance" | null>(null)
+  
+  const paymentTo = watch("paymentTo")
+  const referPassport = watch("referPassport")
+  const amount = watch("amount")
+  const vendorAit = watch("vendorAit")
+  const vendorId = watch("vendorId")
+  const paymentMethod = watch("paymentMethod")
+  const accountId = watch("accountId")
+  const dateValue = watch("date")
 
   useEffect(() => {
     if (open) {
@@ -106,22 +122,9 @@ export default function PaymentModal({ open, onOpenChange, onSubmit, accountsPre
           voucher: null
         })
       }
+      setFieldErrors({})
     }
   }, [open, initialData, reset])
-
-
-  const [accounts, setAccounts] = useState<AccountOptionItem[]>(accountsPreloaded || [])
-  const [paymentMethodOptions, setPaymentMethodOptions] = useState<string[]>([])
-  const [vendorBalanceStatus, setVendorBalanceStatus] = useState<"due" | "advance" | null>(null)
-  
-  const paymentTo = watch("paymentTo")
-  const referPassport = watch("referPassport")
-  const amount = watch("amount")
-  const vendorAit = watch("vendorAit")
-  const vendorId = watch("vendorId")
-  const paymentMethod = watch("paymentMethod")
-  const accountId = watch("accountId")
-  const dateValue = watch("date")
 
   // Fetch Account Types (Payment Methods)
   useEffect(() => {
@@ -233,12 +236,6 @@ export default function PaymentModal({ open, onOpenChange, onSubmit, accountsPre
     setValue("totalAmount", total)
   }, [amount, vendorAit, setValue])
 
-  const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({})
-
-  useEffect(() => {
-    if (open) setFieldErrors({})
-  }, [open])
-
   const onFormSubmit = async (data: any) => {
     const errs: Record<string, boolean> = {}
     const pm = data.paymentMethod || paymentMethod
@@ -284,18 +281,22 @@ export default function PaymentModal({ open, onOpenChange, onSubmit, accountsPre
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit Payment" : "Add Payment"}</DialogTitle>
-        </DialogHeader>
-
-        <FormProvider {...methods}>
-          <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-6 py-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <SharedModal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={isEdit ? "Edit Payment" : "Add Payment"}
+      maxWidth="max-w-4xl"
+      formId="vendor-payment-form"
+      submitText={isEdit ? "Update Payment" : "Submit Payment"}
+      cancelText="Cancel"
+      loading={loading}
+    >
+      <FormProvider {...methods}>
+        <form id="vendor-payment-form" onSubmit={handleSubmit(onFormSubmit)} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             
             {/* Payment To & Invoice Selection Row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:col-span-2">
               {/* Payment To */}
               <div className="space-y-2">
                 <Label>Payment To</Label>
@@ -546,19 +547,9 @@ export default function PaymentModal({ open, onOpenChange, onSubmit, accountsPre
                 {...register("note")} 
               />
             </div>
-
-          </div>
-
-          <div className="flex justify-end space-x-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={loading}>
-              {loading && <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />}
-              {loading ? "Saving..." : "Submit Payment"}
-            </Button>
           </div>
         </form>
-        </FormProvider>
-      </DialogContent>
-    </Dialog>
+      </FormProvider>
+    </SharedModal>
   )
 }

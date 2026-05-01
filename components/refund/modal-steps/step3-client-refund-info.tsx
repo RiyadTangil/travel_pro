@@ -118,7 +118,7 @@ export function Step3ClientRefundInfo({ onNext }: Step3ClientRefundInfoProps) {
         <MoneyReturnFields type="client" errors={errors} />
       )}
 
-      <div className="flex justify-start">
+      <div className="flex justify-end">
         <Button onClick={onNext} className="bg-[#00AEEF] hover:bg-[#008ECC]">
           Check And Confirm To Vendor Payment
         </Button>

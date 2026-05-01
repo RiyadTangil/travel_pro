@@ -88,7 +88,7 @@ export default function AirticketRefundPage() {
 
   return (
     <PageWrapper breadcrumbs={[{ label: "Refund" }, { label: "Airticket Refund" }]}>
-      <div className="mx-4 mb-4 min-w-0 space-y-4">
+      <div className="px-2 sm:px-4 mb-4 min-w-0 space-y-4">
         <FilterToolbar
           showDateRange
           dateRange={dateRange}
@@ -99,7 +99,7 @@ export default function AirticketRefundPage() {
           showSearch
           search={search}
           onSearchChange={setSearch}
-          searchPlaceholder="Search Invoices..."
+          searchPlaceholder="Search Refunds..."
           showRefresh
           onRefresh={fetchRefunds}
           className="flex-1 min-w-0"

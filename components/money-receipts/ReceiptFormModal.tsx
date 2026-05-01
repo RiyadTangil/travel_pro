@@ -421,9 +421,13 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
       onOpenChange={onOpenChange}
       title={mode === "edit" ? "Edit Money Receipt" : "Create Money Receipt"}
       maxWidth="max-w-5xl"
+      formId="receipt-form"
+      submitText={mode === "edit" ? "Update Receipt" : "Create Money Receipt"}
+      cancelText="Cancel"
+      loading={submitting}
     >
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+        <form id="receipt-form" onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
               {/* Select Client */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
@@ -885,14 +889,6 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
                     </FormItem>
                   )}
                 />
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex justify-end gap-3 pt-4 border-t">
-                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-                <Button type="submit"  disabled={submitting}>
-                  {mode === "edit" ? (submitting ? "Updating..." : "Update Receipt") : (submitting ? "Creating..." : "Create Money Receipt")}
-                </Button>
               </div>
             </form>
           </Form>

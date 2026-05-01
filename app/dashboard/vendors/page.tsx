@@ -146,7 +146,7 @@ export default function VendorsPage() {
 
   return (
     <PageWrapper breadcrumbs={[{ label: "Vendors" }]}>
-      <div className="mx-4 mb-4 space-y-4">
+      <div className="min-w-0 space-y-4 px-2 sm:px-4">
         <FilterToolbar
           showSearch
           search={search}
@@ -154,7 +154,6 @@ export default function VendorsPage() {
           searchPlaceholder="Search by vendor name, mobile, email..."
           showRefresh
           onRefresh={loadVendors}
-          className="flex-1"
         >
           <Button
             className="bg-sky-500 hover:bg-sky-600 shrink-0"
@@ -163,30 +162,26 @@ export default function VendorsPage() {
               setOpenAdd(true)
             }}
           >
-            <Plus className="w-4 h-4 mr-2" /> Add Vendor
+            <Plus className="h-4 w-4 mr-2" /> Add Vendor
           </Button>
         </FilterToolbar>
 
-        <Card className="border-none shadow-none bg-transparent">
-          <CardContent className="p-0">
-            <div className="bg-white rounded-md border shadow-sm overflow-hidden">
-              <VendorTable
-                vendors={vendors}
-                loading={tableLoading}
-                onView={(v) => setViewVendor(v)}
-                onEdit={(v) => {
-                  setEditVendor(v)
-                  setOpenAdd(true)
-                }}
-                onAddPayment={() => router.push("/dashboard/vendors/payment")}
-                onDelete={handleDelete}
-                onToggleStatus={handleToggleStatus}
-                statusBusyIds={statusBusyIds}
-                deleteLoadingId={deleteLoadingId}
-              />
-            </div>
-          </CardContent>
-        </Card>
+        <div className="bg-white rounded-md border shadow-sm overflow-hidden">
+          <VendorTable
+            vendors={vendors}
+            loading={tableLoading}
+            onView={(v) => setViewVendor(v)}
+            onEdit={(v) => {
+              setEditVendor(v)
+              setOpenAdd(true)
+            }}
+            onAddPayment={() => router.push("/dashboard/vendors/payment")}
+            onDelete={handleDelete}
+            onToggleStatus={handleToggleStatus}
+            statusBusyIds={statusBusyIds}
+            deleteLoadingId={deleteLoadingId}
+          />
+        </div>
       </div>
 
       <VendorAddModal

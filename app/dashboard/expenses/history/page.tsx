@@ -43,6 +43,16 @@ export default function ExpenseHistoryPage() {
   const [openEdit, setOpenEdit] = useState(false)
   const [editingRow, setEditingRow] = useState<ExpenseRow | null>(null)
 
+  const [narrowViewport, setNarrowViewport] = useState(false)
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 768px)")
+    const apply = () => setNarrowViewport(mq.matches)
+    apply()
+    mq.addEventListener("change", apply)
+    return () => mq.removeEventListener("change", apply)
+  }, [])
+
   const client = axios.create({
     baseURL: "",
     headers: { "x-company-id": session?.user?.companyId ?? "" },
@@ -100,29 +110,34 @@ export default function ExpenseHistoryPage() {
     {
       title: "SL.",
       key: "sl",
-      width: 64,
+      width: 56,
+      align: "center" as const,
       render: (_: unknown, __: ExpenseRow, index: number) => (page - 1) * pageSize + index + 1,
     },
     {
       title: "Date",
       dataIndex: "date",
       key: "date",
+      width: 120,
       render: (date: string) =>
         new Date(date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
     },
-    { title: "Voucher No.", dataIndex: "voucherNo", key: "voucherNo" },
-    { title: "Account Name", dataIndex: "accountName", key: "accountName", ellipsis: true },
+    { title: "Voucher No.", dataIndex: "voucherNo", key: "voucherNo", width: 130 },
+    { title: "Account Name", dataIndex: "accountName", key: "accountName", ellipsis: true, width: 200 },
     {
       title: "Total Amount",
       dataIndex: "totalAmount",
       key: "totalAmount",
       align: "right" as const,
+      width: 130,
       render: (v: number) => Number(v).toLocaleString(),
     },
     {
       title: "Action",
       key: "action",
-      width: 280,
+      fixed: "right" as const,
+      width: narrowViewport ? 64 : 120,
+      align: narrowViewport ? "center" : undefined,
       render: (_: unknown, r: ExpenseRow) => (
         <TableRowActions
           showView
@@ -137,14 +152,15 @@ export default function ExpenseHistoryPage() {
           deleteTitle="Delete expense"
           deleteDescription={`Delete expense ${r.voucherNo}? This cannot be undone.`}
           deleteLoading={deletingId === r.id}
+          compact={narrowViewport}
         />
       ),
     },
   ]
 
   return (
-    <PageWrapper breadcrumbs={[{ label: "Expense" }, { label: "History" }]}>
-      <div className="mx-4 mb-4 space-y-4">
+    <PageWrapper breadcrumbs={[{ label: "Expense" }, { label: "Expense History" }]}>
+      <div className="px-2 sm:px-4 mb-4 min-w-0 space-y-4">
         <FilterToolbar
           showDateRange
           dateRange={dateRange}
@@ -155,16 +171,16 @@ export default function ExpenseHistoryPage() {
           searchPlaceholder="Search voucher, account..."
           showRefresh
           onRefresh={load}
-          className="flex-1"
+          className="flex-1 min-w-0"
         >
-          <Button className="bg-sky-500 hover:bg-sky-600 shrink-0" onClick={() => setOpenAdd(true)}>
+          <Button className="bg-sky-500 hover:bg-sky-600 shrink-0 whitespace-nowrap" onClick={() => setOpenAdd(true)}>
             + Add Expense
           </Button>
         </FilterToolbar>
 
         <Card className="border-none shadow-none bg-transparent">
           <CardContent className="p-0">
-            <div className="bg-white rounded-md border shadow-sm overflow-hidden">
+            <div className="min-w-0 overflow-hidden rounded-md border bg-white shadow-sm">
               <Table<ExpenseRow>
                 columns={columns}
                 dataSource={rows}
@@ -180,9 +196,10 @@ export default function ExpenseHistoryPage() {
                     setPageSize(ps)
                   },
                   showTotal: (t) => `Total ${t} items`,
+                  size: "small",
                 }}
                 className="border-none"
-                scroll={{ x: 900 }}
+                scroll={{ x: "max-content" }}
                 locale={{ emptyText: loading ? "Loading..." : "No expenses found." }}
               />
             </div>

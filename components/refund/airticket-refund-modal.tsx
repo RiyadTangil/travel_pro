@@ -257,36 +257,18 @@ export default function AirticketRefundModal({ isOpen, onClose, onSuccess }: Air
       onOpenChange={handleClose}
       title="Add AirTicket Refund"
       maxWidth="max-w-[1200px]"
+      leftText={step > 1 ? "Previous" : undefined}
+      onLeft={prevStep}
+      submitText={step === 4 ? "Confirm" : undefined}
+      onSubmit={step === 4 ? methods.handleSubmit(onFinalSubmit) : undefined}
+      loading={loading}
     >
-      <div className="flex flex-col">
-        <div className="flex-1 overflow-y-auto p-1">
-          <FormProvider {...methods}>
-            {step === 1 && <Step1InitialSelection onNext={onStep1Submit} />}
-            {step === 2 && <Step2TicketInformation onNext={nextStep} />}
-            {step === 3 && <Step3ClientRefundInfo onNext={nextStep} />}
-            {step === 4 && <Step4VendorRefundInfo onFinalSubmit={onFinalSubmit} loading={loading} />}
-          </FormProvider>
-        </div>
-
-        {step > 1 && (
-          <div className="mt-6 pt-4 border-t flex items-center justify-between bg-white rounded-b-lg">
-            <Button variant="outline" onClick={prevStep} disabled={loading} className="px-8">
-              Previous
-            </Button>
-            
-            {step === 4 && (
-              <Button
-                onClick={methods.handleSubmit(onFinalSubmit)}
-                className="bg-[#00AEEF] hover:bg-[#008ECC] px-8"
-                disabled={loading}
-              >
-                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Confirm
-              </Button>
-            )}
-          </div>
-        )}
-      </div>
+      <FormProvider {...methods}>
+        {step === 1 && <Step1InitialSelection onNext={onStep1Submit} />}
+        {step === 2 && <Step2TicketInformation onNext={nextStep} />}
+        {step === 3 && <Step3ClientRefundInfo onNext={nextStep} />}
+        {step === 4 && <Step4VendorRefundInfo onFinalSubmit={onFinalSubmit} loading={loading} />}
+      </FormProvider>
     </SharedModal>
   )
 }

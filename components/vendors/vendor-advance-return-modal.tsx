@@ -13,6 +13,9 @@ import VendorSelect from "@/components/vendors/vendor-select"
 import type { AccountType } from "@/components/accounts/types"
 import { useInvoiceLookups } from "@/hooks/useInvoiceLookups"
 import { cn } from "@/lib/utils"
+import { SharedModal } from "@/components/shared/shared-modal"
+
+import { useSession } from "next-auth/react"
 
 type FormValues = {
   vendorId: string
@@ -35,9 +38,18 @@ type Props = {
   mode: "add" | "edit"
   initialValues?: Partial<FormValues>
   onSubmit: (values: FormValues) => void
+  loading?: boolean
 }
 
-export default function VendorAdvanceReturnModal({ open, onOpenChange, mode, initialValues, onSubmit }: Props) {
+type AccountOptionItem = {
+  id: string
+  name: string
+  type: string
+  lastBalance?: number
+}
+
+export default function VendorAdvanceReturnModal({ open, onOpenChange, mode, initialValues, onSubmit, loading = false }: Props) {
+  const { data: session } = useSession()
   const { lookups } = useInvoiceLookups()
   const { register, setValue, handleSubmit, reset, watch, setError, formState: { errors } } = useForm<FormValues>({
     defaultValues: {
@@ -69,10 +81,10 @@ export default function VendorAdvanceReturnModal({ open, onOpenChange, mode, ini
   })
 
   const [paymentMethodOptions, setPaymentMethodOptions] = useState<AccountType[]>([])
-  const [submitting, setSubmitting] = useState(false)
+  const [accounts, setAccounts] = useState<AccountOptionItem[]>([])
   const [submitAttempted, setSubmitAttempted] = useState(false)
 
-  // Fetch Payment Methods
+  // Fetch Payment Methods and Accounts
   useEffect(() => {
     if (!open) {
       setSubmitAttempted(false)
@@ -89,17 +101,37 @@ export default function VendorAdvanceReturnModal({ open, onOpenChange, mode, ini
           setPaymentMethodOptions(["Cash", "Bank", "Mobile banking", "Credit Card"])
         }
       })()
-    return () => ctrl.abort()
-  }, [open])
 
-  const accounts = useMemo(() => lookups?.accounts || [], [lookups])
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/accounts?page=1&pageSize=100`, { 
+          signal: ctrl.signal,
+          headers: { "x-company-id": session?.user?.companyId ?? "" }
+        })
+        const data = await res.json()
+        const items = Array.isArray(data?.items) ? data.items : []
+        const mapped = items.map((i: any) => ({
+          id: String(i.id || i._id),
+          name: i.bankName ? `${i.name} (${i.bankName})` : String(i.name || ""),
+          type: String(i.type || "Cash"),
+          lastBalance: typeof i.lastBalance === "number" ? i.lastBalance : Number(i.lastBalance || 0),
+        }))
+        setAccounts(mapped)
+      } catch (e) {
+        console.error("Failed to fetch accounts", e)
+      }
+    })()
+
+    return () => ctrl.abort()
+  }, [open, session?.user?.companyId])
+
   const vendors = useMemo(() => lookups?.vendors || [], [lookups])
 
-  const paymentMethod = watch("paymentMethod") as AccountType | ""
-  const filteredAccounts = useMemo(
-    () => accounts.filter(a => (paymentMethod ? a.type === paymentMethod : true)),
-    [accounts, paymentMethod]
-  )
+  const paymentMethod = watch("paymentMethod")
+  const filteredAccounts = useMemo(() => {
+    if (!accounts || !paymentMethod) return []
+    return accounts.filter(a => a.type === paymentMethod)
+  }, [accounts, paymentMethod])
 
   useEffect(() => {
     if (!paymentMethod) setValue("accountId", "")
@@ -109,7 +141,7 @@ export default function VendorAdvanceReturnModal({ open, onOpenChange, mode, ini
       if (acc && !ids.includes(acc)) setValue("accountId", "")
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paymentMethod, accounts])
+  }, [paymentMethod, filteredAccounts])
 
   useEffect(() => {
     if (initialValues) {
@@ -158,15 +190,15 @@ export default function VendorAdvanceReturnModal({ open, onOpenChange, mode, ini
             const data = await res.json()
             const v = data.vendor
             if (v && v.presentBalance) {
-               const type = v.presentBalance.type
-               const amt = v.presentBalance.amount
-               setValue("presentBalance", type === 'advance' ? `Adv: ${amt}` : `Due: ${amt}`)
+              const type = v.presentBalance.type
+              const amt = v.presentBalance.amount
+              setValue("presentBalance", type === 'advance' ? `Adv: ${amt}` : `Due: ${amt}`)
             } else {
-               setValue("presentBalance", "0")
+              setValue("presentBalance", "0")
             }
           }
         } catch {
-           setValue("presentBalance", "0")
+          setValue("presentBalance", "0")
         }
       })()
     } else {
@@ -208,14 +240,8 @@ export default function VendorAdvanceReturnModal({ open, onOpenChange, mode, ini
     }
     const acc = filteredAccounts.find(a => a.id === vals.accountId)
     setValue("accountName", acc?.name || "")
-    try {
-      setSubmitting(true)
-      await onSubmit({ ...vals, accountName: acc?.name || "" })
-      if (mode === "add") reset(makeDefaults())
-      onOpenChange(false)
-    } finally {
-      setSubmitting(false)
-    }
+
+    await onSubmit({ ...vals, accountName: acc?.name || "" })
   }
 
   const requiredMark = (label: string, required?: boolean) => (
@@ -225,106 +251,103 @@ export default function VendorAdvanceReturnModal({ open, onOpenChange, mode, ini
   )
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[920px]">
-        <DialogHeader>
-          <DialogTitle>{mode === "add" ? "Return Advance Payment" : "Edit Advance Return"}</DialogTitle>
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit(onSubmitInternal)}>
-          <div className="rounded-md border bg-gray-50 p-4 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>{requiredMark("Select vendor:", true)}</Label>
-                  <div className={cn(submitAttempted && errors.vendorId && "rounded-md ring-2 ring-red-500 ring-offset-2 p-1")}>
-                    <VendorSelect
-                      value={watch("vendorId")}
-                      preloaded={vendors}
-                      placeholder="Select Vendor"
-                      onChange={(id, selected) => {
-                        setValue("vendorId", id || "", { shouldValidate: true })
-                        setValue("vendorName", selected?.name || "")
-                      }}
-                    />
-                  </div>
-                  {errors.vendorId && <div className="text-red-500 text-xs">Vendor is required</div>}
-                </div>
-
-                <div className="space-y-2">
-                  <Label>{requiredMark("Payment method:", true)}</Label>
-                  <Select value={watch("paymentMethod")} onValueChange={(v) => setValue("paymentMethod", v)}>
-                    <SelectTrigger className={cn(submitAttempted && errors.paymentMethod && "border-red-500 focus:ring-red-500")}>
-                      <SelectValue placeholder="Select Payment method" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {paymentMethodOptions.map((m) => (<SelectItem key={m} value={m}>{m}</SelectItem>))}
-                    </SelectContent>
-                  </Select>
-                  {errors.paymentMethod && <div className="text-red-500 text-xs">Payment method is required</div>}
-                </div>
-
-                <div className="space-y-2">
-                  <Label>{requiredMark("Select account:", true)}</Label>
-                  <Select value={watch("accountId")} onValueChange={(v) => setValue("accountId", v, { shouldValidate: true })} disabled={!paymentMethod}>
-                    <SelectTrigger className={cn(submitAttempted && errors.accountId && "border-red-500 focus:ring-red-500")}>
-                      <SelectValue placeholder="Select an account" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {filteredAccounts.map((a) => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}
-                    </SelectContent>
-                  </Select>
-                  {errors.accountId && <div className="text-red-500 text-xs">Account is required</div>}
-                </div>
-
-                <div className="space-y-2">
-                  <Label>{requiredMark("Return date:", true)}</Label>
-                  <DateInput
-                    value={watch("returnDate") ? new Date(watch("returnDate")) : undefined}
-                    onChange={(d) => setValue("returnDate", d ? d.toISOString().slice(0, 10) : "", { shouldValidate: true })}
-                    className={cn(submitAttempted && errors.returnDate && "border-red-500 ring-red-500")}
+    <SharedModal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={mode === "add" ? "Return Advance Payment" : "Edit Advance Return"}
+      maxWidth="max-w-[920px]"
+      formId="vendor-advance-return-form"
+      submitText={mode === "add" ? "Return Advance Payment" : "Save Changes"}
+      cancelText="Cancel"
+      loading={loading}
+    >
+      <form id="vendor-advance-return-form" onSubmit={handleSubmit(onSubmitInternal)}>
+        <div className="rounded-md border bg-gray-50 p-4 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>{requiredMark("Select vendor:", true)}</Label>
+                <div className={cn(submitAttempted && errors.vendorId && "rounded-md ring-2 ring-red-500 ring-offset-2 p-1")}>
+                  <VendorSelect
+                    value={watch("vendorId")}
+                    preloaded={vendors}
+                    placeholder="Select Vendor"
+                    onChange={(id, selected) => {
+                      setValue("vendorId", id || "", { shouldValidate: true })
+                      setValue("vendorName", selected?.name || "")
+                    }}
                   />
-                  {errors.returnDate && <div className="text-red-500 text-xs">Date is required</div>}
                 </div>
+                {errors.vendorId && <div className="text-red-500 text-xs">Vendor is required</div>}
               </div>
 
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Present balance:</Label>
-                  <Input readOnly value={watch("presentBalance")} className="bg-gray-100" />
-                </div>
+              <div className="space-y-2">
+                <Label>{requiredMark("Payment method:", true)}</Label>
+                <Select value={watch("paymentMethod")} onValueChange={(v) => setValue("paymentMethod", v)}>
+                  <SelectTrigger className={cn(submitAttempted && errors.paymentMethod && "border-red-500 focus:ring-red-500")}>
+                    <SelectValue placeholder="Select Payment method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {paymentMethodOptions.map((m) => (<SelectItem key={m} value={m}>{m}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+                {errors.paymentMethod && <div className="text-red-500 text-xs">Payment method is required</div>}
+              </div>
 
-                <div className="space-y-2">
-                  <Label>Available Balance:</Label>
-                  <Input readOnly value={watch("availableBalance")} className="bg-gray-100" />
-                </div>
+              <div className="space-y-2">
+                <Label>{requiredMark("Select account:", true)}</Label>
+                <Select value={watch("accountId")} onValueChange={(v) => setValue("accountId", v, { shouldValidate: true })} disabled={!paymentMethod}>
+                  <SelectTrigger className={cn(submitAttempted && errors.accountId && "border-red-500 focus:ring-red-500")}>
+                    <SelectValue placeholder="Select an account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filteredAccounts.map((a) => (<SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+                {errors.accountId && <div className="text-red-500 text-xs">Account is required</div>}
+              </div>
 
-                <div className="space-y-2">
-                  <Label>{requiredMark("Advance amount:", true)}</Label>
-                  <Input 
-                    type="number" 
-                    placeholder="Advance amount" 
-                    {...register("advanceAmount", { required: true, min: 0 })} 
-                    className={cn(submitAttempted && errors.advanceAmount && "border-red-500 focus-visible:ring-red-500")}
-                  />
-                  {errors.advanceAmount && <div className="text-red-500 text-xs">{errors.advanceAmount.message || "Amount is required"}</div>}
-                </div>
+              <div className="space-y-2">
+                <Label>{requiredMark("Return date:", true)}</Label>
+                <DateInput
+                  value={watch("returnDate") ? new Date(watch("returnDate")) : undefined}
+                  onChange={(d) => setValue("returnDate", d ? d.toISOString().slice(0, 10) : "", { shouldValidate: true })}
+                  className={cn(submitAttempted && errors.returnDate && "border-red-500 ring-red-500")}
+                />
+                {errors.returnDate && <div className="text-red-500 text-xs">Date is required</div>}
+              </div>
+            </div>
 
-                <div className="space-y-2">
-                  <Label>Return note:</Label>
-                  <Textarea placeholder="Note something" {...register("returnNote")} />
-                </div>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Present balance:</Label>
+                <Input readOnly value={watch("presentBalance")} className="bg-gray-100" />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Available Balance:</Label>
+                <Input readOnly value={watch("availableBalance")} className="bg-gray-100" />
+              </div>
+
+              <div className="space-y-2">
+                <Label>{requiredMark("Advance amount:", true)}</Label>
+                <Input
+                  type="number"
+                  placeholder="Advance amount"
+                  {...register("advanceAmount", { required: true, min: 0 })}
+                  className={cn(submitAttempted && errors.advanceAmount && "border-red-500 focus-visible:ring-red-500")}
+                />
+                {errors.advanceAmount && <div className="text-red-500 text-xs">{errors.advanceAmount.message || "Amount is required"}</div>}
+              </div>
+
+              <div className="space-y-2">
+                <Label>Return note:</Label>
+                <Textarea placeholder="Note something" {...register("returnNote")} />
               </div>
             </div>
           </div>
-
-          <div className="flex justify-end mt-6">
-             <Button type="submit" className="bg-sky-500 hover:bg-sky-600" disabled={submitting}>
-                {submitting ? "Processing..." : "Return Advance Payment"}
-             </Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </form>
+    </SharedModal>
   )
 }
