@@ -63,7 +63,6 @@ export default function CompaniesPage() {
   useEffect(() => {
     async function fetchCompanies() {
       try {
-        console.log("Fetching companies as admin...");
         const response = await fetch("/api/admin/companies");
         
         if (!response.ok) {
@@ -73,7 +72,6 @@ export default function CompaniesPage() {
         }
         
         const data = await response.json();
-        console.log("Companies data:", data);
         setCompanies(data.companies);
         setFilteredCompanies(data.companies);
       } catch (err) {
