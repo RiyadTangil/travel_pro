@@ -7,11 +7,11 @@ declare module "next-auth" {
       name: string;
       email: string;
       role: "admin" | "company" | "user";
-      roleId?: string | null;
+      roleId?: string;
       permissions?: string[];
-      companyId?: string | null;
-      companyName?: string | null;
-      image?: string | null;
+      companyId: string;
+      companyName?: string;
+      image?: string;
     };
     error?: string;
   }
@@ -21,11 +21,11 @@ declare module "next-auth" {
     name: string;
     email: string;
     role: "admin" | "company" | "user";
-    roleId?: string | null;
+    roleId?: string;
     permissions?: string[];
-    companyId?: string | null;
-    companyName?: string | null;
-    image?: string | null;
+    companyId?: string;
+    companyName?: string;
+    image?: string;
   }
 }
 
@@ -36,10 +36,10 @@ declare module "next-auth/jwt" {
     name: string;
     email: string;
     role: "admin" | "company" | "user";
-    roleId?: string | null;
-    companyId?: string | null;
-    companyName?: string | null;
-    picture?: string | null;
+    roleId?: string;
+    companyId?: string;
+    companyName?: string;
+    picture?: string;
     isInvalid?: boolean;
   }
 } 

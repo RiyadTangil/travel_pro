@@ -1,4 +1,14 @@
-import { startOfYear, endOfYear, eachQuarterOfInterval, format, startOfQuarter, endOfQuarter } from "date-fns"
+import { 
+  startOfYear, 
+  endOfYear, 
+  eachQuarterOfInterval, 
+  startOfQuarter, 
+  endOfQuarter,
+  startOfDay,
+  endOfDay,
+  startOfMonth,
+  endOfMonth
+} from "date-fns"
 import { Types } from "mongoose"
 import connectMongoose from "@/lib/mongoose"
 import { Invoice } from "@/models/invoice"
@@ -8,6 +18,93 @@ import { VendorPayment } from "@/models/vendor-payment"
 import { NonInvoiceIncome } from "@/models/non-invoice-income"
 import { AirticketRefund } from "@/models/airticket-refund"
 import { AdvanceReturn } from "@/models/advance-return"
+
+export async function getDashboardMetrics(period: "daily" | "monthly" | "yearly", companyId: string) {
+  await connectMongoose()
+  const companyObjectId = new Types.ObjectId(companyId)
+  const now = new Date()
+
+  let startDate: Date
+  let endDate: Date
+
+  if (period === "daily") {
+    startDate = startOfDay(now)
+    endDate = endOfDay(now)
+  } else if (period === "monthly") {
+    startDate = startOfMonth(now)
+    endDate = endOfMonth(now)
+  } else {
+    startDate = startOfYear(now)
+    endDate = endOfYear(now)
+  }
+
+  const baseMatch = { companyId: companyObjectId }
+  const dateMatch = (field: string) => ({ [field]: { $gte: startDate, $lte: endDate } })
+
+  const [
+    invoiceData,
+    receiptData,
+    expenseData,
+    vendorPaymentData,
+    nonInvoiceIncomeData,
+    refundData,
+    advanceReturnData
+  ] = await Promise.all([
+    Invoice.aggregate([
+      { $match: { ...baseMatch, isDeleted: { $ne: true }, ...dateMatch("salesDate") } },
+      {
+        $group: {
+          _id: null,
+          sales: { $sum: { $ifNull: ["$netTotal", { $ifNull: ["$billing.netTotal", 0] }] } },
+          purchase: { $sum: { $ifNull: ["$billing.totalCost", 0] } },
+          discount: { $sum: { $ifNull: ["$billing.discount", 0] } },
+        },
+      },
+    ]),
+    MoneyReceipt.aggregate([
+      { $match: { ...baseMatch, ...dateMatch("paymentDate") } },
+      { $group: { _id: null, collection: { $sum: "$amount" }, discount: { $sum: "$discount" } } },
+    ]),
+    Expense.aggregate([
+      { $match: { ...baseMatch, ...dateMatch("date") } },
+      { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+    ]),
+    VendorPayment.aggregate([
+      { $match: { ...baseMatch, ...dateMatch("paymentDate") } },
+      { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+    ]),
+    NonInvoiceIncome.aggregate([
+      { $match: { ...baseMatch, ...dateMatch("date") } },
+      { $group: { _id: null, total: { $sum: "$amount" } } },
+    ]),
+    AirticketRefund.aggregate([
+      { $match: { ...baseMatch, isDeleted: { $ne: true }, ...dateMatch("refundDate") } },
+      { $group: { _id: null, profit: { $sum: { $ifNull: ["$refundProfit", 0] } } } },
+    ]),
+    AdvanceReturn.aggregate([
+      { $match: { ...baseMatch, ...dateMatch("returnDate") } },
+      { $group: { _id: null, charges: { $sum: { $ifNull: ["$transactionCharge", 0] } } } },
+    ])
+  ])
+
+  const inv = invoiceData[0] ?? { sales: 0, purchase: 0, discount: 0 }
+  const rec = receiptData[0] ?? { collection: 0, discount: 0 }
+  const exp = expenseData[0] ?? { total: 0 }
+  const vp = vendorPaymentData[0] ?? { total: 0 }
+  const nii = nonInvoiceIncomeData[0] ?? { total: 0 }
+  const ref = refundData[0] ?? { profit: 0 }
+  const adr = advanceReturnData[0] ?? { charges: 0 }
+
+  return {
+    salesAmount: Math.round(inv.sales),
+    purchaseAmount: Math.round(inv.purchase),
+    collectionAmount: Math.round(rec.collection),
+    paymentAmount: Math.round(vp.total),
+    discountAmount: Math.round(inv.discount + rec.discount),
+    expenseAmount: Math.round(exp.total),
+    profitLoss: Math.round(inv.sales - inv.purchase), // Business logic: Profit = Sales - Purchases
+  }
+}
 
 export async function getDashboardYearlyStats(year: number, companyId: string) {
   await connectMongoose()

@@ -6,13 +6,14 @@ import type { ColumnsType } from "antd/es/table"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { PageWrapper } from "@/components/shared/page-wrapper"
-import { format } from "date-fns"
+import { format, parseISO } from "date-fns"
 import { Search, Printer, FileSpreadsheet } from "lucide-react"
 import { ClearableSelect } from "@/components/shared/clearable-select"
 import { DateRangePickerWithPresets } from "@/components/shared/date-range-with-presets"
 import { DateRange } from "react-day-picker"
 import Link from "next/link"
 import { toast } from "@/components/ui/use-toast"
+import { useSearchParams } from "next/navigation"
 
 interface SalesItem {
   id: string
@@ -47,12 +48,21 @@ interface SalesReportData {
 }
 
 export default function SalesReportPage() {
+  const searchParams = useSearchParams()
+  const dailyParam = searchParams.get("daily")
+
   const [selectedClient, setSelectedClient] = useState<string>("")
   const [selectedEmployee, setSelectedEmployee] = useState<string>("")
   const [selectedCategory, setSelectedCategory] = useState<string>("")
-  const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: new Date(new Date().getFullYear(), new Date().getMonth(), 1), // First day of current month
-    to: new Date(),
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+    if (dailyParam) {
+      const parsedDate = parseISO(dailyParam)
+      return { from: parsedDate, to: parsedDate }
+    }
+    return {
+      from: new Date(new Date().getFullYear(), new Date().getMonth(), 1), // First day of current month
+      to: new Date(),
+    }
   })
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(false)

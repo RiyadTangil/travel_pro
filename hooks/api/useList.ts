@@ -1,7 +1,6 @@
 import { useQuery, UseQueryOptions } from "@tanstack/react-query";
 import { fetcher, ApiResponse } from "@/lib/api/fetcher";
 import { queryKeys } from "./queryKeys";
-import { useSession } from "next-auth/react";
 
 interface ListParams {
   page?: number;
@@ -13,13 +12,11 @@ interface ListParams {
 export function useList<T>(
   key: string,
   url: string,
+  companyId?: string,
   params?: ListParams,
   options?: Omit<UseQueryOptions<ApiResponse<T>, Error>, "queryKey" | "queryFn">
 ) {
-  const { data: session } = useSession();
-  const companyId = session?.user?.companyId;
-
-  // Build query string
+  // Build query string natively
   const queryParams = new URLSearchParams();
   if (params) {
     Object.entries(params).forEach(([k, v]) => {
@@ -28,18 +25,22 @@ export function useList<T>(
       }
     });
   }
+  
+  const queryString = queryParams.toString();
+  const fullUrl = `${url}${queryString ? `?${queryString}` : ""}`;
 
-  const fullUrl = `${url}${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
+  const isEnabled = !!companyId && (options?.enabled === undefined || options?.enabled);
 
   return useQuery<ApiResponse<T>, Error>({
-    queryKey: queryKeys.list(key, params),
+    queryKey: queryKeys.list(key, queryString, companyId),
     queryFn: () => 
       fetcher<T>(fullUrl, {
         headers: {
           "x-company-id": companyId || "",
         },
       }),
-    enabled: !!companyId && (options?.enabled !== false),
+    enabled: isEnabled,
+    placeholderData: (previousData) => previousData, // Equivalent to keepPreviousData in v5
     ...options,
   });
 }

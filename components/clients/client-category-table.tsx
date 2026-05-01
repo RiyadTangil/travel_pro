@@ -39,7 +39,7 @@ export default function ClientCategoryTable({ items, page, pageSize, total, onPa
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map((item, idx) => (
+            {items?.map((item, idx) => (
               <TableRow key={item.id} className={loading ? "opacity-60" : undefined}>
                 <TableCell>{(page - 1) * pageSize + idx + 1}</TableCell>
                 <TableCell>{item.name}</TableCell>

@@ -2,55 +2,63 @@ import { toast } from "sonner";
 
 export interface ApiResponse<T> {
   success: boolean;
+  message: string;
+  statusCode: number;
   data: T;
-  message?: string;
   meta?: {
     total?: number;
     page?: number;
     limit?: number;
   };
+  error?: any;
 }
 
 export async function fetcher<T>(
   url: string,
   options?: RequestInit
 ): Promise<ApiResponse<T>> {
+  let res: Response;
   try {
-    const res = await fetch(url, {
+    res = await fetch(url, {
       ...options,
       headers: {
         "Content-Type": "application/json",
         ...options?.headers,
       },
     });
-
-    const result = await res.json();
-
-    if (!res.ok || result.success === false) {
-      const errorMsg = result.message || result.error || "Something went wrong";
-      toast.error(errorMsg);
-      throw new Error(errorMsg);
-    }
-
-    // Standardize the response format
-    return {
-      success: true,
-      data: result.data ?? result.items ?? result, // Handle various backend formats
-      message: result.message,
-      meta: result.meta || result.pagination || {
-        total: result.total,
-        page: result.page,
-        limit: result.limit || result.pageSize,
-      },
-    };
   } catch (error: any) {
     if (error.name !== "AbortError") {
-      // Error is already toasted above if it came from the API
-      // But for network errors or parsing errors:
-      if (!error.message.includes("toasted")) {
-        // toast.error(error.message || "Network Error");
-      }
+      error.isToasted = true;
+      toast.error("Network Error: Could not connect to server");
+      console.error("Network Error:", error);
     }
     throw error;
   }
+
+  let result: ApiResponse<T>;
+
+  try {
+    result = await res.json();
+  } catch {
+    const errorMsg = "Invalid server response format";
+    const error: any = new Error(errorMsg);
+    error.isToasted = true;
+    toast.error(errorMsg);
+    throw error;
+  }
+
+  if (!res.ok || result.success === false) {
+    const errorMsg = result.message || result.error?.message || "Something went wrong";
+    
+    const error: any = new Error(errorMsg);
+    error.statusCode = result.statusCode || res.status;
+    error.details = result.error;
+    error.isToasted = true;
+    
+    // Global error toast
+    toast.error(errorMsg);
+    throw error;
+  }
+
+  return result;
 }

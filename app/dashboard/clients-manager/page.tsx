@@ -70,7 +70,7 @@ export default function ClientsManagerPage() {
       if (filters.userId) params.append("userId", filters.userId)
       if (filters.status) params.append("status", filters.status)
       const res = await fetch(`/api/clients-manager?${params.toString()}`)
-      const data = await res.json()
+      const { data } = await res.json()
       setClients(data.data || data.clients || [])
     } catch (e) {
       console.error(e)
@@ -197,7 +197,7 @@ export default function ClientsManagerPage() {
       setModalOpen(false)
       fetchClients()
     } catch (e) {
- 
+
       toast({ title: "Failed to add", description: e instanceof Error ? e.message : "Unknown error" })
     } finally {
       setSaving(false)

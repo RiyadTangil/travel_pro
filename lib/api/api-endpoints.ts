@@ -6,8 +6,11 @@
 export const API = {
   DASH: {
     YEARLY: "/api/dashboard/yearly-stats",
+    METRICS: "/api/dashboard/metrics",
+    CLIENT_VENDOR_STATS: "/api/dashboard/client-vendor-stats",
+    EXPENSE_STATS: "/api/dashboard/expense-stats"
   },
-  INV: "/api/invoices",
+  INVOICES: "/api/invoices",
   CL: "/api/clients",
   VEN: "/api/vendors",
   AR: "/api/advance-returns",
@@ -19,8 +22,11 @@ export const API = {
 export const KEYS = {
   DASH: {
     YEARLY: "yearly-stats",
+    METRICS: "dashboard-metrics",
+    CLIENT_VENDOR_STATS: "client-vendor-stats",
+    EXPENSE_STATS: "expense-stats"
   },
-  INV: "invoices",
+  INVOICES: "invoices",
   CL: "clients",
   VEN: "vendors",
   AR: "advance-returns",

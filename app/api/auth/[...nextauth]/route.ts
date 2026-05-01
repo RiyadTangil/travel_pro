@@ -63,9 +63,9 @@ export const authOptions = {
             name: user.name,
             email: user.email,
             role: user.role,
-            roleId: user.roleId ? user.roleId.toString() : null,
-            companyId: user.companyId ? user.companyId.toString() : null,
-            companyName: companyData?.name || null,
+            roleId: user.roleId ? user.roleId.toString() : undefined,
+            companyId: user.companyId ? user.companyId.toString() : undefined,
+            companyName: companyData?.name || undefined,
           };
         } catch (error) {
           console.error("Auth error:", error);

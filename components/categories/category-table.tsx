@@ -38,7 +38,7 @@ export default function CategoryTable({ items, page, pageSize, total, onPageChan
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map((item, idx) => (
+            {items?.map((item, idx) => (
               <TableRow key={item.id} className={loading ? "opacity-60" : undefined}>
                 <TableCell>{(page - 1) * pageSize + idx + 1}</TableCell>
                 <TableCell>{item.name}</TableCell>
