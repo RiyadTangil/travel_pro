@@ -2,28 +2,71 @@
 
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 
-const employeeData = [
-  {
-    id: 1,
-    clientName: "Tanvir Hasan",
-    mobile: "01737966040",
-    salesAmount: "8,500",
-  },
-];
+interface BestEmployee {
+  id: string;
+  name: string;
+  department: string;
+  totalSales: number;
+}
 
-export function BestEmployeeList() {
+interface BestEmployeeListProps {
+  monthlyData?: BestEmployee[];
+  yearlyData?: BestEmployee[];
+  isLoading: boolean;
+}
+
+export function BestEmployeeList({ monthlyData, yearlyData, isLoading }: BestEmployeeListProps) {
   const [activeTab, setActiveTab] = useState("monthly");
+  const router = useRouter();
+  const renderTable = (employees?: BestEmployee[]) => (
+    <div className="rounded-md border">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-gray-50">
+            <TableHead className="text-xs font-medium text-gray-600">Employee Name</TableHead>
+            <TableHead className="text-xs font-medium text-gray-600">Department</TableHead>
+            <TableHead className="text-xs font-medium text-gray-600 text-right">Sales Amount</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {employees?.map((employee) => (
+            <TableRow key={employee.id}>
+              <TableCell className="text-sm font-medium">{employee.name}</TableCell>
+              <TableCell className="text-sm text-gray-500">{employee.department}</TableCell>
+              <TableCell className="text-sm text-right font-semibold text-green-600">
+                {employee.totalSales.toLocaleString()}
+              </TableCell>
+            </TableRow>
+          ))}
+          {(!employees || employees.length === 0) && !isLoading && (
+            <TableRow>
+              <TableCell colSpan={3} className="text-center py-8 text-gray-400 text-sm">
+                No employee performance data for this period
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  );
 
   return (
-    <Card className="w-full">
+    <Card className="w-full relative">
+      {isLoading && (
+        <div className="absolute inset-0 bg-white/50 z-10 flex items-center justify-center rounded-xl">
+          <Loader2 className="h-6 w-6 animate-spin text-sky-500" />
+        </div>
+      )}
       <CardHeader className="pb-4">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg font-medium">Best Employee List</CardTitle>
-          <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-800">
+          <Button onClick={() => router.push("/dashboard/reports/sales_man_collection_report")} variant="ghost" size="sm" className="text-blue-600 hover:text-blue-800">
             Show All
           </Button>
         </div>
@@ -36,49 +79,11 @@ export function BestEmployeeList() {
           </TabsList>
           
           <TabsContent value="monthly">
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-gray-50">
-                    <TableHead className="text-xs font-medium text-gray-600">Client Name</TableHead>
-                    <TableHead className="text-xs font-medium text-gray-600">Mobile</TableHead>
-                    <TableHead className="text-xs font-medium text-gray-600">Sales Amount</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {employeeData.map((employee) => (
-                    <TableRow key={employee.id}>
-                      <TableCell className="text-sm">{employee.clientName}</TableCell>
-                      <TableCell className="text-sm">{employee.mobile}</TableCell>
-                      <TableCell className="text-sm">{employee.salesAmount}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            {renderTable(monthlyData)}
           </TabsContent>
           
           <TabsContent value="yearly">
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-gray-50">
-                    <TableHead className="text-xs font-medium text-gray-600">Client Name</TableHead>
-                    <TableHead className="text-xs font-medium text-gray-600">Mobile</TableHead>
-                    <TableHead className="text-xs font-medium text-gray-600">Sales Amount</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {employeeData.map((employee) => (
-                    <TableRow key={employee.id}>
-                      <TableCell className="text-sm">{employee.clientName}</TableCell>
-                      <TableCell className="text-sm">{employee.mobile}</TableCell>
-                      <TableCell className="text-sm">{employee.salesAmount}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            {renderTable(yearlyData)}
           </TabsContent>
         </Tabs>
       </CardContent>

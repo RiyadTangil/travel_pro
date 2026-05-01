@@ -57,7 +57,7 @@ export default function ClientSelect({ value, onChange, onRequestAdd, placeholde
         } else {
           const qs = new URLSearchParams({ page: "1", limit: "25", search }).toString()
           const res = await fetch(`/api/clients-manager?${qs}`, { signal: controller.signal })
-          const data = await res.json()
+          const {data} = await res.json()
           const list: ClientItem[] = (data.clients || []).map((c: any) => ({ id: c.id, name: c.name, uniqueId: c.uniqueId, email: c.email, phone: c.phone }))
           setItems(list)
         }
@@ -83,8 +83,8 @@ export default function ClientSelect({ value, onChange, onRequestAdd, placeholde
         try {
           const res = await fetch(`/api/clients-manager/${value}`)
           if (!res.ok) return
-          const json = await res.json()
-          const c = json?.data || json
+          const {data} = await res.json()
+          const c = data || data
           if (!c || !c.id) return
           const item: ClientItem = { id: c.id, name: c.name, uniqueId: c.uniqueId, email: c.email, phone: c.phone }
           if (isMounted) setItems(prev => {

@@ -7,7 +7,7 @@ import { AppError } from "@/errors/AppError"
  * Throws an AppError if the session is missing or the user is not authenticated.
  */
 export async function getBackendSession() {
-  const session = await getServerSession(authOptions as any)
+  const session = await getServerSession(authOptions)
   
   if (!session?.user) {
     throw new AppError("Unauthorized: No active session", 401)

@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 export function DashboardHeader() {
   return (
     <div className="flex w-full min-w-0 max-w-full items-center justify-between gap-2 border-b border-gray-200 bg-white p-2 sm:gap-3 sm:p-4">
-      <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+      <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3 " style={{visibility:'hidden'}}>
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 sm:left-3" />
           <Input

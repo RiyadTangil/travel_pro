@@ -43,23 +43,41 @@ export async function getExpenseDashboardStats(companyId: string) {
   ])
 
   // 2. Pie Chart Data (Group by Account for the current year or all time - let's do current year)
-  const pieData = await Expense.aggregate([
-    {
-      $match: {
-        companyId: companyObjectId,
-        date: { $gte: startOfYear(now), $lte: endOfYear(now) }
-      }
-    },
-    {
-      $group: {
-        _id: "$accountId",
-        name: { $first: "$accountName" },
-        value: { $sum: "$totalAmount" }
-      }
-    },
-    { $sort: { value: -1 } }
-  ])
-
+const pieData = await Expense.aggregate([
+  {
+    $match: {
+      companyId: companyObjectId,
+      date: { $gte: startOfYear(now), $lte: endOfYear(now) }
+    }
+  },
+  {
+    $group: {
+      _id: "$accountId",
+      value: { $sum: "$totalAmount" }
+    }
+  },
+  {
+    $lookup: {
+      from: "accounts", // your collection name
+      localField: "_id",
+      foreignField: "_id",
+      as: "account"
+    }
+  },
+  {
+    $unwind: {
+      path: "$account",
+      preserveNullAndEmptyArrays: true
+    }
+  },
+  {
+    $project: {
+      name: "$account.name",
+      value: 1
+    }
+  },
+  { $sort: { value: -1 } }
+])
   return {
     summary: {
       daily: dailyRes[0]?.total || 0,

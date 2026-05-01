@@ -1,34 +1,51 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Loader2 } from "lucide-react";
 
-export function TotalCards() {
+interface TotalCardsProps {
+  receivable?: number;
+  advance?: number;
+  isLoading: boolean;
+}
+
+export function TotalCards({ receivable = 0, advance = 0, isLoading }: TotalCardsProps) {
+  const fmt = (n: number) =>
+    new Intl.NumberFormat("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n);
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      {/* Total Receivable Card */}
-      <Card className="bg-white border border-gray-200">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <Card className="relative">
+        {isLoading && (
+          <div className="absolute inset-0 bg-white/50 z-10 flex items-center justify-center rounded-xl">
+            <Loader2 className="h-4 w-4 animate-spin text-sky-500" />
+          </div>
+        )}
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-gray-600">
+          <CardTitle className="text-sm font-medium text-gray-600 uppercase tracking-wide">
             Total Receivable
           </CardTitle>
         </CardHeader>
-        <CardContent className="pt-0">
-          <div className="flex items-center justify-center">
-            <span className="text-6xl font-bold text-blue-500">0</span>
+        <CardContent>
+          <div className="text-3xl font-bold text-blue-600">
+            {fmt(receivable)}
           </div>
         </CardContent>
       </Card>
-
-      {/* Total Advance Collection Card */}
-      <Card className="bg-white border border-gray-200">
+      <Card className="relative">
+        {isLoading && (
+          <div className="absolute inset-0 bg-white/50 z-10 flex items-center justify-center rounded-xl">
+            <Loader2 className="h-4 w-4 animate-spin text-sky-500" />
+          </div>
+        )}
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-gray-600">
+          <CardTitle className="text-sm font-medium text-gray-600 uppercase tracking-wide">
             Total Advance Collection
           </CardTitle>
         </CardHeader>
-        <CardContent className="pt-0">
-          <div className="flex items-center justify-center">
-            <span className="text-6xl font-bold text-green-500">0</span>
+        <CardContent>
+          <div className="text-3xl font-bold text-emerald-500">
+            {fmt(advance)}
           </div>
         </CardContent>
       </Card>

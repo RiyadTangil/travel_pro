@@ -2,7 +2,7 @@ import { MONGODB_DB_NAME } from "@/lib/database-config"
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
-import { MongoDBAdapter } from "@auth/mongodb-adapter";
+import { MongoDBAdapter } from "@next-auth/mongodb-adapter"
 import clientPromise from "@/lib/mongodb";
 import { verifyPassword, normalizeEmail, emailEqualsNormalized } from "@/lib/auth";
 import { ObjectId } from "mongodb";

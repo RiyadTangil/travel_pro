@@ -31,18 +31,18 @@ interface DashboardMetrics {
   profitLoss: number;
 }
 
-export function SalesDataPanel() {
+interface SalesDataPanelProps {
+  period: "daily" | "monthly" | "yearly";
+  onPeriodChange: (period: "daily" | "monthly" | "yearly") => void;
+  metrics?: DashboardMetrics;
+  isLoading: boolean;
+}
+
+export function SalesDataPanel({ period, onPeriodChange, metrics: providedMetrics, isLoading }: SalesDataPanelProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"daily" | "monthly" | "yearly">("daily");
   const [showMore, setShowMore] = useState(false);
 
-  const { data: response, isLoading } = useList<DashboardMetrics>(
-    KEYS.DASH.METRICS,
-    API.DASH.METRICS,
-    { period: activeTab }
-  );
-
-  const metrics = response?.data || {
+  const metrics = providedMetrics || {
     salesAmount: 0,
     purchaseAmount: 0,
     collectionAmount: 0,
@@ -152,7 +152,7 @@ export function SalesDataPanel() {
         <CardTitle className="text-lg font-medium">Sales Data</CardTitle>
       </CardHeader>
       <CardContent>
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
+        <Tabs value={period} onValueChange={(v) => onPeriodChange(v as any)} className="w-full">
           <TabsList className="grid w-full grid-cols-3 mb-6">
             <TabsTrigger value="daily" className="text-sm">DAILY</TabsTrigger>
             <TabsTrigger value="monthly" className="text-sm">MONTHLY</TabsTrigger>

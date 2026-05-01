@@ -1,14 +1,4 @@
-import { 
-  startOfYear, 
-  endOfYear, 
-  eachQuarterOfInterval, 
-  startOfQuarter, 
-  endOfQuarter,
-  startOfDay,
-  endOfDay,
-  startOfMonth,
-  endOfMonth
-} from "date-fns"
+import { startOfYear, endOfYear, eachQuarterOfInterval, format, startOfQuarter, endOfQuarter, startOfMonth, endOfMonth, startOfDay, endOfDay } from "date-fns"
 import { Types } from "mongoose"
 import connectMongoose from "@/lib/mongoose"
 import { Invoice } from "@/models/invoice"
@@ -18,6 +8,12 @@ import { VendorPayment } from "@/models/vendor-payment"
 import { NonInvoiceIncome } from "@/models/non-invoice-income"
 import { AirticketRefund } from "@/models/airticket-refund"
 import { AdvanceReturn } from "@/models/advance-return"
+import { InvoiceItem } from "@/models/invoice-item"
+
+import { Account } from "@/models/account"
+import { AccountType } from "@/models/account-type"
+import { Client } from "@/models/client"
+import { Employee } from "@/models/employee"
 
 export async function getDashboardMetrics(period: "daily" | "monthly" | "yearly", companyId: string) {
   await connectMongoose()
@@ -41,26 +37,152 @@ export async function getDashboardMetrics(period: "daily" | "monthly" | "yearly"
   const baseMatch = { companyId: companyObjectId }
   const dateMatch = (field: string) => ({ [field]: { $gte: startDate, $lte: endDate } })
 
+  // Define specific ranges for rankings (Monthly and Yearly)
+  const monthlyStart = startOfMonth(now)
+  const monthlyEnd = endOfMonth(now)
+  const yearlyStart = startOfYear(now)
+  const yearlyEnd = endOfYear(now)
+
+  const rankMatch = (field: string, start: Date, end: Date) => ({
+    [field]: { $gte: start, $lte: end },
+    ...baseMatch,
+    isDeleted: { $ne: true }
+  })
+
+  // Single large aggregation using $facet to reduce round-trips
+  const [metrics] = await Invoice.aggregate([
+    {
+      $facet: {
+        // Sales and Purchase (Period Specific)
+        periodStats: [
+          { $match: { ...baseMatch, isDeleted: { $ne: true }, ...dateMatch("salesDate") } },
+          {
+            $group: {
+              _id: null,
+              sales: { $sum: { $ifNull: ["$netTotal", { $ifNull: ["$billing.netTotal", 0] }] } },
+              purchase: { $sum: { $ifNull: ["$billing.totalCost", 0] } },
+              discount: { $sum: { $ifNull: ["$billing.discount", 0] } },
+            },
+          },
+        ],
+        // Global: Total Receivable
+        totalReceivable: [
+          { $match: { ...baseMatch, isDeleted: { $ne: true } } },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: { $subtract: ["$netTotal", "$receivedAmount"] } }
+            }
+          }
+        ],
+        // Best Clients Monthly
+        bestClientsMonthly: [
+          { $match: rankMatch("salesDate", monthlyStart, monthlyEnd) },
+          {
+            $group: {
+              _id: "$clientId",
+              totalSales: { $sum: { $ifNull: ["$netTotal", { $ifNull: ["$billing.netTotal", 0] }] } }
+            }
+          },
+          { $sort: { totalSales: -1 } },
+          { $limit: 5 },
+          { $lookup: { from: "clients", localField: "_id", foreignField: "_id", as: "client" } },
+          { $unwind: "$client" },
+          {
+            $project: {
+              id: "$_id",
+              name: "$client.name",
+              phone: "$client.phone",
+              totalSales: 1,
+              presentBalance: "$client.presentBalance"
+            }
+          }
+        ],
+        // Best Clients Yearly
+        bestClientsYearly: [
+          { $match: rankMatch("salesDate", yearlyStart, yearlyEnd) },
+          {
+            $group: {
+              _id: "$clientId",
+              totalSales: { $sum: { $ifNull: ["$netTotal", { $ifNull: ["$billing.netTotal", 0] }] } }
+            }
+          },
+          { $sort: { totalSales: -1 } },
+          { $limit: 5 },
+          { $lookup: { from: "clients", localField: "_id", foreignField: "_id", as: "client" } },
+          { $unwind: "$client" },
+          {
+            $project: {
+              id: "$_id",
+              name: "$client.name",
+              phone: "$client.phone",
+              totalSales: 1,
+              presentBalance: "$client.presentBalance"
+            }
+          }
+        ],
+        // Best Employees Monthly
+        bestEmployeesMonthly: [
+          { $match: rankMatch("salesDate", monthlyStart, monthlyEnd) },
+          {
+            $group: {
+              _id: "$employeeId",
+              totalSales: { $sum: { $ifNull: ["$netTotal", { $ifNull: ["$billing.netTotal", 0] }] } }
+            }
+          },
+          { $match: { _id: { $ne: null } } },
+          { $sort: { totalSales: -1 } },
+          { $limit: 5 },
+          { $lookup: { from: "employees", localField: "_id", foreignField: "_id", as: "employee" } },
+          { $unwind: "$employee" },
+          {
+            $project: {
+              id: "$_id",
+              name: "$employee.name",
+              department: "$employee.department",
+              totalSales: 1
+            }
+          }
+        ],
+        // Best Employees Yearly
+        bestEmployeesYearly: [
+          { $match: rankMatch("salesDate", yearlyStart, yearlyEnd) },
+          {
+            $group: {
+              _id: "$employeeId",
+              totalSales: { $sum: { $ifNull: ["$netTotal", { $ifNull: ["$billing.netTotal", 0] }] } }
+            }
+          },
+          { $match: { _id: { $ne: null } } },
+          { $sort: { totalSales: -1 } },
+          { $limit: 5 },
+          { $lookup: { from: "employees", localField: "_id", foreignField: "_id", as: "employee" } },
+          { $unwind: "$employee" },
+          {
+            $project: {
+              id: "$_id",
+              name: "$employee.name",
+              department: "$employee.department",
+              totalSales: 1
+            }
+          }
+        ]
+      }
+    }
+  ])
+
+  // Additional Parallel Queries for other collections (MoneyReceipt, Expense, etc.)
   const [
-    invoiceData,
     receiptData,
     expenseData,
     vendorPaymentData,
     nonInvoiceIncomeData,
     refundData,
-    advanceReturnData
+    advanceReturnData,
+    totalAdvanceData,
+    flightScheduleData,
+    accountBalances
   ] = await Promise.all([
-    Invoice.aggregate([
-      { $match: { ...baseMatch, isDeleted: { $ne: true }, ...dateMatch("salesDate") } },
-      {
-        $group: {
-          _id: null,
-          sales: { $sum: { $ifNull: ["$netTotal", { $ifNull: ["$billing.netTotal", 0] }] } },
-          purchase: { $sum: { $ifNull: ["$billing.totalCost", 0] } },
-          discount: { $sum: { $ifNull: ["$billing.discount", 0] } },
-        },
-      },
-    ]),
     MoneyReceipt.aggregate([
       { $match: { ...baseMatch, ...dateMatch("paymentDate") } },
       { $group: { _id: null, collection: { $sum: "$amount" }, discount: { $sum: "$discount" } } },
@@ -84,10 +206,68 @@ export async function getDashboardMetrics(period: "daily" | "monthly" | "yearly"
     AdvanceReturn.aggregate([
       { $match: { ...baseMatch, ...dateMatch("returnDate") } },
       { $group: { _id: null, charges: { $sum: { $ifNull: ["$transactionCharge", 0] } } } },
+    ]),
+    MoneyReceipt.aggregate([
+      { $match: { ...baseMatch, paymentTo: "advance" } },
+      { $group: { _id: null, total: { $sum: "$amount" } } }
+    ]),
+    InvoiceItem.aggregate([
+      { 
+        $match: { 
+          ...baseMatch, 
+          itemType: "ticket", 
+          isDeleted: { $ne: true },
+          "ticketMetadata.journeyDate": { $gte: now.toISOString().slice(0, 10) }
+        } 
+      },
+      {
+        $lookup: { from: "invoices", localField: "invoiceId", foreignField: "_id", as: "invoice" }
+      },
+      { $unwind: "$invoice" },
+      {
+        $lookup: { from: "clients", localField: "invoice.clientId", foreignField: "_id", as: "client" }
+      },
+      { $unwind: "$client" },
+      {
+        $project: {
+          id: "$_id",
+          clientName: "$client.name",
+          ticketNo: "$ticketMetadata.ticketNo",
+          airline: "$ticketMetadata.airline",
+          journeyDate: "$ticketMetadata.journeyDate"
+        }
+      },
+      { $sort: { journeyDate: 1 } },
+      { $limit: 5 }
+    ]),
+    Account.aggregate([
+      { $match: { ...baseMatch } },
+      {
+        $lookup: {
+          from: "account_types",
+          localField: "accountTypeId",
+          foreignField: "_id",
+          as: "accountType"
+        }
+      },
+      { $unwind: "$accountType" },
+      {
+        $group: {
+          _id: "$accountType.name",
+          totalBalance: { $sum: "$lastBalance" },
+          accounts: {
+            $push: {
+              name: "$name",
+              balance: "$lastBalance"
+            }
+          }
+        }
+      },
+      { $sort: { _id: 1 } }
     ])
   ])
 
-  const inv = invoiceData[0] ?? { sales: 0, purchase: 0, discount: 0 }
+  const inv = metrics.periodStats[0] ?? { sales: 0, purchase: 0, discount: 0 }
   const rec = receiptData[0] ?? { collection: 0, discount: 0 }
   const exp = expenseData[0] ?? { total: 0 }
   const vp = vendorPaymentData[0] ?? { total: 0 }
@@ -102,7 +282,15 @@ export async function getDashboardMetrics(period: "daily" | "monthly" | "yearly"
     paymentAmount: Math.round(vp.total),
     discountAmount: Math.round(inv.discount + rec.discount),
     expenseAmount: Math.round(exp.total),
-    profitLoss: Math.round(inv.sales - inv.purchase), // Business logic: Profit = Sales - Purchases
+    profitLoss: Math.round(inv.sales - inv.purchase),
+    totalReceivable: Math.round(metrics.totalReceivable[0]?.total || 0),
+    totalAdvanceCollection: Math.round(totalAdvanceData[0]?.total || 0),
+    flightSchedule: flightScheduleData,
+    bestClientsMonthly: metrics.bestClientsMonthly,
+    bestClientsYearly: metrics.bestClientsYearly,
+    bestEmployeesMonthly: metrics.bestEmployeesMonthly,
+    bestEmployeesYearly: metrics.bestEmployeesYearly,
+    accountBalances: accountBalances
   }
 }
 

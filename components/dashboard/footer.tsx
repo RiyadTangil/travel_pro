@@ -15,29 +15,16 @@ export function DashboardFooter() {
             <div className="space-y-2">
               <div className="flex items-center space-x-2">
                 <Phone className="h-4 w-4 text-blue-600" />
-                <span className="text-sm text-gray-600">+880 1737-966040</span>
+                <span className="text-sm text-gray-600">+880 1852527707</span>
               </div>
               <div className="flex items-center space-x-2">
                 <Mail className="h-4 w-4 text-blue-600" />
-                <span className="text-sm text-gray-600">support@travelpro.com</span>
+                <span className="text-sm text-gray-600">Riyad.hasan@gmail.com</span>
               </div>
             </div>
           </div>
 
-          {/* Download Apps */}
-          <div className="space-y-3">
-            <h3 className="text-lg font-semibold text-gray-800">Download Our App</h3>
-            <div className="flex flex-col space-y-2">
-              <Button variant="outline" size="sm" className="justify-start">
-                <Smartphone className="h-4 w-4 mr-2" />
-                Download for Android
-              </Button>
-              <Button variant="outline" size="sm" className="justify-start">
-                <Download className="h-4 w-4 mr-2" />
-                Download for iOS
-              </Button>
-            </div>
-          </div>
+         =
 
           {/* Company Info */}
           <div className="space-y-3">
