@@ -17,7 +17,7 @@ const ClientSchema = new Schema({
   creditLimit: { type: Number, default: 0 },
   // Present balance can be negative (Due) or positive (Advance)
   presentBalance: { type: Number, default: 0 },
-  // Hidden field used later; do not display in Clients Manager UI
+  // Hidden field used later; do not display in Clients  UI
   invoiceDue: { type: Number, default: 0 },
   walkingCustomer: { type: String, enum: ["No", "Yes"], default: "No" },
   active: { type: Boolean, default: true },

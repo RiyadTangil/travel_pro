@@ -24,7 +24,7 @@ export const getNavItems = (): NavItem[] => [
     href: "/dashboard",
   },
   {
-    title: "Clients Manager",
+    title: "Clients",
     icon: <Users className="h-5 w-5" />,
     href: "/dashboard/clients-manager",
   },

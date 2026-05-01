@@ -227,7 +227,7 @@ export default function ClientsManagerPage() {
   }
 
   return (
-    <PageWrapper breadcrumbs={[{ label: "Clients Manager" }]}>
+    <PageWrapper breadcrumbs={[{ label: "Clients" }]}>
       <div className="mx-4 mb-4 min-w-0 space-y-4">
         <FilterToolbar
           showSearch
@@ -267,7 +267,7 @@ export default function ClientsManagerPage() {
           className="flex-1 min-w-0"
         >
           <div className="flex shrink-0 gap-2">
-            <Button type="button" onClick={handleOpenAddModal} className="whitespace-nowrap bg-blue-600 hover:bg-blue-700">
+            <Button type="button" onClick={handleOpenAddModal} >
               <Plus className="mr-2 h-4 w-4" />
               Add Client
             </Button>
