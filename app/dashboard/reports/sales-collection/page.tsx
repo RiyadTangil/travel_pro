@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { format } from "date-fns"
+import { format, parseISO } from "date-fns"
 import { Search, Printer, FileSpreadsheet } from "lucide-react"
 import { ClearableSelect } from "@/components/shared/clearable-select"
 import { DateRangePickerWithPresets } from "@/components/shared/date-range-with-presets"
@@ -13,6 +13,7 @@ import { toast } from "@/components/ui/use-toast"
 import { PageWrapper } from "@/components/shared/page-wrapper"
 import { Table } from "antd"
 import type { ColumnsType } from "antd/es/table"
+import { useSearchParams } from "next/navigation"
 
 interface CollectionItem {
   id: string
@@ -47,10 +48,19 @@ interface SalesCollectionReportData {
 }
 
 export default function SalesCollectionReportPage() {
+  const searchParams = useSearchParams()
+  const dailyParam = searchParams.get("daily")
+
   const [selectedClient, setSelectedClient] = useState<string>("")
-  const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-    to: new Date(),
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+    if (dailyParam) {
+      const parsedDate = parseISO(dailyParam)
+      return { from: parsedDate, to: parsedDate }
+    }
+    return {
+      from: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+      to: new Date(),
+    }
   })
   const [loading, setLoading] = useState(false)
   const [reportData, setReportData] = useState<SalesCollectionReportData | null>(null)

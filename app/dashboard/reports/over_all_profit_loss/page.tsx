@@ -4,13 +4,14 @@ import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { format } from "date-fns"
+import { format, parseISO } from "date-fns"
 import { PageWrapper } from "@/components/shared/page-wrapper"
 import { Search, Printer, FileSpreadsheet } from "lucide-react"
 import { DateRangePickerWithPresets } from "@/components/shared/date-range-with-presets"
 import { DateRange } from "react-day-picker"
 import { toast } from "@/components/ui/use-toast"
 import { cn } from "@/lib/utils"
+import { useSearchParams } from "next/navigation"
 
 interface ProfitLossData {
   salesIncome: {
@@ -41,9 +42,18 @@ interface ProfitLossData {
 }
 
 export default function OverAllProfitLossPage() {
-  const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-    to: new Date(),
+  const searchParams = useSearchParams()
+  const dailyParam = searchParams.get("daily")
+
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+    if (dailyParam) {
+      const parsedDate = parseISO(dailyParam)
+      return { from: parsedDate, to: parsedDate }
+    }
+    return {
+      from: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+      to: new Date(),
+    }
   })
   const [loading, setLoading] = useState(false)
   const [reportData, setReportData] = useState<ProfitLossData | null>(null)

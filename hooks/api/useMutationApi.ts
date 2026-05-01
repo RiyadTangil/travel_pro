@@ -1,12 +1,12 @@
 import { useMutation, useQueryClient, UseMutationOptions } from "@tanstack/react-query";
 import { fetcher, ApiResponse } from "@/lib/api/fetcher";
 import { toast } from "sonner";
-import { useSession } from "next-auth/react";
 
 interface MutationOptions<T, V> extends Omit<UseMutationOptions<ApiResponse<T>, Error, V>, "mutationFn"> {
   method?: "POST" | "PUT" | "DELETE" | "PATCH";
   invalidateKeys?: any[][];
   successMessage?: string;
+  companyId?: string;
 }
 
 export function useMutationApi<T = any, V = any>(
@@ -14,8 +14,7 @@ export function useMutationApi<T = any, V = any>(
   options?: MutationOptions<T, V>
 ) {
   const queryClient = useQueryClient();
-  const { data: session } = useSession();
-  const companyId = session?.user?.companyId;
+  const companyId = options?.companyId;
 
   return useMutation<ApiResponse<T>, Error, V>({
     mutationFn: async (variables: V) => {
@@ -33,7 +32,7 @@ export function useMutationApi<T = any, V = any>(
     onSuccess: (data, variables, context) => {
       if (options?.successMessage) {
         toast.success(options.successMessage);
-      } else if (data.message) {
+      } else if (data.message && data.message !== "Success") { // Don't show default 'Success'
         toast.success(data.message);
       }
 
@@ -45,9 +44,16 @@ export function useMutationApi<T = any, V = any>(
       }
 
       if (options?.onSuccess) {
-        // Fix for TanStack Query v5 signature: (data, variables, context)
         // @ts-ignore - handled by generic signature
         options.onSuccess(data, variables, context);
+      }
+    },
+    onError: (error, variables, context) => {
+      // The fetcher already shows the error toast globally
+      // We just pass it through to the local onError handler if provided
+      if (options?.onError) {
+        // @ts-ignore - handled by generic signature
+        options.onError(error, variables, context);
       }
     },
     ...options,

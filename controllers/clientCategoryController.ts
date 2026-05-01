@@ -18,7 +18,7 @@ const updateSchema = z.object({
 export async function list(query: { page?: number; pageSize?: number; companyId?: string }) {
   try {
     const { data, total } = await listClientCategories(query)
-    return ok({ data, total })
+    return ok(data, 200, "Success", { total }); // 👈 clean
   } catch (error) {
     console.error("clientCategoryController.list error:", error)
     return fail("Internal server error", 500)

@@ -7,6 +7,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MoreVertical, Download, Loader2 } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { useList } from "@/hooks/api/useList";
 import { API, KEYS } from "@/lib/api/api-endpoints";
 
@@ -19,6 +20,7 @@ interface ChartData {
 }
 
 export function YearlySalesChart() {
+  const { data: session } = useSession();
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
   const [activeLegend, setActiveLegend] = useState<string | null>(null);
   const [hoveredBar, setHoveredBar] = useState<any>(null);
@@ -28,7 +30,9 @@ export function YearlySalesChart() {
     return Array.from({ length: 5 }, (_, i) => (currentYear - i).toString());
   }, []);
 
-  const { data: response, isLoading } = useList<ChartData[]>(KEYS.DASH.YEARLY, API.DASH.YEARLY, { year: selectedYear }
+  const { data: response, isLoading } = useList<ChartData[]>(
+    KEYS.DASH.YEARLY, API.DASH.YEARLY, session?.user?.companyId,
+    { year: selectedYear },
   );
 
   const chartData = response?.data || [];
