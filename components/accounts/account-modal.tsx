@@ -37,7 +37,7 @@ export default function AccountModal({ open, onOpenChange, initialItem, onSubmit
       ; (async () => {
         try {
           const res = await fetch(`/api/account-types`, { signal: ctrl.signal })
-          const data = await res.json()
+          const {data} = await res.json()
           const items = Array.isArray(data?.items) ? data.items : []
           setTypeOptions(items)
         } catch {
