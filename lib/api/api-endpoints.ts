@@ -16,7 +16,7 @@ export const API = {
   AR: "/api/advance-returns",
   MR: "/api/money-receipts",
   EXP: "/api/expenses",
-
+  UPLOAD: "/api/upload",
 };
 
 export const KEYS = {

@@ -5,6 +5,7 @@ import { Table, Tag } from "antd"
 import type { ColumnsType } from "antd/es/table"
 import { Card, CardContent } from "@/components/ui/card"
 import { TableRowActions } from "@/components/shared/table-row-actions"
+import { FileViewer } from "@/components/ui/file-viewer"
 import type { MoneyReceipt } from "./types"
 
 type Props = {
@@ -105,14 +106,14 @@ export default function ReceiptListTable({
         dataIndex: "docOneName",
         key: "docOneName",
         width: 100,
-        render: (text: string) => text || "-",
+        render: (text: string) => <FileViewer url={text} alt="Document One" />,
       },
       {
         title: "Doc Two",
         dataIndex: "docTwoName",
         key: "docTwoName",
         width: 100,
-        render: (text: string) => text || "-",
+        render: (text: string) => <FileViewer url={text} alt="Document Two" />,
       },
       {
         title: "Action",

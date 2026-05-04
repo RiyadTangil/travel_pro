@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
-import FileUploadButton from "./FileUploadButton"
+import { FileUpload } from "@/components/ui/file-upload"
 import type { MoneyReceipt } from "./types"
 import ClientSelect from "@/components/clients/client-select"
 import { DateInput } from "@/components/ui/date-input"
@@ -72,8 +72,8 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
     },
   })
 
-  const [docOne, setDocOne] = useState<File | undefined>(undefined)
-  const [docTwo, setDocTwo] = useState<File | undefined>(undefined)
+  const [docOne, setDocOne] = useState<{url: string, name: string} | undefined>(undefined)
+  const [docTwo, setDocTwo] = useState<{url: string, name: string} | undefined>(undefined)
   const [clients, setClients] = useState<ClientItem[]>(clientsPreloaded || [])
   const paymentMethod = form.watch("paymentMethod")
   const selectedClientId = form.watch("clientId")
@@ -155,6 +155,8 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
         note: defaults?.note ?? "",
         showBalance: defaults?.showBalance ?? true,
       })
+      setDocOne(defaults?.docOneName ? { url: defaults.docOneName, name: defaults.docOneName.split("/").pop() || "Document 1" } : undefined)
+      setDocTwo(defaults?.docTwoName ? { url: defaults.docTwoName, name: defaults.docTwoName.split("/").pop() || "Document 2" } : undefined)
       const ctrl = new AbortController()
       ;(async () => {
         try {
@@ -330,8 +332,8 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
       discount: values.discount ?? 0,
       paymentDate: values.paymentDate,
       note: values.note,
-      docOneName: docOne?.name,
-      docTwoName: docTwo?.name,
+      docOneName: docOne?.url,
+      docTwoName: docTwo?.url,
     }
 
     if (values.paymentTo === "invoice") {
@@ -397,8 +399,8 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
           ? (isEdit ? updated.present_balance : created.present_balance)
           : (values.presentDue ?? 0),
         note: values.note,
-        docOneName: docOne?.name,
-        docTwoName: docTwo?.name,
+        docOneName: docOne?.url,
+        docTwoName: docTwo?.url,
         showBalance: values.showBalance,
       }
       onSubmit(receipt)
@@ -861,11 +863,21 @@ export default function ReceiptFormModal({ open, onOpenChange, onSubmit, clients
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4 items-center">
                 <div className="space-y-2">
                   <Label>Upload Docs (Max 1MB)</Label>
-                  <FileUploadButton label="Upload Doc" onFileSelected={setDocOne} />
+                  <FileUpload 
+                    label="Upload Doc" 
+                    defaultUrl={docOne?.url}
+                    onUploadSuccess={(url, fileName) => setDocOne({ url, name: fileName })} 
+                    onRemove={() => setDocOne(undefined)}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Upload Docs (Max 1MB)</Label>
-                  <FileUploadButton label="Upload Doc" onFileSelected={setDocTwo} />
+                  <FileUpload 
+                    label="Upload Doc" 
+                    defaultUrl={docTwo?.url}
+                    onUploadSuccess={(url, fileName) => setDocTwo({ url, name: fileName })}
+                    onRemove={() => setDocTwo(undefined)}
+                  />
                 </div>
                 <FormField
                   control={form.control}
