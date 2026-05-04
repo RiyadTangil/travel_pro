@@ -14,6 +14,7 @@ import type { AccountType } from "@/components/accounts/types"
 import axios from "axios"
 import { useSession } from "next-auth/react"
 import { ClearableSelect } from "@/components/shared/clearable-select"
+import { FileUpload } from "@/components/ui/file-upload"
 
 type ExpenseItem = {
   headId: string
@@ -67,6 +68,9 @@ export default function ExpenseModal({ open, onOpenChange, mode, initialValues, 
     control,
     name: "items"
   })
+
+  const [docOne, setDocOne] = useState<{ url: string; name: string } | undefined>(undefined)
+  const [docTwo, setDocTwo] = useState<{ url: string; name: string } | undefined>(undefined)
 
   const [heads, setHeads] = useState<Array<{ id: string; name: string }>>([])
   const [accounts, setAccounts] = useState<Array<{ id: string; name: string; type: AccountType; lastBalance?: number }>>([])
@@ -174,6 +178,8 @@ export default function ExpenseModal({ open, onOpenChange, mode, initialValues, 
         ...initialValues,
         items: initialValues.items || []
       })
+      setDocOne(initialValues.voucherImage1 ? { url: initialValues.voucherImage1, name: initialValues.voucherImage1.split("/").pop() || "Voucher 1" } : undefined)
+      setDocTwo(initialValues.voucherImage2 ? { url: initialValues.voucherImage2, name: initialValues.voucherImage2.split("/").pop() || "Voucher 2" } : undefined)
     } else {
       reset({
         tempHeadId: "",
@@ -185,6 +191,8 @@ export default function ExpenseModal({ open, onOpenChange, mode, initialValues, 
         date: new Date().toISOString().slice(0, 10),
         note: "",
       })
+      setDocOne(undefined)
+      setDocTwo(undefined)
     }
   }, [initialValues, open])
 
@@ -256,7 +264,9 @@ export default function ExpenseModal({ open, onOpenChange, mode, initialValues, 
         ...vals,
         items: finalItems,
         totalAmount: finalTotal,
-        accountName: acc?.name || ""
+        accountName: acc?.name || "",
+        voucherImage1: docOne?.url,
+        voucherImage2: docTwo?.url,
       })
       if (ok) {
         onOpenChange(false)
@@ -399,15 +409,23 @@ export default function ExpenseModal({ open, onOpenChange, mode, initialValues, 
                 </div>
                 
                 <div className="space-y-2">
-                   <Button type="button" variant="outline" className="w-full justify-start text-gray-500">
-                      <Upload className="w-4 h-4 mr-2" /> Voucher image 1
-                   </Button>
+                   <Label>Voucher image 1 (Max 1MB)</Label>
+                   <FileUpload 
+                     label="Upload Voucher 1" 
+                     defaultUrl={docOne?.url}
+                     onUploadSuccess={(url, fileName) => setDocOne({ url, name: fileName })} 
+                     onRemove={() => setDocOne(undefined)}
+                   />
                 </div>
 
                 <div className="space-y-2">
-                   <Button type="button" variant="outline" className="w-full justify-start text-gray-500">
-                      <Upload className="w-4 h-4 mr-2" /> Voucher image 2
-                   </Button>
+                   <Label>Voucher image 2 (Max 1MB)</Label>
+                   <FileUpload 
+                     label="Upload Voucher 2" 
+                     defaultUrl={docTwo?.url}
+                     onUploadSuccess={(url, fileName) => setDocTwo({ url, name: fileName })} 
+                     onRemove={() => setDocTwo(undefined)}
+                   />
                 </div>
              </div>
 
